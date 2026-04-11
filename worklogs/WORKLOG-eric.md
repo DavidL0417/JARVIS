@@ -2,6 +2,18 @@
 
 ## Log
 
+### 2026-04-11 16:17 CDT
+
+- Completed the merge-readiness cleanup pass: removed generated build noise from the diff, confirmed `.env.local` stays gitignored, and added README setup notes for env copying plus Supabase schema application.
+- Status: branch is now positioned as a backend foundation milestone with intentional docs/setup guidance, explicit demo-user behavior, and an intentionally stubbed `/api/schedule` path.
+- Next step: manually apply `sql/schema.sql`, set env vars in local/Vercel, and then decide when to replace the demo-user pattern and schedule stub with full production behavior.
+
+### 2026-04-11 15:36 CDT
+
+- Added the first real backend milestone: MVP Supabase SQL schema in `sql/schema.sql`, demo-user bootstrap helper, DB row mappers, and DB-backed `dashboard`, `onboarding`, and `schedule` route flows.
+- Status: `/api/dashboard` now reads live Supabase tables, `/api/onboarding` creates or reuses the MVP demo user and writes preferences/tasks, and `/api/schedule` now reads DB context and returns a validated planner stub for David’s future Claude hookup.
+- Next step: apply `sql/schema.sql` in Supabase, set the required env vars, and then wire the validated schedule output into real DB writes plus the remaining `checkin` and `replan` persistence.
+
 ### 2026-04-11 15:12 CDT
 
 - Applied backend ownership markers across `app/api/**`, `lib/**`, `schemas/**`, and `types/**`, plus a narrow marked data-fetching section inside `app/page.tsx`.

@@ -21,6 +21,9 @@ export interface Task {
 
 export interface UserPreferences {
   timezone: string
+  sleepPattern?: string
+  peakEnergyWindow?: string
+  procrastinationPattern?: string
   workdayStart: string
   workdayEnd: string
   defaultTaskDurationMinutes: number
@@ -66,6 +69,49 @@ export interface DashboardResponse {
   stats: DashboardStats
   currentTask: DashboardCurrentTask | null
   events: ScheduleEvent[]
+}
+
+export interface OnboardingTaskInput {
+  title: string
+  description?: string
+  deadline?: string | null
+  durationMinutes?: number | null
+  priority?: Priority
+  status?: TaskStatus
+}
+
+export interface OnboardingResponse {
+  success: true
+  userId: string
+  preferenceId: string | null
+  taskIds: string[]
+  taskCount: number
+}
+
+export interface SchedulePreparationContext {
+  userId: string
+  tasks: Task[]
+  preferences: UserPreferences | null
+  hardEvents: ScheduleEvent[]
+}
+
+export interface SchedulePlanResult {
+  plannerStatus: "stubbed" | "ready"
+  proposedEvents: ScheduleEvent[]
+  unscheduledTaskIds: string[]
+  summary: string
+}
+
+export interface ScheduleResponse {
+  success: true
+  message: string
+  context: {
+    userId: string
+    taskCount: number
+    hardEventCount: number
+    hasPreferences: boolean
+  }
+  schedule: SchedulePlanResult
 }
 
 // ##### END BACKEND #####
