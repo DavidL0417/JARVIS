@@ -247,15 +247,15 @@ JARVIS continuously learns:
 pnpm install
 ```
 
-### 2. Start development server
+### 2. Configure environment variables
+
+Copy `.env.example` to `.env.local` and fill in your local values:
 
 ```bash
-pnpm dev
+cp .env.example .env.local
 ```
 
-### 3. Configure environment variables
-
-Create a `.env.local` file:
+`.env.local` is intentionally ignored by git and must stay local to your machine.
 
 ```env
 NEXT_PUBLIC_SUPABASE_URL=
@@ -267,6 +267,24 @@ ANTHROPIC_API_KEY=
 GOOGLE_CLIENT_ID=
 GOOGLE_CLIENT_SECRET=
 GOOGLE_REDIRECT_URI=
+```
+
+### 3. Apply the Supabase schema
+
+Apply [sql/schema.sql](/Users/ericzhou/Desktop/Productivity/mydearestjarvis/sql/schema.sql) in your Supabase SQL editor before testing the DB-backed routes.
+
+Current backend routes that depend on this schema:
+
+- `/api/dashboard`
+- `/api/onboarding`
+- `/api/schedule` for context reads
+
+The current backend foundation still uses a documented demo-user pattern until full auth is wired in.
+
+### 4. Start development server
+
+```bash
+pnpm dev
 ```
 
 ---

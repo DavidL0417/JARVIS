@@ -4,7 +4,7 @@
 import Anthropic from "@anthropic-ai/sdk"
 
 import type { ReplanRequest } from "@/schemas/replan"
-import type { ScheduleRequest } from "@/schemas/schedule"
+import type { SchedulePlanResult, SchedulePreparationContext } from "@/types"
 
 export function getClaudeClient() {
   const apiKey = process.env.ANTHROPIC_API_KEY
@@ -16,16 +16,17 @@ export function getClaudeClient() {
   return new Anthropic({ apiKey })
 }
 
-export async function generateSchedule(input: ScheduleRequest) {
+export async function generateSchedule(input: SchedulePreparationContext): Promise<SchedulePlanResult> {
   const client = getClaudeClient()
 
   void client
 
-  // TODO: Replace this stub with a real Claude prompt + structured parsing flow.
+  // TODO: Intentionally stubbed for the backend foundation milestone until David wires the planner prompt/output.
   return {
-    success: true,
-    scheduledTaskCount: input.tasks.length,
-    message: "Schedule generation is stubbed until AI orchestration is connected.",
+    plannerStatus: "stubbed",
+    proposedEvents: [],
+    unscheduledTaskIds: input.tasks.map((task) => task.id),
+    summary: "Schedule generation is stubbed until AI orchestration is connected.",
   }
 }
 
@@ -34,7 +35,7 @@ export async function replanSchedule(input: ReplanRequest) {
 
   void client
 
-  // TODO: Replace this stub with a replan prompt that preserves pinned calendar blocks.
+  // TODO: Intentionally stubbed until replanning logic is implemented against the persisted schedule model.
   return {
     success: true,
     reason: input.reason,

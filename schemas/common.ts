@@ -13,6 +13,9 @@ const hhmmPattern = /^([01]\d|2[0-3]):([0-5]\d)$/
 
 export const userPreferencesSchema = z.object({
   timezone: z.string().min(1),
+  sleepPattern: z.string().min(1).optional(),
+  peakEnergyWindow: z.string().min(1).optional(),
+  procrastinationPattern: z.string().min(1).optional(),
   workdayStart: z.string().regex(hhmmPattern, "Expected HH:MM time"),
   workdayEnd: z.string().regex(hhmmPattern, "Expected HH:MM time"),
   defaultTaskDurationMinutes: z.number().int().positive(),
