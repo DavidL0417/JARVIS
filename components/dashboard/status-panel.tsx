@@ -32,14 +32,14 @@ function StatusItem({ label, value }: StatusItemProps) {
   )
 }
 
-function formatCheckIns(value: DashboardStats["checkins"]) {
+function formatCheckIns(value: DashboardStats["checkInMode"]) {
   return value.charAt(0).toUpperCase() + value.slice(1)
 }
 
 export function StatusPanel({ stats }: StatusPanelProps) {
   const status = stats
     ? {
-        checkIns: formatCheckIns(stats.checkins),
+        checkIns: formatCheckIns(stats.checkInMode),
         overdue: stats.overdue,
         unscheduled: stats.unscheduled,
         checkInsMessage: "Backend check-in state is connected to the dashboard mock endpoint.",

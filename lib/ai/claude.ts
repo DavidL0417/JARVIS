@@ -3,8 +3,7 @@
 
 import Anthropic from "@anthropic-ai/sdk"
 
-import type { ReplanRequest } from "@/schemas/replan"
-import type { SchedulePlanResult, SchedulePreparationContext } from "@/types"
+import type { ReplanRequest, SchedulePlanResult, SchedulePreparationContext } from "@/types"
 
 export function getClaudeClient() {
   const apiKey = process.env.ANTHROPIC_API_KEY

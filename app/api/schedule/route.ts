@@ -3,7 +3,11 @@
 
 import { NextResponse } from "next/server"
 
-import { mapPreferenceRowToUserPreferences, mapTaskRowToTask } from "@/lib/data/mappers"
+import {
+  mapPreferencesRowToPreferences,
+  mapScheduleEventInputToScheduleEvent,
+  mapTaskRowToTask,
+} from "@/lib/data/mappers"
 import { generateSchedule } from "@/lib/ai/claude"
 import { getOrCreateDemoUser } from "@/lib/supabase/demo-user"
 import { createSupabaseAdminClient } from "@/lib/supabase/server"
@@ -35,7 +39,9 @@ export async function POST(request: Request) {
 
     let taskQuery = supabase
       .from("tasks")
-      .select("id, title, description, deadline, duration_minutes, priority, status, is_immutable, calendar_id, scheduled_for")
+      .select(
+        "id, user_id, title, description, deadline, duration_minutes, priority, status, scheduled_for, created_at, updated_at, is_immutable, calendar_id, tags",
+      )
       .eq("user_id", user.id)
       .order("created_at", { ascending: true })
 
@@ -48,7 +54,7 @@ export async function POST(request: Request) {
       supabase
         .from("preferences")
         .select(
-          "timezone, sleep_pattern, peak_energy_window, procrastination_pattern, workday_start, workday_end, default_task_duration_minutes, break_duration_minutes, preferred_focus_block_minutes, preferred_checkin_mode, calendar_id",
+          "id, user_id, timezone, sleep_pattern, peak_energy_window, procrastination_pattern, workday_start, workday_end, default_task_duration_minutes, break_duration_minutes, preferred_focus_block_minutes, preferred_checkin_mode, calendar_id, created_at, updated_at",
         )
         .eq("user_id", user.id)
         .maybeSingle(),
@@ -61,8 +67,10 @@ export async function POST(request: Request) {
     const scheduleContext: SchedulePreparationContext = {
       userId: user.id,
       tasks: (tasksResult.data || []).map(mapTaskRowToTask),
-      preferences: mapPreferenceRowToUserPreferences(preferencesResult.data),
-      hardEvents: parsedBody.data.hardEvents,
+      preferences: mapPreferencesRowToPreferences(preferencesResult.data),
+      hardEvents: parsedBody.data.hardEvents.map((event) =>
+        mapScheduleEventInputToScheduleEvent(event, user.id),
+      ),
     }
 
     const parsedContext = schedulePreparationContextSchema.safeParse(scheduleContext)

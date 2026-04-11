@@ -30,7 +30,7 @@ function StatItem({ label, value }: StatItemProps) {
   )
 }
 
-function formatCheckIns(value: DashboardStats["checkins"]) {
+function formatCheckIns(value: DashboardStats["checkInMode"]) {
   return value.charAt(0).toUpperCase() + value.slice(1)
 }
 
@@ -40,7 +40,7 @@ export function WorkspaceSnapshot({ stats }: WorkspaceSnapshotProps) {
         openTasks: stats.tasks,
         inbox: 0,
         overdue: stats.overdue,
-        checkIns: formatCheckIns(stats.checkins),
+        checkIns: formatCheckIns(stats.checkInMode),
       }
     : mockWorkspaceStats
 

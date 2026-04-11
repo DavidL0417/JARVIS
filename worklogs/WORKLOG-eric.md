@@ -2,6 +2,13 @@
 
 ## Log
 
+### 2026-04-11 18:10 CDT
+
+- Reconciled backend/shared task, schedule event, preferences, and check-in contracts so raw Supabase rows are now explicitly snake_case and app-facing models are explicitly camelCase through centralized mapper functions.
+- Added persisted `tasks.tags` support end-to-end in `sql/schema.sql`, shared TS/Zod contracts, onboarding inserts, dashboard/task reads, and schedule preparation reads.
+- Status: `pnpm exec tsc --noEmit` passes and `pnpm build` passes after rerunning with network access for Google Fonts.
+- Next step: apply the `public.tasks.tags` schema change in Supabase so existing environments match the updated canonical task model.
+
 ### 2026-04-11 17:28 CDT
 
 - Added `is_immutable` and `calendar_id` across the backend scheduling data model for both tasks and schedule events, including SQL schema, shared TS/Zod contracts, DB row mappers, and route read/write points.

@@ -3,18 +3,28 @@
 
 import { NextResponse } from "next/server"
 
+import {
+  mapOnboardingTaskInputToTaskInsert,
+  mapPreferencesToUpsert,
+} from "@/lib/data/mappers"
 import { getOrCreateDemoUser } from "@/lib/supabase/demo-user"
 import { createSupabaseAdminClient } from "@/lib/supabase/server"
 import { onboardingRequestSchema, onboardingResponseSchema } from "@/schemas/onboarding"
 import type { OnboardingResponse, UserPreferences } from "@/types"
 
 const DEFAULT_PREFERENCES: UserPreferences = {
+  userId: "",
   timezone: "America/Chicago",
+  sleepPattern: null,
+  peakEnergyWindow: null,
+  procrastinationPattern: null,
   workdayStart: "09:00",
   workdayEnd: "17:00",
   defaultTaskDurationMinutes: 50,
   breakDurationMinutes: 10,
+  preferredFocusBlockMinutes: null,
   preferredCheckInMode: "quiet",
+  calendarId: null,
 }
 
 export async function POST(request: Request) {
@@ -38,29 +48,14 @@ export async function POST(request: Request) {
     const user = await getOrCreateDemoUser(supabase, { name: parsedBody.data.name })
     const mergedPreferences: UserPreferences = {
       ...DEFAULT_PREFERENCES,
+      userId: user.id,
       ...parsedBody.data.preferences,
       timezone: parsedBody.data.preferences?.timezone || parsedBody.data.timezone,
     }
 
     const { data: preferenceRecord, error: preferenceError } = await supabase
       .from("preferences")
-      .upsert(
-        {
-          user_id: user.id,
-          timezone: mergedPreferences.timezone,
-          sleep_pattern: mergedPreferences.sleepPattern || null,
-          peak_energy_window: mergedPreferences.peakEnergyWindow || null,
-          procrastination_pattern: mergedPreferences.procrastinationPattern || null,
-          workday_start: mergedPreferences.workdayStart,
-          workday_end: mergedPreferences.workdayEnd,
-          default_task_duration_minutes: mergedPreferences.defaultTaskDurationMinutes,
-          break_duration_minutes: mergedPreferences.breakDurationMinutes,
-          preferred_focus_block_minutes: mergedPreferences.preferredFocusBlockMinutes || null,
-          preferred_checkin_mode: mergedPreferences.preferredCheckInMode || null,
-          calendar_id: mergedPreferences.calendarId || null,
-        },
-        { onConflict: "user_id" },
-      )
+      .upsert(mapPreferencesToUpsert(mergedPreferences), { onConflict: "user_id" })
       .select("id")
       .single<{ id: string }>()
 
@@ -78,6 +73,7 @@ export async function POST(request: Request) {
           durationMinutes: null,
           isImmutable: false,
           calendarId: null,
+          tags: [],
           priority: "medium" as const,
           status: "todo" as const,
         }))
@@ -88,17 +84,13 @@ export async function POST(request: Request) {
       const { data: insertedTasks, error: taskError } = await supabase
         .from("tasks")
         .insert(
-          onboardingTasks.map((task) => ({
-            user_id: user.id,
-            title: task.title,
-            description: task.description || null,
-            deadline: task.deadline || null,
-            duration_minutes: task.durationMinutes || mergedPreferences.defaultTaskDurationMinutes,
-            priority: task.priority || "medium",
-            status: task.status || "todo",
-            is_immutable: task.isImmutable ?? false,
-            calendar_id: task.calendarId || null,
-          })),
+          onboardingTasks.map((task) =>
+            mapOnboardingTaskInputToTaskInsert(
+              task,
+              user.id,
+              mergedPreferences.defaultTaskDurationMinutes,
+            ),
+          ),
         )
         .select("id")
 

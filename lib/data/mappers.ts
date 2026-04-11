@@ -2,53 +2,45 @@
 // DO NOT MODIFY UNLESS BACKEND OWNER
 
 import type {
-  CheckInStatus,
+  CheckInInsertRow,
+  CheckInRequest,
+  OnboardingTaskInput,
+  PreferredCheckInMode,
+  Priority,
   ScheduleEvent,
+  ScheduleEventInput,
+  ScheduleEventRow,
+  ScheduleEventSource,
   Task,
+  TaskInsertRow,
+  TaskRow,
   TaskStatus,
+  TaskUpdateRow,
   UserPreferences,
+  UserPreferencesRow,
+  UserPreferencesUpsertRow,
 } from "@/types"
 
-interface TaskRow {
-  id: string
-  title: string
-  description: string | null
-  deadline: string | null
-  duration_minutes: number | null
-  priority: string | null
-  status: string | null
-  is_immutable: boolean | null
-  calendar_id: string | null
-  scheduled_for: string | null
+function normalizeNullableText(value: string | null | undefined): string | null {
+  if (!value) {
+    return null
+  }
+
+  const trimmed = value.trim()
+  return trimmed.length > 0 ? trimmed : null
 }
 
-interface ScheduleEventRow {
-  id: string
-  title: string
-  starts_at: string
-  ends_at: string
-  source: string | null
-  status: string | null
-  is_immutable: boolean | null
-  calendar_id: string | null
-  location: string | null
+function normalizeTags(tags: string[] | null | undefined): string[] {
+  return Array.from(
+    new Set(
+      (tags || [])
+        .map((tag) => tag.trim())
+        .filter((tag) => tag.length > 0),
+    ),
+  )
 }
 
-interface PreferenceRow {
-  timezone: string | null
-  sleep_pattern: string | null
-  peak_energy_window: string | null
-  procrastination_pattern: string | null
-  workday_start: string | null
-  workday_end: string | null
-  default_task_duration_minutes: number | null
-  break_duration_minutes: number | null
-  preferred_focus_block_minutes: number | null
-  preferred_checkin_mode: CheckInStatus | null
-  calendar_id: string | null
-}
-
-function normalizeTaskStatus(value: string | null): TaskStatus {
+function normalizeTaskStatus(value: TaskStatus | string | null | undefined): TaskStatus {
   if (value === "scheduled" || value === "completed" || value === "missed") {
     return value
   }
@@ -56,7 +48,7 @@ function normalizeTaskStatus(value: string | null): TaskStatus {
   return "todo"
 }
 
-function normalizePriority(value: string | null): Task["priority"] {
+function normalizePriority(value: Priority | string | null | undefined): Priority {
   if (value === "low" || value === "high") {
     return value
   }
@@ -64,7 +56,7 @@ function normalizePriority(value: string | null): Task["priority"] {
   return "medium"
 }
 
-function normalizeEventSource(value: string | null): ScheduleEvent["source"] {
+function normalizeEventSource(value: ScheduleEventSource | string | null | undefined): ScheduleEventSource {
   if (value === "calendar" || value === "focus") {
     return value
   }
@@ -72,61 +64,202 @@ function normalizeEventSource(value: string | null): ScheduleEvent["source"] {
   return "task"
 }
 
-function normalizeTimeValue(value: string | null, fallback: string) {
+function normalizeTimeValue(value: string | null | undefined, fallback: string) {
   return value?.slice(0, 5) || fallback
 }
 
+// Mapper utilities centralize all DB row <-> app model translation.
 export function mapTaskRowToTask(row: TaskRow): Task {
   return {
     id: row.id,
+    userId: row.user_id,
     title: row.title,
-    description: row.description || undefined,
+    description: normalizeNullableText(row.description),
+    deadline: row.deadline,
+    durationMinutes: row.duration_minutes,
     priority: normalizePriority(row.priority),
     status: normalizeTaskStatus(row.status),
-    isImmutable: row.is_immutable ?? false,
-    calendarId: row.calendar_id,
-    dueAt: row.deadline,
     scheduledFor: row.scheduled_for,
-    estimateMinutes: row.duration_minutes,
-    tags: [],
+    isImmutable: row.is_immutable,
+    calendarId: normalizeNullableText(row.calendar_id),
+    tags: normalizeTags(row.tags),
+  }
+}
+
+export function mapTaskToInsert(task: Task): TaskInsertRow {
+  return {
+    user_id: task.userId,
+    title: task.title,
+    description: normalizeNullableText(task.description),
+    deadline: task.deadline,
+    duration_minutes: task.durationMinutes,
+    priority: normalizePriority(task.priority),
+    status: normalizeTaskStatus(task.status),
+    scheduled_for: task.scheduledFor,
+    is_immutable: task.isImmutable,
+    calendar_id: normalizeNullableText(task.calendarId),
+    tags: normalizeTags(task.tags),
+  }
+}
+
+export function mapTaskToUpdate(task: Partial<Omit<Task, "id" | "userId">>): TaskUpdateRow {
+  const update: TaskUpdateRow = {}
+
+  if ("title" in task && typeof task.title === "string") {
+    update.title = task.title
+  }
+
+  if ("description" in task) {
+    update.description = normalizeNullableText(task.description)
+  }
+
+  if ("deadline" in task) {
+    update.deadline = task.deadline ?? null
+  }
+
+  if ("durationMinutes" in task) {
+    update.duration_minutes = task.durationMinutes ?? null
+  }
+
+  if ("priority" in task) {
+    update.priority = normalizePriority(task.priority)
+  }
+
+  if ("status" in task) {
+    update.status = normalizeTaskStatus(task.status)
+  }
+
+  if ("scheduledFor" in task) {
+    update.scheduled_for = task.scheduledFor ?? null
+  }
+
+  if ("isImmutable" in task && typeof task.isImmutable === "boolean") {
+    update.is_immutable = task.isImmutable
+  }
+
+  if ("calendarId" in task) {
+    update.calendar_id = normalizeNullableText(task.calendarId)
+  }
+
+  if ("tags" in task) {
+    update.tags = normalizeTags(task.tags)
+  }
+
+  return update
+}
+
+export function mapOnboardingTaskInputToTaskInsert(
+  task: OnboardingTaskInput,
+  userId: string,
+  defaultDurationMinutes: number,
+): TaskInsertRow {
+  return {
+    user_id: userId,
+    title: task.title,
+    description: normalizeNullableText(task.description),
+    deadline: task.deadline ?? null,
+    duration_minutes: task.durationMinutes ?? defaultDurationMinutes,
+    priority: normalizePriority(task.priority),
+    status: normalizeTaskStatus(task.status),
+    scheduled_for: null,
+    is_immutable: task.isImmutable ?? false,
+    calendar_id: normalizeNullableText(task.calendarId),
+    tags: normalizeTags(task.tags),
+  }
+}
+
+export function mapPreferencesRowToPreferences(row: UserPreferencesRow | null): UserPreferences | null {
+  if (!row) {
+    return null
+  }
+
+  return {
+    userId: row.user_id,
+    timezone: row.timezone,
+    sleepPattern: normalizeNullableText(row.sleep_pattern),
+    peakEnergyWindow: normalizeNullableText(row.peak_energy_window),
+    procrastinationPattern: normalizeNullableText(row.procrastination_pattern),
+    workdayStart: normalizeTimeValue(row.workday_start, "09:00"),
+    workdayEnd: normalizeTimeValue(row.workday_end, "17:00"),
+    defaultTaskDurationMinutes: row.default_task_duration_minutes,
+    breakDurationMinutes: row.break_duration_minutes,
+    preferredFocusBlockMinutes: row.preferred_focus_block_minutes,
+    preferredCheckInMode: row.preferred_checkin_mode,
+    calendarId: normalizeNullableText(row.calendar_id),
+  }
+}
+
+export function mapPreferencesToUpsert(preferences: UserPreferences): UserPreferencesUpsertRow {
+  return {
+    user_id: preferences.userId,
+    timezone: preferences.timezone,
+    sleep_pattern: normalizeNullableText(preferences.sleepPattern),
+    peak_energy_window: normalizeNullableText(preferences.peakEnergyWindow),
+    procrastination_pattern: normalizeNullableText(preferences.procrastinationPattern),
+    workday_start: preferences.workdayStart,
+    workday_end: preferences.workdayEnd,
+    default_task_duration_minutes: preferences.defaultTaskDurationMinutes,
+    break_duration_minutes: preferences.breakDurationMinutes,
+    preferred_focus_block_minutes: preferences.preferredFocusBlockMinutes,
+    preferred_checkin_mode: preferences.preferredCheckInMode,
+    calendar_id: normalizeNullableText(preferences.calendarId),
   }
 }
 
 export function mapScheduleEventRowToScheduleEvent(row: ScheduleEventRow): ScheduleEvent {
   return {
     id: row.id,
+    userId: row.user_id,
+    taskId: row.task_id,
     title: row.title,
     start: row.starts_at,
     end: row.ends_at,
     source: normalizeEventSource(row.source),
-    isImmutable: row.is_immutable ?? false,
-    calendarId: row.calendar_id,
-    status: row.status ? normalizeTaskStatus(row.status) : undefined,
-    location: row.location,
+    status: row.status ? normalizeTaskStatus(row.status) : null,
+    location: normalizeNullableText(row.location),
+    externalEventId: normalizeNullableText(row.external_event_id),
+    isImmutable: row.is_immutable,
+    calendarId: normalizeNullableText(row.calendar_id),
   }
 }
 
-export function mapPreferenceRowToUserPreferences(row: PreferenceRow | null): UserPreferences | null {
-  if (!row) {
-    return null
-  }
-
+export function mapScheduleEventInputToScheduleEvent(
+  event: ScheduleEventInput,
+  userId: string,
+): ScheduleEvent {
   return {
-    timezone: row.timezone || "America/Chicago",
-    sleepPattern: row.sleep_pattern || undefined,
-    peakEnergyWindow: row.peak_energy_window || undefined,
-    procrastinationPattern: row.procrastination_pattern || undefined,
-    workdayStart: normalizeTimeValue(row.workday_start, "09:00"),
-    workdayEnd: normalizeTimeValue(row.workday_end, "17:00"),
-    defaultTaskDurationMinutes: row.default_task_duration_minutes || 50,
-    breakDurationMinutes: row.break_duration_minutes ?? 10,
-    preferredFocusBlockMinutes: row.preferred_focus_block_minutes || undefined,
-    preferredCheckInMode: row.preferred_checkin_mode || undefined,
-    calendarId: row.calendar_id || undefined,
+    id: event.id,
+    userId,
+    taskId: event.taskId ?? null,
+    title: event.title,
+    start: event.start,
+    end: event.end,
+    source: normalizeEventSource(event.source),
+    status: event.status ?? null,
+    location: normalizeNullableText(event.location),
+    externalEventId: normalizeNullableText(event.externalEventId),
+    isImmutable: event.isImmutable ?? false,
+    calendarId: normalizeNullableText(event.calendarId),
   }
 }
 
-export function getCheckInStatus(checkInCount: number): CheckInStatus {
+export function mapCheckInPayloadToInsert(
+  payload: CheckInRequest,
+  userId: string,
+  outcome: "completed" | "missed" | "partial" = "partial",
+): CheckInInsertRow {
+  return {
+    user_id: userId,
+    task_id: payload.activeTaskId ?? null,
+    mood: payload.mood ?? null,
+    energy: payload.energy ?? null,
+    outcome,
+    note: normalizeNullableText(payload.note),
+    blockers: payload.blockers?.map((blocker) => blocker.trim()).filter(Boolean) || [],
+  }
+}
+
+export function getCheckInModeFromCount(checkInCount: number): PreferredCheckInMode {
   if (checkInCount <= 0) {
     return "silent"
   }

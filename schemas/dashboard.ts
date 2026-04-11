@@ -3,17 +3,17 @@
 
 import { z } from "zod"
 
-import { checkInStatusSchema, scheduleEventSchema, taskStatusSchema } from "@/schemas/common"
+import { preferredCheckInModeSchema, scheduleEventSchema, taskStatusSchema } from "@/schemas/common"
 
 export const dashboardStatsSchema = z.object({
   tasks: z.number().int().nonnegative(),
   overdue: z.number().int().nonnegative(),
   unscheduled: z.number().int().nonnegative(),
-  checkins: checkInStatusSchema,
+  checkInMode: preferredCheckInModeSchema,
 })
 
 export const dashboardCurrentTaskSchema = z.object({
-  id: z.string().min(1).optional(),
+  id: z.string().uuid(),
   title: z.string().min(1),
   status: taskStatusSchema,
 })

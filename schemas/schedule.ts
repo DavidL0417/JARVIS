@@ -3,11 +3,16 @@
 
 import { z } from "zod"
 
-import { scheduleEventSchema, taskSchema, userPreferencesSchema } from "@/schemas/common"
+import {
+  scheduleEventInputSchema,
+  scheduleEventSchema,
+  taskSchema,
+  userPreferencesSchema,
+} from "@/schemas/common"
 
 export const scheduleRequestSchema = z.object({
   taskIds: z.array(z.string().uuid()).optional().default([]),
-  hardEvents: z.array(scheduleEventSchema).optional().default([]),
+  hardEvents: z.array(scheduleEventInputSchema).optional().default([]),
 })
 
 export const schedulePreparationContextSchema = z.object({
@@ -20,7 +25,7 @@ export const schedulePreparationContextSchema = z.object({
 export const schedulePlanResultSchema = z.object({
   plannerStatus: z.enum(["stubbed", "ready"]),
   proposedEvents: z.array(scheduleEventSchema),
-  unscheduledTaskIds: z.array(z.string().min(1)),
+  unscheduledTaskIds: z.array(z.string().uuid()),
   summary: z.string().min(1),
 })
 
