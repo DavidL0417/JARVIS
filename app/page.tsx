@@ -11,7 +11,7 @@ import { StatusPanel } from "@/components/dashboard/status-panel"
 import { CalendarsSidebar, initialCalendars, type Calendar } from "@/components/dashboard/calendars-sidebar"
 import { TaskManager, initialTasks, type Task } from "@/components/dashboard/task-manager"
 import { Button } from "@/components/ui/button"
-import { X } from "lucide-react"
+import { X, Book } from "lucide-react"
 
 type MobileSection = "command" | "schedule" | "status"
 
