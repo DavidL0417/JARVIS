@@ -2,8 +2,13 @@
 
 ## Log
 
-<<<<<<<<< Temporary merge branch 1
-=========
+### 2026-04-11 13:13 CDT
+
+- Verified that duplicate uppercase worklog files were still present in the tracked tree after `HEAD` moved to a later merge commit.
+- Removing `WORKLOG_DAVID.md`, `WORKLOG_ERIC.md`, and `WORKLOG_CINDY.md` so only the canonical lowercase worklogs remain.
+- Status: current `HEAD` is being amended to delete the duplicate files for real.
+- Next step: keep only the lowercase canonical worklogs in future commits.
+
 ### 2026-04-11 13:11 CDT
 
 - Audited the worklog directory after duplicate contributor logs were created with uppercase/underscored filenames.
