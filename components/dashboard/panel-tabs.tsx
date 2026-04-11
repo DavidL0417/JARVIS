@@ -19,15 +19,15 @@ export function PanelTabs() {
   const tabs = mockTabs
 
   return (
-    <Card className="bg-[#141414] border-[#2a2a2a]">
-      <CardHeader className="p-3 pb-1">
+    <Card className="bg-card border-border">
+      <CardHeader className="p-2 pb-1">
         <div className="flex items-center justify-between">
-          <CardTitle className="text-xs font-medium text-foreground">Panel</CardTitle>
-          <span className="text-[10px] text-muted-foreground capitalize">{activeTab}</span>
+          <CardTitle className="text-[11px] font-medium text-foreground">Panel</CardTitle>
+          <span className="text-[9px] text-muted-foreground capitalize">{activeTab}</span>
         </div>
       </CardHeader>
-      <CardContent className="p-3 pt-2 space-y-2">
-        <div className="flex gap-1">
+      <CardContent className="p-2 pt-1 space-y-1">
+        <div className="flex gap-0.5">
           {tabs.map((tab) => (
             <Button
               key={tab.id}
@@ -36,15 +36,15 @@ export function PanelTabs() {
               onClick={() => setActiveTab(tab.id)}
               className={
                 activeTab === tab.id
-                  ? "bg-[#3b82f6] hover:bg-[#2563eb] text-white text-[10px] h-6 px-2"
-                  : "text-muted-foreground hover:text-foreground hover:bg-[#1f1f1f] text-[10px] h-6 px-2"
+                  ? "bg-[#3b82f6] hover:bg-[#2563eb] text-white text-[9px] h-5 px-1.5"
+                  : "text-muted-foreground hover:text-foreground hover:bg-secondary text-[9px] h-5 px-1.5"
               }
             >
               {tab.label}
             </Button>
           ))}
         </div>
-        <p className="text-[10px] text-muted-foreground leading-tight">
+        <p className="text-[9px] text-muted-foreground leading-tight">
           Master input, now-task guidance, and quick actions.
         </p>
       </CardContent>

@@ -3,9 +3,9 @@
 import { useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { MapPin, Clock } from "lucide-react"
+import { MapPin, Clock, ChevronLeft, ChevronRight } from "lucide-react"
 
-type ViewMode = "1day" | "3days" | "7days"
+type ViewMode = "1day" | "3days" | "7days" | "1month"
 type TabMode = "calendars" | "schedule"
 
 interface Event {
@@ -59,7 +59,6 @@ const mockEvents: Event[] = [
 ]
 
 // API Hook: Replace mockScheduleStatus with fetch call here
-// Example: const { data: scheduleStatus } = useSWR('/api/schedule/status', fetcher)
 const mockScheduleStatus = {
   plannerStatus: "Not scheduled",
   currentMonth: "April 2026",
@@ -76,18 +75,15 @@ const colorClasses: Record<Event["color"], string> = {
 
 const timeSlots = ["10AM", "11AM", "12PM", "1PM", "2PM", "3PM", "4PM", "5PM", "6PM", "7PM", "8PM"]
 
-const days = ["", "", "", "", "", "", ""]
-
 export function ScheduleView() {
   const [viewMode, setViewMode] = useState<ViewMode>("7days")
   const [tabMode, setTabMode] = useState<TabMode>("schedule")
+  const [selectedDate, setSelectedDate] = useState<Date>(new Date(2026, 3, 11)) // April 11, 2026
+  const [monthViewDate, setMonthViewDate] = useState<Date>(new Date(2026, 3, 1)) // April 2026
 
-  // API Hook: Replace mockEvents and mockScheduleStatus with fetched data
   const events = mockEvents
   const scheduleStatus = mockScheduleStatus
 
-  // API Hook: Replace with actual schedule action handlers
-  // Example: const { trigger: replanNow } = useSWRMutation('/api/schedule/replan', postFetcher)
   const handleReplanNow = () => {
     console.log("Replanning now")
   }
@@ -97,35 +93,98 @@ export function ScheduleView() {
   }
 
   const getEventStyle = (event: Event) => {
-    const top = (event.startHour - 10) * 48 // 48px per hour (compact)
-    const height = event.duration * 48
+    const top = (event.startHour - 10) * 40 // 40px per hour (compact)
+    const height = event.duration * 40
     return {
       top: `${top}px`,
-      height: `${height}px`,
+      height: `${Math.max(height, 20)}px`,
     }
   }
 
+  // Month view helpers
+  const getDaysInMonth = (date: Date) => {
+    return new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate()
+  }
+
+  const getFirstDayOfMonth = (date: Date) => {
+    return new Date(date.getFullYear(), date.getMonth(), 1).getDay()
+  }
+
+  const handleDateClick = (day: number) => {
+    const newDate = new Date(monthViewDate.getFullYear(), monthViewDate.getMonth(), day)
+    setSelectedDate(newDate)
+    setViewMode("1day")
+  }
+
+  const handlePrevMonth = () => {
+    setMonthViewDate(new Date(monthViewDate.getFullYear(), monthViewDate.getMonth() - 1, 1))
+  }
+
+  const handleNextMonth = () => {
+    setMonthViewDate(new Date(monthViewDate.getFullYear(), monthViewDate.getMonth() + 1, 1))
+  }
+
+  const monthNames = ["January", "February", "March", "April", "May", "June", 
+                      "July", "August", "September", "October", "November", "December"]
+
+  const renderMonthView = () => {
+    const daysInMonth = getDaysInMonth(monthViewDate)
+    const firstDay = getFirstDayOfMonth(monthViewDate)
+    const days = []
+    
+    // Empty cells for days before the first day of the month
+    for (let i = 0; i < firstDay; i++) {
+      days.push(<div key={`empty-${i}`} className="h-8 md:h-10" />)
+    }
+    
+    // Days of the month
+    for (let day = 1; day <= daysInMonth; day++) {
+      const isToday = day === 11 && monthViewDate.getMonth() === 3 && monthViewDate.getFullYear() === 2026
+      const isSelected = selectedDate.getDate() === day && 
+                         selectedDate.getMonth() === monthViewDate.getMonth() &&
+                         selectedDate.getFullYear() === monthViewDate.getFullYear()
+      
+      days.push(
+        <button
+          key={day}
+          onClick={() => handleDateClick(day)}
+          className={`h-8 md:h-10 rounded text-xs md:text-sm font-medium transition-colors
+            ${isToday ? "bg-[#3b82f6] text-white" : ""}
+            ${isSelected && !isToday ? "bg-secondary text-foreground" : ""}
+            ${!isToday && !isSelected ? "hover:bg-secondary text-foreground" : ""}
+          `}
+        >
+          {day}
+        </button>
+      )
+    }
+    
+    return days
+  }
+
   return (
-    <Card className="bg-[#141414] border-[#2a2a2a] h-full flex flex-col">
-      <CardHeader className="p-3 pb-2 flex-shrink-0">
+    <Card className="bg-card border-border h-full flex flex-col">
+      <CardHeader className="p-2 pb-1 flex-shrink-0">
         <div className="flex items-center justify-between">
           <div>
             <CardTitle className="text-xs font-medium text-foreground">Schedule</CardTitle>
             <CardDescription className="text-[10px] text-muted-foreground">
-              {scheduleStatus.currentMonth}
+              {viewMode === "1month" 
+                ? `${monthNames[monthViewDate.getMonth()]} ${monthViewDate.getFullYear()}`
+                : scheduleStatus.currentMonth}
             </CardDescription>
           </div>
           <div className="flex items-center gap-2">
             <span className="text-[10px] text-muted-foreground">Planner: {scheduleStatus.plannerStatus}</span>
           </div>
         </div>
-        <p className="text-[10px] text-muted-foreground leading-tight">
+        <p className="text-[9px] text-muted-foreground leading-tight">
           Schedule runs only when you click Schedule/Replan. Dragging a block pins it by default.
         </p>
       </CardHeader>
-      <CardContent className="p-3 pt-0 flex-1 flex flex-col overflow-hidden">
+      <CardContent className="p-2 pt-0 flex-1 flex flex-col overflow-hidden">
         {/* Controls - hidden on mobile, shown on tablet+ */}
-        <div className="hidden md:flex items-center justify-between mb-3 flex-wrap gap-2">
+        <div className="hidden md:flex items-center justify-between mb-2 flex-wrap gap-2">
           <div className="flex gap-0.5 flex-wrap">
             <Button
               variant={tabMode === "calendars" ? "default" : "ghost"}
@@ -133,8 +192,8 @@ export function ScheduleView() {
               onClick={() => setTabMode("calendars")}
               className={
                 tabMode === "calendars"
-                  ? "bg-[#2a2a2a] text-white text-[10px] h-6 px-2"
-                  : "text-muted-foreground hover:text-foreground hover:bg-[#1f1f1f] text-[10px] h-6 px-2"
+                  ? "bg-secondary text-foreground text-[10px] h-5 px-2"
+                  : "text-muted-foreground hover:text-foreground hover:bg-secondary text-[10px] h-5 px-2"
               }
             >
               Calendars
@@ -145,8 +204,8 @@ export function ScheduleView() {
               onClick={() => setTabMode("schedule")}
               className={
                 tabMode === "schedule"
-                  ? "bg-[#3b82f6] text-white text-[10px] h-6 px-2"
-                  : "text-muted-foreground hover:text-foreground hover:bg-[#1f1f1f] text-[10px] h-6 px-2"
+                  ? "bg-[#3b82f6] text-white text-[10px] h-5 px-2"
+                  : "text-muted-foreground hover:text-foreground hover:bg-secondary text-[10px] h-5 px-2"
               }
             >
               Schedule
@@ -155,7 +214,7 @@ export function ScheduleView() {
               variant="ghost"
               size="sm"
               onClick={handleReplanNow}
-              className="text-muted-foreground hover:text-foreground hover:bg-[#1f1f1f] text-[10px] h-6 px-2"
+              className="text-muted-foreground hover:text-foreground hover:bg-secondary text-[10px] h-5 px-2"
             >
               Replan Now
             </Button>
@@ -163,34 +222,38 @@ export function ScheduleView() {
               variant="ghost"
               size="sm"
               onClick={handleResetReplan}
-              className="text-muted-foreground hover:text-foreground hover:bg-[#1f1f1f] text-[10px] h-6 px-2"
+              className="text-muted-foreground hover:text-foreground hover:bg-secondary text-[10px] h-5 px-2"
             >
               Reset & Replan
             </Button>
           </div>
-          <div className="flex gap-0.5 bg-[#1a1a1a] rounded p-0.5">
-            {(["1day", "3days", "7days"] as ViewMode[]).map((mode) => (
-              <Button
-                key={mode}
-                variant={viewMode === mode ? "default" : "ghost"}
-                size="sm"
-                onClick={() => setViewMode(mode)}
-                className={
-                  viewMode === mode
-                    ? "bg-[#3b82f6] text-white text-[10px] h-5 px-2"
-                    : "text-muted-foreground hover:text-foreground text-[10px] h-5 px-2"
-                }
-              >
-                {mode === "1day" ? "Days" : mode === "3days" ? "1 Day" : mode === "3days" ? "3 Days" : "7 Days"}
-              </Button>
-            ))}
+          <div className="flex items-center gap-1.5">
+            <span className="text-[10px] text-muted-foreground">Days:</span>
+            <div className="flex gap-0.5 bg-secondary/50 rounded p-0.5">
+              {(["1day", "3days", "7days", "1month"] as ViewMode[]).map((mode) => (
+                <Button
+                  key={mode}
+                  variant={viewMode === mode ? "default" : "ghost"}
+                  size="sm"
+                  onClick={() => setViewMode(mode)}
+                  className={
+                    viewMode === mode
+                      ? "bg-[#3b82f6] text-white text-[10px] h-5 px-2"
+                      : "text-muted-foreground hover:text-foreground text-[10px] h-5 px-2"
+                  }
+                >
+                  {mode === "1day" ? "1 Day" : mode === "3days" ? "3 Days" : mode === "7days" ? "7 Days" : "1 Month"}
+                </Button>
+              ))}
+            </div>
           </div>
         </div>
 
         {/* Mobile Controls */}
         <div className="flex md:hidden items-center justify-between mb-2 gap-2">
-          <div className="flex gap-0.5 bg-[#1a1a1a] rounded p-0.5">
-            {(["1day", "3days", "7days"] as ViewMode[]).map((mode) => (
+          <span className="text-[10px] text-muted-foreground">Days:</span>
+          <div className="flex gap-0.5 bg-secondary/50 rounded p-0.5">
+            {(["1day", "3days", "7days", "1month"] as ViewMode[]).map((mode) => (
               <Button
                 key={mode}
                 variant={viewMode === mode ? "default" : "ghost"}
@@ -198,78 +261,122 @@ export function ScheduleView() {
                 onClick={() => setViewMode(mode)}
                 className={
                   viewMode === mode
-                    ? "bg-[#3b82f6] text-white text-[10px] h-6 px-2"
-                    : "text-muted-foreground hover:text-foreground text-[10px] h-6 px-2"
+                    ? "bg-[#3b82f6] text-white text-[9px] h-5 px-1.5"
+                    : "text-muted-foreground hover:text-foreground text-[9px] h-5 px-1.5"
                 }
               >
-                {mode === "1day" ? "1D" : mode === "3days" ? "3D" : "7D"}
+                {mode === "1day" ? "1D" : mode === "3days" ? "3D" : mode === "7days" ? "7D" : "Mo"}
               </Button>
             ))}
           </div>
         </div>
 
-        {/* Calendar Grid */}
-        <div className="flex-1 overflow-auto relative">
-          <div 
-            className={`grid gap-px min-h-[528px] ${
-              viewMode === "1day" 
-                ? "grid-cols-2" 
-                : viewMode === "3days" 
-                ? "grid-cols-4" 
-                : "grid-cols-8"
-            }`}
-          >
-            {/* Time column */}
-            <div className="flex flex-col">
-              {timeSlots.map((time) => (
-                <div key={time} className="h-[48px] text-[10px] text-muted-foreground pr-1 text-right flex items-start">
-                  {time}
+        {/* Month View */}
+        {viewMode === "1month" ? (
+          <div className="flex-1 flex flex-col">
+            {/* Month navigation */}
+            <div className="flex items-center justify-between mb-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handlePrevMonth}
+                className="text-muted-foreground hover:text-foreground h-6 w-6 p-0"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </Button>
+              <span className="text-sm font-medium text-foreground">
+                {monthNames[monthViewDate.getMonth()]} {monthViewDate.getFullYear()}
+              </span>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleNextMonth}
+                className="text-muted-foreground hover:text-foreground h-6 w-6 p-0"
+              >
+                <ChevronRight className="w-4 h-4" />
+              </Button>
+            </div>
+            
+            {/* Day headers */}
+            <div className="grid grid-cols-7 gap-1 mb-1">
+              {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => (
+                <div key={day} className="text-center text-[10px] text-muted-foreground font-medium">
+                  {day}
                 </div>
               ))}
             </div>
+            
+            {/* Calendar grid */}
+            <div className="grid grid-cols-7 gap-1 flex-1">
+              {renderMonthView()}
+            </div>
+            
+            <p className="text-[10px] text-muted-foreground text-center mt-2">
+              Click a date to view that day
+            </p>
+          </div>
+        ) : (
+          /* Calendar Grid - Day/Week View */
+          <div className="flex-1 overflow-auto relative">
+            <div 
+              className={`grid gap-px min-h-[440px] ${
+                viewMode === "1day" 
+                  ? "grid-cols-2" 
+                  : viewMode === "3days" 
+                  ? "grid-cols-4" 
+                  : "grid-cols-8"
+              }`}
+            >
+              {/* Time column */}
+              <div className="flex flex-col">
+                {timeSlots.map((time) => (
+                  <div key={time} className="h-[40px] text-[9px] text-muted-foreground pr-1 text-right flex items-start">
+                    {time}
+                  </div>
+                ))}
+              </div>
 
-            {/* Day columns */}
-            {days
-              .slice(0, viewMode === "1day" ? 1 : viewMode === "3days" ? 3 : 7)
-              .map((day, dayIndex) => (
-                <div key={dayIndex} className="relative bg-[#1a1a1a] border-l border-[#2a2a2a]">
+              {/* Day columns */}
+              {Array.from({ length: viewMode === "1day" ? 1 : viewMode === "3days" ? 3 : 7 }).map((_, dayIndex) => (
+                <div key={dayIndex} className="relative bg-secondary/30 border-l border-border">
                   {/* Hour lines */}
                   {timeSlots.map((_, i) => (
                     <div
                       key={i}
-                      className="absolute w-full border-t border-[#2a2a2a]/50"
-                      style={{ top: `${i * 48}px` }}
+                      className="absolute w-full border-t border-border/50"
+                      style={{ top: `${i * 40}px` }}
                     />
                   ))}
 
-                  {/* Events - API Hook: Events are rendered from fetched data */}
+                  {/* Events */}
                   {events
                     .filter((event) => event.day === dayIndex)
                     .map((event) => (
                       <div
                         key={event.id}
-                        className={`absolute left-0.5 right-0.5 rounded p-1 overflow-hidden ${colorClasses[event.color]}`}
+                        className={`absolute left-0.5 right-0.5 rounded px-1 py-0.5 overflow-hidden ${colorClasses[event.color]}`}
                         style={getEventStyle(event)}
                       >
-                        <p className="text-[9px] font-medium truncate leading-tight">{event.title}</p>
-                        {event.location && (
-                          <div className="flex items-center gap-0.5 mt-0.5">
+                        <p className="text-[8px] font-medium truncate leading-tight">{event.title}</p>
+                        {event.location && event.duration >= 0.75 && (
+                          <div className="flex items-center gap-0.5">
                             <MapPin className="w-2 h-2 flex-shrink-0" />
-                            <p className="text-[8px] truncate opacity-80">{event.location}</p>
+                            <p className="text-[7px] truncate opacity-80">{event.location}</p>
                           </div>
                         )}
-                        {event.time && (
-                          <div className="flex items-center gap-0.5 mt-0.5">
+                        {event.time && event.duration >= 1 && (
+                          <div className="flex items-center gap-0.5">
                             <Clock className="w-2 h-2 flex-shrink-0" />
-                            <p className="text-[8px] truncate opacity-80">{event.time}</p>
+                            <p className="text-[7px] truncate opacity-80">{event.time}</p>
                           </div>
                         )}
                       </div>
                     ))}
                 </div>
               ))}
+            </div>
           </div>
-        </div>
+        )}
       </CardContent>
     </Card>
   )

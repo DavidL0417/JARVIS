@@ -20,9 +20,9 @@ interface StatusItemProps {
 
 function StatusItem({ label, value }: StatusItemProps) {
   return (
-    <div className="space-y-0.5">
-      <p className="text-[10px] text-muted-foreground uppercase tracking-wide">{label}</p>
-      <p className="text-sm font-semibold text-foreground">{value}</p>
+    <div className="space-y-0">
+      <p className="text-[9px] text-muted-foreground uppercase tracking-wide">{label}</p>
+      <p className="text-xs font-semibold text-foreground">{value}</p>
     </div>
   )
 }
@@ -32,14 +32,14 @@ export function StatusPanel() {
   const status = mockStatusData
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-2">
       {/* Status Grid */}
-      <Card className="bg-[#141414] border-[#2a2a2a]">
-        <CardHeader className="p-3 pb-1">
-          <CardTitle className="text-xs font-medium text-foreground">Status</CardTitle>
+      <Card className="bg-card border-border">
+        <CardHeader className="p-2 pb-1">
+          <CardTitle className="text-[11px] font-medium text-foreground">Status</CardTitle>
         </CardHeader>
-        <CardContent className="p-3 pt-2">
-          <div className="grid grid-cols-2 gap-3">
+        <CardContent className="p-2 pt-1">
+          <div className="grid grid-cols-2 gap-2">
             <StatusItem label="Check-ins" value={status.checkIns} />
             <StatusItem label="Overdue" value={status.overdue} />
             <StatusItem label="Unscheduled" value={status.unscheduled} />
@@ -48,32 +48,32 @@ export function StatusPanel() {
       </Card>
 
       {/* Check-ins */}
-      <Card className="bg-[#141414] border-[#2a2a2a]">
-        <CardHeader className="p-3 pb-1">
-          <CardTitle className="text-xs font-medium text-foreground">Check-ins</CardTitle>
+      <Card className="bg-card border-border">
+        <CardHeader className="p-2 pb-1">
+          <CardTitle className="text-[11px] font-medium text-foreground">Check-ins</CardTitle>
         </CardHeader>
-        <CardContent className="p-3 pt-2">
-          <p className="text-[11px] text-muted-foreground">{status.checkInsMessage}</p>
+        <CardContent className="p-2 pt-1">
+          <p className="text-[10px] text-muted-foreground">{status.checkInsMessage}</p>
         </CardContent>
       </Card>
 
       {/* Overdue */}
-      <Card className="bg-[#141414] border-[#2a2a2a]">
-        <CardHeader className="p-3 pb-1">
-          <CardTitle className="text-xs font-medium text-foreground">Overdue</CardTitle>
+      <Card className="bg-card border-border">
+        <CardHeader className="p-2 pb-1">
+          <CardTitle className="text-[11px] font-medium text-foreground">Overdue</CardTitle>
         </CardHeader>
-        <CardContent className="p-3 pt-2">
-          <p className="text-[11px] text-muted-foreground">{status.overdueMessage}</p>
+        <CardContent className="p-2 pt-1">
+          <p className="text-[10px] text-muted-foreground">{status.overdueMessage}</p>
         </CardContent>
       </Card>
 
       {/* Missing explicit estimates */}
-      <Card className="bg-[#141414] border-[#2a2a2a]">
-        <CardHeader className="p-3 pb-1">
-          <CardTitle className="text-xs font-medium text-foreground">Missing explicit estimates</CardTitle>
+      <Card className="bg-card border-border">
+        <CardHeader className="p-2 pb-1">
+          <CardTitle className="text-[11px] font-medium text-foreground">Missing explicit estimates</CardTitle>
         </CardHeader>
-        <CardContent className="p-3 pt-2">
-          <p className="text-[11px] text-muted-foreground">{status.estimatesMessage}</p>
+        <CardContent className="p-2 pt-1">
+          <p className="text-[10px] text-muted-foreground">{status.estimatesMessage}</p>
         </CardContent>
       </Card>
     </div>
