@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { DashboardHeader } from "@/components/dashboard/dashboard-header"
 import { WorkspaceSnapshot } from "@/components/dashboard/workspace-snapshot"
 import { PanelTabs } from "@/components/dashboard/panel-tabs"
@@ -9,6 +9,7 @@ import { WhatToDoNow } from "@/components/dashboard/what-to-do-now"
 import { ScheduleView } from "@/components/dashboard/schedule-view"
 import { StatusPanel } from "@/components/dashboard/status-panel"
 import { Button } from "@/components/ui/button"
+import type { DashboardResponse } from "@/types"
 import { X } from "lucide-react"
 
 type MobileSection = "command" | "schedule" | "status"
@@ -17,6 +18,38 @@ export default function DashboardPage() {
   const [panelsHidden, setPanelsHidden] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [mobileSection, setMobileSection] = useState<MobileSection>("schedule")
+  const [dashboardData, setDashboardData] = useState<DashboardResponse | null>(null)
+
+  useEffect(() => {
+    let isActive = true
+
+    async function loadDashboard() {
+      try {
+        const response = await fetch("/api/dashboard")
+
+        if (!response.ok) {
+          throw new Error(`Dashboard request failed with status ${response.status}`)
+        }
+
+        const data: DashboardResponse = await response.json()
+
+        if (!isActive) {
+          return
+        }
+
+        console.log("Loaded dashboard data", data)
+        setDashboardData(data)
+      } catch (error) {
+        console.error("Failed to load dashboard data", error)
+      }
+    }
+
+    loadDashboard()
+
+    return () => {
+      isActive = false
+    }
+  }, [])
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-foreground p-3 md:p-4">
@@ -71,7 +104,11 @@ export default function DashboardPage() {
         {/* Page Title - Desktop */}
         <div className="hidden md:block mb-3">
           <h2 className="text-xl font-bold text-foreground">Today</h2>
-          <p className="text-[11px] text-muted-foreground">Your plan, quick actions, and schedule</p>
+          <p className="text-[11px] text-muted-foreground">
+            {dashboardData
+              ? `${dashboardData.stats.tasks} tasks loaded from /api/dashboard`
+              : "Your plan, quick actions, and schedule"}
+          </p>
         </div>
 
         {/* Hide Panels Toggle - Desktop only */}
@@ -116,10 +153,10 @@ export default function DashboardPage() {
         <div className="md:hidden">
           {mobileSection === "command" && (
             <div className="flex flex-col gap-3">
-              <WorkspaceSnapshot />
+              <WorkspaceSnapshot stats={dashboardData?.stats} />
               <PanelTabs />
               <MasterInput />
-              <WhatToDoNow />
+              <WhatToDoNow currentTask={dashboardData?.currentTask} />
             </div>
           )}
           {mobileSection === "schedule" && (
@@ -129,7 +166,7 @@ export default function DashboardPage() {
           )}
           {mobileSection === "status" && (
             <div>
-              <StatusPanel />
+              <StatusPanel stats={dashboardData?.stats} />
             </div>
           )}
         </div>
@@ -139,10 +176,10 @@ export default function DashboardPage() {
           {/* Left Column - Command Center */}
           {!panelsHidden && (
             <div className="flex flex-col gap-3">
-              <WorkspaceSnapshot />
+              <WorkspaceSnapshot stats={dashboardData?.stats} />
               <PanelTabs />
               <MasterInput />
-              <WhatToDoNow />
+              <WhatToDoNow currentTask={dashboardData?.currentTask} />
             </div>
           )}
 
@@ -154,7 +191,7 @@ export default function DashboardPage() {
           {/* Right Column - Status Panel */}
           {!panelsHidden && (
             <div>
-              <StatusPanel />
+              <StatusPanel stats={dashboardData?.stats} />
             </div>
           )}
         </div>
