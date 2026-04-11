@@ -1,3 +1,6 @@
+// ##### BACKEND API #####
+// DO NOT MODIFY UNLESS BACKEND OWNER
+
 import Anthropic from "@anthropic-ai/sdk"
 
 import type { ReplanRequest } from "@/schemas/replan"
@@ -38,3 +41,5 @@ export async function replanSchedule(input: ReplanRequest) {
     message: "Replan generation is stubbed until AI orchestration is connected.",
   }
 }
+
+// ##### END BACKEND #####

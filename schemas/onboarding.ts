@@ -1,3 +1,6 @@
+// ##### BACKEND API #####
+// DO NOT MODIFY UNLESS BACKEND OWNER
+
 import { z } from "zod"
 
 import { userPreferencesSchema } from "@/schemas/common"
@@ -10,3 +13,5 @@ export const onboardingRequestSchema = z.object({
 })
 
 export type OnboardingRequest = z.infer<typeof onboardingRequestSchema>
+
+// ##### END BACKEND #####

@@ -9,7 +9,11 @@ import { WhatToDoNow } from "@/components/dashboard/what-to-do-now"
 import { ScheduleView } from "@/components/dashboard/schedule-view"
 import { StatusPanel } from "@/components/dashboard/status-panel"
 import { Button } from "@/components/ui/button"
+// ##### BACKEND API #####
+// DO NOT MODIFY UNLESS BACKEND OWNER
+import { getDashboardData } from "@/lib/data/dashboard"
 import type { DashboardResponse } from "@/types"
+// ##### END BACKEND #####
 import { X } from "lucide-react"
 
 type MobileSection = "command" | "schedule" | "status"
@@ -18,30 +22,22 @@ export default function DashboardPage() {
   const [panelsHidden, setPanelsHidden] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [mobileSection, setMobileSection] = useState<MobileSection>("schedule")
+  // ##### BACKEND API #####
+  // DO NOT MODIFY UNLESS BACKEND OWNER
   const [dashboardData, setDashboardData] = useState<DashboardResponse | null>(null)
 
   useEffect(() => {
     let isActive = true
 
     async function loadDashboard() {
-      try {
-        const response = await fetch("/api/dashboard")
+      const data = await getDashboardData()
 
-        if (!response.ok) {
-          throw new Error(`Dashboard request failed with status ${response.status}`)
-        }
-
-        const data: DashboardResponse = await response.json()
-
-        if (!isActive) {
-          return
-        }
-
-        console.log("Loaded dashboard data", data)
-        setDashboardData(data)
-      } catch (error) {
-        console.error("Failed to load dashboard data", error)
+      if (!isActive || !data) {
+        return
       }
+
+      console.log("Loaded dashboard data", data)
+      setDashboardData(data)
     }
 
     loadDashboard()
@@ -50,6 +46,7 @@ export default function DashboardPage() {
       isActive = false
     }
   }, [])
+  // ##### END BACKEND #####
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-foreground p-3 md:p-4">

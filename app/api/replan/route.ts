@@ -1,3 +1,6 @@
+// ##### BACKEND API #####
+// DO NOT MODIFY UNLESS BACKEND OWNER
+
 import { NextResponse } from "next/server"
 
 import { replanSchedule } from "@/lib/ai/claude"
@@ -26,3 +29,5 @@ export async function POST(request: Request) {
     result,
   })
 }
+
+// ##### END BACKEND #####

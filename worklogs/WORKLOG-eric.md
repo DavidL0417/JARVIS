@@ -2,6 +2,18 @@
 
 ## Log
 
+### 2026-04-11 15:12 CDT
+
+- Applied backend ownership markers across `app/api/**`, `lib/**`, `schemas/**`, and `types/**`, plus a narrow marked data-fetching section inside `app/page.tsx`.
+- Status: backend protection comments now make the shared boundary explicit without changing UI structure or dashboard component code.
+- Next step: keep any new backend logic inside marked sections/files so frontend work can continue safely in `components/**` and the UI portions of `app/page.tsx`.
+
+### 2026-04-11 15:00 CDT
+
+- Extracted dashboard fetch responsibility out of `app/page.tsx` into backend-owned `lib/data/dashboard.ts` to reduce shared merge pressure with frontend/UI work.
+- Status: `app/page.tsx` is now a thinner shared rendering layer that imports `getDashboardData()` and only manages page-local UI state plus prop passing.
+- Next step: keep future dashboard data changes in `lib/data/**` so teammate UI edits in `app/page.tsx` stay low-conflict.
+
 ### 2026-04-11 14:56 CDT
 
 - Finalized Eric handoff note for the JARVIS backend foundation pass in the canonical worklog.

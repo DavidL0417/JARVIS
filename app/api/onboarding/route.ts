@@ -1,3 +1,6 @@
+// ##### BACKEND API #####
+// DO NOT MODIFY UNLESS BACKEND OWNER
+
 import { NextResponse } from "next/server"
 
 import { onboardingRequestSchema } from "@/schemas/onboarding"
@@ -23,3 +26,5 @@ export async function POST(request: Request) {
     user: parsedBody.data.name,
   })
 }
+
+// ##### END BACKEND #####

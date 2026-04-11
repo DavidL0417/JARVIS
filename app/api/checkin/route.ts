@@ -1,3 +1,6 @@
+// ##### BACKEND API #####
+// DO NOT MODIFY UNLESS BACKEND OWNER
+
 import { NextResponse } from "next/server"
 
 import { checkInRequestSchema } from "@/schemas/checkin"
@@ -23,3 +26,5 @@ export async function POST(request: Request) {
     completedTaskCount: parsedBody.data.completedTaskIds.length,
   })
 }
+
+// ##### END BACKEND #####

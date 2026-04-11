@@ -1,3 +1,6 @@
+// ##### BACKEND API #####
+// DO NOT MODIFY UNLESS BACKEND OWNER
+
 import { google } from "googleapis"
 
 import type { ScheduleEvent } from "@/types"
@@ -39,3 +42,5 @@ export async function updateCalendarEvents(events: ScheduleEvent[]) {
     externalEventIds: [] as string[],
   }
 }
+
+// ##### END BACKEND #####

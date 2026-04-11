@@ -1,3 +1,6 @@
+// ##### BACKEND API #####
+// DO NOT MODIFY UNLESS BACKEND OWNER
+
 import { z } from "zod"
 
 import { prioritySchema } from "@/schemas/common"
@@ -12,3 +15,5 @@ export const checkInRequestSchema = z.object({
 })
 
 export type CheckInRequest = z.infer<typeof checkInRequestSchema>
+
+// ##### END BACKEND #####

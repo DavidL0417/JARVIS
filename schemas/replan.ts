@@ -1,3 +1,6 @@
+// ##### BACKEND API #####
+// DO NOT MODIFY UNLESS BACKEND OWNER
+
 import { z } from "zod"
 
 import { scheduleEventSchema, taskSchema, userPreferencesSchema } from "@/schemas/common"
@@ -10,3 +13,5 @@ export const replanRequestSchema = z.object({
 })
 
 export type ReplanRequest = z.infer<typeof replanRequestSchema>
+
+// ##### END BACKEND #####

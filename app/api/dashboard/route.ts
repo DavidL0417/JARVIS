@@ -1,3 +1,6 @@
+// ##### BACKEND API #####
+// DO NOT MODIFY UNLESS BACKEND OWNER
+
 import { NextResponse } from "next/server"
 
 import { dashboardResponseSchema } from "@/schemas/dashboard"
@@ -33,3 +36,5 @@ export async function GET() {
 
   return NextResponse.json(parsedPayload.data)
 }
+
+// ##### END BACKEND #####

@@ -1,3 +1,6 @@
+// ##### BACKEND API #####
+// DO NOT MODIFY UNLESS BACKEND OWNER
+
 import { z } from "zod"
 
 import { checkInStatusSchema, scheduleEventSchema, taskStatusSchema } from "@/schemas/common"
@@ -22,3 +25,5 @@ export const dashboardResponseSchema = z.object({
 })
 
 export type DashboardResponseInput = z.infer<typeof dashboardResponseSchema>
+
+// ##### END BACKEND #####

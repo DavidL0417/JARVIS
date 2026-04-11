@@ -1,3 +1,6 @@
+// ##### BACKEND API #####
+// DO NOT MODIFY UNLESS BACKEND OWNER
+
 export type Priority = "low" | "medium" | "high"
 
 export type TaskStatus = "todo" | "scheduled" | "completed" | "missed"
@@ -64,3 +67,5 @@ export interface DashboardResponse {
   currentTask: DashboardCurrentTask | null
   events: ScheduleEvent[]
 }
+
+// ##### END BACKEND #####

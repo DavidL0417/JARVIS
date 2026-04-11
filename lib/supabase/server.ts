@@ -1,3 +1,6 @@
+// ##### BACKEND API #####
+// DO NOT MODIFY UNLESS BACKEND OWNER
+
 import { createServerClient } from "@supabase/ssr"
 import { createClient } from "@supabase/supabase-js"
 import { cookies } from "next/headers"
@@ -48,3 +51,5 @@ export function createSupabaseAdminClient() {
     getRequiredEnv("SUPABASE_SERVICE_ROLE_KEY"),
   )
 }
+
+// ##### END BACKEND #####

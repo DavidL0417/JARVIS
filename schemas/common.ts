@@ -1,3 +1,6 @@
+// ##### BACKEND API #####
+// DO NOT MODIFY UNLESS BACKEND OWNER
+
 import { z } from "zod"
 
 export const prioritySchema = z.enum(["low", "medium", "high"])
@@ -40,3 +43,5 @@ export const scheduleEventSchema = z.object({
   status: taskStatusSchema.optional(),
   location: z.string().min(1).nullable().optional(),
 })
+
+// ##### END BACKEND #####

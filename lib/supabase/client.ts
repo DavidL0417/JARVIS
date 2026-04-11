@@ -1,3 +1,6 @@
+// ##### BACKEND API #####
+// DO NOT MODIFY UNLESS BACKEND OWNER
+
 import { createBrowserClient } from "@supabase/ssr"
 
 function getRequiredPublicEnv(name: "NEXT_PUBLIC_SUPABASE_URL" | "NEXT_PUBLIC_SUPABASE_ANON_KEY") {
@@ -16,3 +19,5 @@ export function createSupabaseBrowserClient() {
     getRequiredPublicEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY"),
   )
 }
+
+// ##### END BACKEND #####
