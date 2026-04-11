@@ -7,7 +7,9 @@ import { PanelTabs } from "@/components/dashboard/panel-tabs"
 import { MasterInput } from "@/components/dashboard/master-input"
 import { WhatToDoNow } from "@/components/dashboard/what-to-do-now"
 import { ScheduleView } from "@/components/dashboard/schedule-view"
-import { StatusPanel } from "@/components/dashboard/status-panel"
+import { TaskSidebar } from "@/components/dashboard/task-sidebar"
+import { CalendarsSidebar } from "@/components/dashboard/calendars-sidebar"
+// StatusPanel is now replaced by TaskSidebar which shows status when no calendar is selected
 import { Button } from "@/components/ui/button"
 // ##### BACKEND API #####
 // DO NOT MODIFY UNLESS BACKEND OWNER
@@ -15,6 +17,7 @@ import { getDashboardData } from "@/lib/data/dashboard"
 import type { DashboardResponse } from "@/types"
 // ##### END BACKEND #####
 import { X } from "lucide-react"
+import { useCalendarStore } from "@/lib/stores/calendar-store"
 
 type MobileSection = "command" | "schedule" | "status"
 
@@ -22,6 +25,10 @@ export default function DashboardPage() {
   const [panelsHidden, setPanelsHidden] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [mobileSection, setMobileSection] = useState<MobileSection>("schedule")
+  
+  // Calendar sidebar state
+  const { calendarSidebarOpen, setCalendarSidebarOpen } = useCalendarStore()
+  
   // ##### BACKEND API #####
   // DO NOT MODIFY UNLESS BACKEND OWNER
   const [dashboardData, setDashboardData] = useState<DashboardResponse | null>(null)
@@ -55,7 +62,14 @@ export default function DashboardPage() {
         <DashboardHeader 
           onTogglePanels={() => setPanelsHidden(!panelsHidden)} 
           onToggleMobileMenu={() => setMobileMenuOpen(!mobileMenuOpen)}
+          onToggleCalendarSidebar={() => setCalendarSidebarOpen(!calendarSidebarOpen)}
           panelsHidden={panelsHidden} 
+        />
+        
+        {/* Calendar Sidebar */}
+        <CalendarsSidebar 
+          open={calendarSidebarOpen} 
+          onOpenChange={setCalendarSidebarOpen} 
         />
 
         {/* Mobile Navigation Menu */}
@@ -163,7 +177,7 @@ export default function DashboardPage() {
           )}
           {mobileSection === "status" && (
             <div>
-              <StatusPanel stats={dashboardData?.stats} />
+              <TaskSidebar stats={dashboardData?.stats} />
             </div>
           )}
         </div>
@@ -185,10 +199,10 @@ export default function DashboardPage() {
             <ScheduleView />
           </div>
 
-          {/* Right Column - Status Panel */}
+          {/* Right Column - Task Sidebar (transforms based on selected calendar) */}
           {!panelsHidden && (
             <div>
-              <StatusPanel stats={dashboardData?.stats} />
+              <TaskSidebar stats={dashboardData?.stats} />
             </div>
           )}
         </div>

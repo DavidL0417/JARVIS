@@ -4,74 +4,16 @@ import { useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { MapPin, Clock } from "lucide-react"
+import { useCalendarStore, type CalendarEvent } from "@/lib/stores/calendar-store"
 
 type ViewMode = "1day" | "3days" | "7days"
 type TabMode = "calendars" | "schedule"
-
-interface Event {
-  id: string
-  title: string
-  location?: string
-  time?: string
-  color: "mint" | "blue" | "yellow" | "orange" | "purple" | "cyan"
-  day: number
-  startHour: number
-  duration: number
-}
-
-// API Hook: Replace mockEvents with fetch call here
-// Example: const { data: events } = useSWR('/api/schedule/events', fetcher)
-const mockEvents: Event[] = [
-  // Monday (day 0)
-  { id: "1", title: "MATH 240-0", location: "Lunt 105", color: "mint", day: 0, startHour: 10, duration: 1 },
-  { id: "2", title: "HISTORY 38...", location: "Locy Hall 111", color: "blue", day: 0, startHour: 11, duration: 1 },
-  { id: "3", title: "PHIL 101-8 O...", location: "Crowe 3-178", time: "2:30 PM-3:...", color: "cyan", day: 0, startHour: 15, duration: 0.5 },
-  { id: "4", title: "PHIL 101-8 (seminar)", location: "Shepard Ha...", color: "cyan", day: 0, startHour: 16, duration: 1 },
-  { id: "5", title: "Project Vela...", color: "orange", day: 0, startHour: 16.5, duration: 0.5 },
-  { id: "6", title: "PAD Meeting", location: "University...", time: "6:00 PM-7:...", color: "purple", day: 0, startHour: 18, duration: 2.5 },
-
-  // Tuesday (day 1)
-  { id: "7", title: "MATH 240-0...", location: "Lunt Hall 103", color: "mint", day: 1, startHour: 10, duration: 1 },
-  { id: "8", title: "LEGAL_ST 221-0", location: "Harris Hall...", time: "12:30 PM-1:...", color: "yellow", day: 1, startHour: 13, duration: 1 },
-  { id: "9", title: "COMP_SCI 397-0 (semi...", location: "RB135 - Th...", time: "2:35 PM-5:...", color: "yellow", day: 1, startHour: 14.5, duration: 2.5 },
-  { id: "10", title: "Project Vela...", color: "orange", day: 1, startHour: 16.5, duration: 1.5 },
-
-  // Wednesday (day 2)
-  { id: "11", title: "HISTORY 38...", location: "Locy Hall 111", color: "blue", day: 2, startHour: 11, duration: 1 },
-  { id: "12", title: "PHIL 101-8 O...", location: "Crowe 3-178", time: "2:30 PM-3:...", color: "cyan", day: 2, startHour: 15, duration: 0.5 },
-  { id: "13", title: "PHIL 101-8 (seminar)", location: "Shepard Ha...", color: "cyan", day: 2, startHour: 16, duration: 1 },
-  { id: "14", title: "Project Vela...", color: "orange", day: 2, startHour: 16.5, duration: 0.5 },
-  { id: "15", title: "Feiyi Recital", location: "Galvin Reci...", time: "6:00 PM-7:...", color: "cyan", day: 2, startHour: 18, duration: 1 },
-
-  // Thursday (day 3)
-  { id: "16", title: "LEGAL_ST 221-0", location: "Harris Hall...", time: "12:30 PM-1:...", color: "yellow", day: 3, startHour: 13, duration: 1 },
-  { id: "17", title: "LEGAL_ST 2...", location: "Kresge Cen...", color: "yellow", day: 3, startHour: 16, duration: 1 },
-  { id: "18", title: "Project Vela...", color: "orange", day: 3, startHour: 16.5, duration: 0.5 },
-  { id: "19", title: "Dinner w Evan", time: "6:00 PM-7:...", color: "cyan", day: 3, startHour: 18, duration: 1 },
-
-  // Friday (day 4)
-  { id: "20", title: "MATH 240-0", location: "Lunt 105", color: "mint", day: 4, startHour: 10, duration: 1 },
-  { id: "21", title: "HISTORY 38...", location: "Locy Hall 111", color: "blue", day: 4, startHour: 11, duration: 1 },
-  { id: "22", title: "Innovation L...", location: "Microsoft T...", color: "orange", day: 4, startHour: 13, duration: 1 },
-  { id: "23", title: "HISTORY 38...", location: "Kresge Cen...", color: "blue", day: 4, startHour: 14, duration: 1 },
-  { id: "24", title: "Project Vela...", color: "orange", day: 4, startHour: 16.5, duration: 0.5 },
-  { id: "25", title: "Hotpot", time: "6:00 PM-9:...", color: "cyan", day: 4, startHour: 18, duration: 3 },
-]
 
 // API Hook: Replace mockScheduleStatus with fetch call here
 // Example: const { data: scheduleStatus } = useSWR('/api/schedule/status', fetcher)
 const mockScheduleStatus = {
   plannerStatus: "Not scheduled",
   currentMonth: "April 2026",
-}
-
-const colorClasses: Record<Event["color"], string> = {
-  mint: "bg-[#4ade80] text-[#052e16]",
-  blue: "bg-[#3b82f6] text-white",
-  yellow: "bg-[#fde047] text-[#422006]",
-  orange: "bg-[#fb923c] text-[#431407]",
-  purple: "bg-[#c084fc] text-[#3b0764]",
-  cyan: "bg-[#22d3ee] text-[#083344]",
 }
 
 const timeSlots = ["10AM", "11AM", "12PM", "1PM", "2PM", "3PM", "4PM", "5PM", "6PM", "7PM", "8PM"]
@@ -82,8 +24,11 @@ export function ScheduleView() {
   const [viewMode, setViewMode] = useState<ViewMode>("7days")
   const [tabMode, setTabMode] = useState<TabMode>("schedule")
 
-  // API Hook: Replace mockEvents and mockScheduleStatus with fetched data
-  const events = mockEvents
+  // Get events and calendars from store with visibility filtering
+  const { calendars, getVisibleEvents } = useCalendarStore()
+  const events = getVisibleEvents()
+
+  // API Hook: Replace mockScheduleStatus with fetched data
   const scheduleStatus = mockScheduleStatus
 
   // API Hook: Replace with actual schedule action handlers
@@ -96,13 +41,30 @@ export function ScheduleView() {
     console.log("Reset and replan")
   }
 
-  const getEventStyle = (event: Event) => {
+  const getEventStyle = (event: CalendarEvent) => {
     const top = (event.startHour - 10) * 48 // 48px per hour (compact)
     const height = event.duration * 48
     return {
       top: `${top}px`,
       height: `${height}px`,
     }
+  }
+
+  // Get calendar color for an event
+  const getEventColor = (event: CalendarEvent) => {
+    const calendar = calendars.find((c) => c.id === event.calendarId)
+    return calendar?.color || "#3b82f6"
+  }
+
+  // Get text color based on background brightness
+  const getTextColor = (bgColor: string) => {
+    // Simple brightness check - dark colors get white text
+    const hex = bgColor.replace("#", "")
+    const r = parseInt(hex.slice(0, 2), 16)
+    const g = parseInt(hex.slice(2, 4), 16)
+    const b = parseInt(hex.slice(4, 6), 16)
+    const brightness = (r * 299 + g * 587 + b * 114) / 1000
+    return brightness > 128 ? "#1a1a1a" : "#ffffff"
   }
 
   return (
@@ -242,30 +204,38 @@ export function ScheduleView() {
                     />
                   ))}
 
-                  {/* Events - API Hook: Events are rendered from fetched data */}
+                  {/* Events - filtered by calendar visibility */}
                   {events
                     .filter((event) => event.day === dayIndex)
-                    .map((event) => (
-                      <div
-                        key={event.id}
-                        className={`absolute left-0.5 right-0.5 rounded p-1 overflow-hidden ${colorClasses[event.color]}`}
-                        style={getEventStyle(event)}
-                      >
-                        <p className="text-[9px] font-medium truncate leading-tight">{event.title}</p>
-                        {event.location && (
-                          <div className="flex items-center gap-0.5 mt-0.5">
-                            <MapPin className="w-2 h-2 flex-shrink-0" />
-                            <p className="text-[8px] truncate opacity-80">{event.location}</p>
-                          </div>
-                        )}
-                        {event.time && (
-                          <div className="flex items-center gap-0.5 mt-0.5">
-                            <Clock className="w-2 h-2 flex-shrink-0" />
-                            <p className="text-[8px] truncate opacity-80">{event.time}</p>
-                          </div>
-                        )}
-                      </div>
-                    ))}
+                    .map((event) => {
+                      const bgColor = getEventColor(event)
+                      const textColor = getTextColor(bgColor)
+                      return (
+                        <div
+                          key={event.id}
+                          className="absolute left-0.5 right-0.5 rounded p-1 overflow-hidden transition-opacity duration-200"
+                          style={{
+                            ...getEventStyle(event),
+                            backgroundColor: bgColor,
+                            color: textColor,
+                          }}
+                        >
+                          <p className="text-[9px] font-medium truncate leading-tight">{event.title}</p>
+                          {event.location && (
+                            <div className="flex items-center gap-0.5 mt-0.5">
+                              <MapPin className="w-2 h-2 flex-shrink-0" />
+                              <p className="text-[8px] truncate opacity-80">{event.location}</p>
+                            </div>
+                          )}
+                          {event.time && (
+                            <div className="flex items-center gap-0.5 mt-0.5">
+                              <Clock className="w-2 h-2 flex-shrink-0" />
+                              <p className="text-[8px] truncate opacity-80">{event.time}</p>
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
                 </div>
               ))}
           </div>

@@ -1,15 +1,16 @@
 "use client"
 
 import { Button } from "@/components/ui/button"
-import { Sidebar, Moon, Shield, Check, Menu } from "lucide-react"
+import { Sidebar, Moon, Shield, Check, Menu, BookOpen } from "lucide-react"
 
 interface DashboardHeaderProps {
   onTogglePanels?: () => void
   onToggleMobileMenu?: () => void
+  onToggleCalendarSidebar?: () => void
   panelsHidden?: boolean
 }
 
-export function DashboardHeader({ onTogglePanels, onToggleMobileMenu, panelsHidden }: DashboardHeaderProps) {
+export function DashboardHeader({ onTogglePanels, onToggleMobileMenu, onToggleCalendarSidebar, panelsHidden }: DashboardHeaderProps) {
   return (
     <div className="flex items-center justify-between mb-4">
       <div className="flex items-center gap-3">
@@ -21,6 +22,16 @@ export function DashboardHeader({ onTogglePanels, onToggleMobileMenu, panelsHidd
           className="md:hidden text-muted-foreground hover:text-foreground hover:bg-[#1f1f1f] p-2"
         >
           <Menu className="w-4 h-4" />
+        </Button>
+        {/* Calendar sidebar toggle (Book icon) */}
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={onToggleCalendarSidebar}
+          className="text-muted-foreground hover:text-foreground hover:bg-[#1f1f1f] p-2"
+          title="Manage Calendars"
+        >
+          <BookOpen className="w-4 h-4" />
         </Button>
         {/* Desktop sidebar toggle */}
         <Button
