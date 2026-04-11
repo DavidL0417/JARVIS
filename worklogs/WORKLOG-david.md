@@ -2,6 +2,34 @@
 
 ## Log
 
+### 2026-04-11 18:44 CDT
+
+- Added [`sql/seed_demo_data.sql`](./../sql/seed_demo_data.sql) to reset and repopulate the single demo user with realistic sample preferences and a 20-task student workload across classes, research, career, extracurricular, admin, and personal categories.
+- Kept the seeded task records aligned with the current product boundary: raw tasks carry `title`, optional `description`, `deadline`, `priority`, `status`, `calendarId`, `isImmutable`, and `tags`, while `duration_minutes` and `scheduled_for` stay `null` for later planner inference.
+- Status: the repo now has a reusable mock task dataset for backend/demo testing without changing the shared contracts Eric already merged.
+- Next step: apply the seed in Supabase or expose a lightweight seeding path so the demo user can be populated on demand before Claude scheduling is wired.
+
+### 2026-04-11 18:20 CDT
+
+- Merged the latest `origin/main` into `david-ai-calendar`, including the new persisted `tasks.tags` support and updated backend/shared task contracts.
+- Confirmed the current data-model split: raw tasks now carry persisted categorization via `tags`, while planner-derived timing remains `scheduledFor` plus `durationMinutes`.
+- Status: backend can now pass Claude task tags, immutable flags, and calendar IDs without any schema changes from David’s side.
+- Next step: wire `lib/ai/claude.ts` to treat `tags` as the temporary class/extracurricular/project category signal and respect `isImmutable` / `calendarId` in planning output.
+
+### 2026-04-11 17:34 CDT
+
+- Merged the newest `main` backend updates into `david-ai-calendar`, including `is_immutable` / `calendar_id` support plus DB-backed schedule preparation context.
+- Clarified the model boundary with the backend: raw task records remain the source of truth (`id`, `title`, optional `description`, `priority`, `status`, `dueAt`), while `scheduledFor` and `estimateMinutes` are planner-derived scheduling fields rather than user-entered source fields.
+- Current connections still to be wired: Supabase task source cleanup for planner-ready raw tasks, preference capture, Google Calendar hard-event ingestion, and Claude planner output inside `lib/ai/claude.ts`.
+- Immediate next step: implement `generateSchedule()` against the merged `SchedulePreparationContext` / `SchedulePlanResult` contracts and coordinate with Eric if raw-task creation should stop pre-filling planner-derived duration data.
+
+### 2026-04-11 16:14 CDT
+
+- Merged the latest `main` backend work into `david-ai-calendar`, including Supabase-backed onboarding and schedule preparation context.
+- Clarified the planning boundary: raw task records are the source of truth (`id`, `title`, optional `description`, `priority`, `status`, `dueAt`), while `scheduledFor` and `estimateMinutes` are planner-derived outputs rather than user-entered fields.
+- Current connections still to be wired: task source in Supabase, user preferences, hard calendar events, and Claude schedule/replan output in `lib/ai/claude.ts`.
+- Next step: implement Claude planner output against the merged `SchedulePreparationContext` / `SchedulePlanResult` contracts without changing backend-owned schemas or routes.
+
 ### 2026-04-11 13:13 CDT
 
 - Verified that duplicate uppercase worklog files were still present in the tracked tree after `HEAD` moved to a later merge commit.

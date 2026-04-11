@@ -9,6 +9,12 @@
 - Status: `pnpm exec tsc --noEmit` passes and `pnpm build` passes after rerunning with network access for Google Fonts.
 - Next step: apply the `public.tasks.tags` schema change in Supabase so existing environments match the updated canonical task model.
 
+### 2026-04-11 17:32 CDT
+
+- Added the provided Google OAuth client ID and client secret to local `.env.local`.
+- Status: Google client credentials now exist locally, but `GOOGLE_REDIRECT_URI` is still unset and the repo does not yet expose a Google OAuth callback route.
+- Next step: add the exact redirect URI from the Google Cloud OAuth client and implement the callback/auth flow before expecting Google sign-in or Calendar consent to work.
+
 ### 2026-04-11 17:28 CDT
 
 - Added `is_immutable` and `calendar_id` across the backend scheduling data model for both tasks and schedule events, including SQL schema, shared TS/Zod contracts, DB row mappers, and route read/write points.
