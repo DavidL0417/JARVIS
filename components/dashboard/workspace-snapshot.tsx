@@ -1,6 +1,7 @@
 "use client"
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
+import type { DashboardStats } from "@/types"
 
 // API Hook: Replace mockWorkspaceStats with fetch call here
 // Example: const { data: stats } = useSWR('/api/workspace/stats', fetcher)
@@ -16,6 +17,10 @@ interface StatItemProps {
   value: string | number
 }
 
+interface WorkspaceSnapshotProps {
+  stats?: DashboardStats
+}
+
 function StatItem({ label, value }: StatItemProps) {
   return (
     <div className="space-y-0.5">
@@ -25,9 +30,19 @@ function StatItem({ label, value }: StatItemProps) {
   )
 }
 
-export function WorkspaceSnapshot() {
-  // API Hook: Replace mockWorkspaceStats with fetched data
-  const stats = mockWorkspaceStats
+function formatCheckIns(value: DashboardStats["checkins"]) {
+  return value.charAt(0).toUpperCase() + value.slice(1)
+}
+
+export function WorkspaceSnapshot({ stats }: WorkspaceSnapshotProps) {
+  const workspaceStats = stats
+    ? {
+        openTasks: stats.tasks,
+        inbox: 0,
+        overdue: stats.overdue,
+        checkIns: formatCheckIns(stats.checkins),
+      }
+    : mockWorkspaceStats
 
   return (
     <Card className="bg-[#141414] border-[#2a2a2a]">
@@ -39,10 +54,10 @@ export function WorkspaceSnapshot() {
       </CardHeader>
       <CardContent className="p-3 pt-2">
         <div className="grid grid-cols-2 gap-3">
-          <StatItem label="Open tasks" value={stats.openTasks} />
-          <StatItem label="Inbox" value={stats.inbox} />
-          <StatItem label="Overdue" value={stats.overdue} />
-          <StatItem label="Check-ins" value={stats.checkIns} />
+          <StatItem label="Open tasks" value={workspaceStats.openTasks} />
+          <StatItem label="Inbox" value={workspaceStats.inbox} />
+          <StatItem label="Overdue" value={workspaceStats.overdue} />
+          <StatItem label="Check-ins" value={workspaceStats.checkIns} />
         </div>
       </CardContent>
     </Card>

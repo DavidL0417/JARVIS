@@ -181,7 +181,7 @@ export function ScheduleView() {
                     : "text-muted-foreground hover:text-foreground text-[10px] h-5 px-2"
                 }
               >
-                {mode === "1day" ? "Days" : mode === "3days" ? "1 Day" : mode === "3days" ? "3 Days" : "7 Days"}
+                {mode === "1day" ? "1 Day" : mode === "3days" ? "3 Days" : "7 Days"}
               </Button>
             ))}
           </div>
