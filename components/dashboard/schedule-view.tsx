@@ -3,19 +3,21 @@
 import { useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { MapPin, Clock, ChevronLeft, ChevronRight, RefreshCw, Loader2 } from "lucide-react"
+import { MapPin, ChevronLeft, ChevronRight, RefreshCw, Loader2 } from "lucide-react"
+import type { Calendar } from "./calendars-sidebar"
 
 type ViewMode = "1day" | "3days" | "7days" | "1month"
 type TabMode = "calendars" | "schedule"
 
 // Enhanced Event interface for Google Calendar integration
-interface CalendarEvent {
+export interface CalendarEvent {
   id: string
   title: string
   start: string // ISO Date string
   end: string // ISO Date string
   source: "google" | "local"
   isReadOnly: boolean
+  calendarId: string // Links to Calendar.id
   location?: string
   color: "mint" | "blue" | "yellow" | "orange" | "purple" | "cyan"
   // Derived fields for rendering (calculated from start/end)
@@ -28,40 +30,40 @@ interface CalendarEvent {
 // Example: const { data: events, isLoading, mutate } = useCalendarEvents()
 // This is the central hook where backend team can replace mock data
 const mockEvents: CalendarEvent[] = [
-  // Monday (day 0)
-  { id: "1", title: "MATH 240-0", location: "Lunt 105", color: "mint", day: 0, startHour: 10, duration: 1, start: "2026-04-06T10:00:00", end: "2026-04-06T11:00:00", source: "google", isReadOnly: true },
-  { id: "2", title: "HISTORY 38...", location: "Locy Hall 111", color: "blue", day: 0, startHour: 11, duration: 1, start: "2026-04-06T11:00:00", end: "2026-04-06T12:00:00", source: "google", isReadOnly: true },
-  { id: "3", title: "PHIL 101-8 O...", location: "Crowe 3-178", color: "cyan", day: 0, startHour: 15, duration: 0.5, start: "2026-04-06T15:00:00", end: "2026-04-06T15:30:00", source: "local", isReadOnly: false },
-  { id: "4", title: "PHIL 101-8 (seminar)", location: "Shepard Ha...", color: "cyan", day: 0, startHour: 16, duration: 1, start: "2026-04-06T16:00:00", end: "2026-04-06T17:00:00", source: "local", isReadOnly: false },
-  { id: "5", title: "Project Vela...", color: "orange", day: 0, startHour: 16.5, duration: 0.5, start: "2026-04-06T16:30:00", end: "2026-04-06T17:00:00", source: "local", isReadOnly: false },
-  { id: "6", title: "PAD Meeting", location: "University...", color: "purple", day: 0, startHour: 18, duration: 2.5, start: "2026-04-06T18:00:00", end: "2026-04-06T20:30:00", source: "google", isReadOnly: true },
+  // Personal Calendar (cal-1)
+  { id: "1", calendarId: "cal-1", title: "PAD Meeting", location: "University...", color: "purple", day: 0, startHour: 18, duration: 2.5, start: "2026-04-06T18:00:00", end: "2026-04-06T20:30:00", source: "google", isReadOnly: true },
+  { id: "19", calendarId: "cal-1", title: "Dinner w Evan", color: "cyan", day: 3, startHour: 18, duration: 1, start: "2026-04-09T18:00:00", end: "2026-04-09T19:00:00", source: "local", isReadOnly: false },
+  { id: "25", calendarId: "cal-1", title: "Hotpot", color: "cyan", day: 4, startHour: 18, duration: 3, start: "2026-04-10T18:00:00", end: "2026-04-10T21:00:00", source: "local", isReadOnly: false },
+  
+  // Work Calendar (cal-2)
+  { id: "22", calendarId: "cal-2", title: "Innovation L...", location: "Microsoft T...", color: "orange", day: 4, startHour: 13, duration: 1, start: "2026-04-10T13:00:00", end: "2026-04-10T14:00:00", source: "local", isReadOnly: false },
 
-  // Tuesday (day 1)
-  { id: "7", title: "MATH 240-0...", location: "Lunt Hall 103", color: "mint", day: 1, startHour: 10, duration: 1, start: "2026-04-07T10:00:00", end: "2026-04-07T11:00:00", source: "google", isReadOnly: true },
-  { id: "8", title: "LEGAL_ST 221-0", location: "Harris Hall...", color: "yellow", day: 1, startHour: 13, duration: 1, start: "2026-04-07T13:00:00", end: "2026-04-07T14:00:00", source: "google", isReadOnly: true },
-  { id: "9", title: "COMP_SCI 397-0 (semi...", location: "RB135 - Th...", color: "yellow", day: 1, startHour: 14.5, duration: 2.5, start: "2026-04-07T14:30:00", end: "2026-04-07T17:00:00", source: "local", isReadOnly: false },
-  { id: "10", title: "Project Vela...", color: "orange", day: 1, startHour: 16.5, duration: 1.5, start: "2026-04-07T16:30:00", end: "2026-04-07T18:00:00", source: "local", isReadOnly: false },
+  // Northwestern Classes (cal-3)
+  { id: "2", calendarId: "cal-3", title: "MATH 240-0", location: "Lunt 105", color: "mint", day: 0, startHour: 10, duration: 1, start: "2026-04-06T10:00:00", end: "2026-04-06T11:00:00", source: "google", isReadOnly: true },
+  { id: "3", calendarId: "cal-3", title: "HISTORY 38...", location: "Locy Hall 111", color: "blue", day: 0, startHour: 11, duration: 1, start: "2026-04-06T11:00:00", end: "2026-04-06T12:00:00", source: "google", isReadOnly: true },
+  { id: "4", calendarId: "cal-3", title: "PHIL 101-8 O...", location: "Crowe 3-178", color: "cyan", day: 0, startHour: 15, duration: 0.5, start: "2026-04-06T15:00:00", end: "2026-04-06T15:30:00", source: "local", isReadOnly: false },
+  { id: "5", calendarId: "cal-3", title: "PHIL 101-8 (seminar)", location: "Shepard Ha...", color: "cyan", day: 0, startHour: 16, duration: 1, start: "2026-04-06T16:00:00", end: "2026-04-06T17:00:00", source: "local", isReadOnly: false },
+  { id: "7", calendarId: "cal-3", title: "MATH 240-0...", location: "Lunt Hall 103", color: "mint", day: 1, startHour: 10, duration: 1, start: "2026-04-07T10:00:00", end: "2026-04-07T11:00:00", source: "google", isReadOnly: true },
+  { id: "8", calendarId: "cal-3", title: "LEGAL_ST 221-0", location: "Harris Hall...", color: "yellow", day: 1, startHour: 13, duration: 1, start: "2026-04-07T13:00:00", end: "2026-04-07T14:00:00", source: "google", isReadOnly: true },
+  { id: "9", calendarId: "cal-3", title: "COMP_SCI 397-0 (semi...", location: "RB135 - Th...", color: "yellow", day: 1, startHour: 14.5, duration: 2.5, start: "2026-04-07T14:30:00", end: "2026-04-07T17:00:00", source: "local", isReadOnly: false },
+  { id: "11", calendarId: "cal-3", title: "HISTORY 38...", location: "Locy Hall 111", color: "blue", day: 2, startHour: 11, duration: 1, start: "2026-04-08T11:00:00", end: "2026-04-08T12:00:00", source: "google", isReadOnly: true },
+  { id: "12", calendarId: "cal-3", title: "PHIL 101-8 O...", location: "Crowe 3-178", color: "cyan", day: 2, startHour: 15, duration: 0.5, start: "2026-04-08T15:00:00", end: "2026-04-08T15:30:00", source: "local", isReadOnly: false },
+  { id: "13", calendarId: "cal-3", title: "PHIL 101-8 (seminar)", location: "Shepard Ha...", color: "cyan", day: 2, startHour: 16, duration: 1, start: "2026-04-08T16:00:00", end: "2026-04-08T17:00:00", source: "local", isReadOnly: false },
+  { id: "16", calendarId: "cal-3", title: "LEGAL_ST 221-0", location: "Harris Hall...", color: "yellow", day: 3, startHour: 13, duration: 1, start: "2026-04-09T13:00:00", end: "2026-04-09T14:00:00", source: "google", isReadOnly: true },
+  { id: "17", calendarId: "cal-3", title: "LEGAL_ST 2...", location: "Kresge Cen...", color: "yellow", day: 3, startHour: 16, duration: 1, start: "2026-04-09T16:00:00", end: "2026-04-09T17:00:00", source: "local", isReadOnly: false },
+  { id: "20", calendarId: "cal-3", title: "MATH 240-0", location: "Lunt 105", color: "mint", day: 4, startHour: 10, duration: 1, start: "2026-04-10T10:00:00", end: "2026-04-10T11:00:00", source: "google", isReadOnly: true },
+  { id: "21", calendarId: "cal-3", title: "HISTORY 38...", location: "Locy Hall 111", color: "blue", day: 4, startHour: 11, duration: 1, start: "2026-04-10T11:00:00", end: "2026-04-10T12:00:00", source: "google", isReadOnly: true },
+  { id: "23", calendarId: "cal-3", title: "HISTORY 38...", location: "Kresge Cen...", color: "blue", day: 4, startHour: 14, duration: 1, start: "2026-04-10T14:00:00", end: "2026-04-10T15:00:00", source: "google", isReadOnly: true },
 
-  // Wednesday (day 2)
-  { id: "11", title: "HISTORY 38...", location: "Locy Hall 111", color: "blue", day: 2, startHour: 11, duration: 1, start: "2026-04-08T11:00:00", end: "2026-04-08T12:00:00", source: "google", isReadOnly: true },
-  { id: "12", title: "PHIL 101-8 O...", location: "Crowe 3-178", color: "cyan", day: 2, startHour: 15, duration: 0.5, start: "2026-04-08T15:00:00", end: "2026-04-08T15:30:00", source: "local", isReadOnly: false },
-  { id: "13", title: "PHIL 101-8 (seminar)", location: "Shepard Ha...", color: "cyan", day: 2, startHour: 16, duration: 1, start: "2026-04-08T16:00:00", end: "2026-04-08T17:00:00", source: "local", isReadOnly: false },
-  { id: "14", title: "Project Vela...", color: "orange", day: 2, startHour: 16.5, duration: 0.5, start: "2026-04-08T16:30:00", end: "2026-04-08T17:00:00", source: "local", isReadOnly: false },
-  { id: "15", title: "Feiyi Recital", location: "Galvin Reci...", color: "cyan", day: 2, startHour: 18, duration: 1, start: "2026-04-08T18:00:00", end: "2026-04-08T19:00:00", source: "google", isReadOnly: true },
+  // Project Vela (cal-4)
+  { id: "6", calendarId: "cal-4", title: "Project Vela...", color: "orange", day: 0, startHour: 16.5, duration: 0.5, start: "2026-04-06T16:30:00", end: "2026-04-06T17:00:00", source: "local", isReadOnly: false },
+  { id: "10", calendarId: "cal-4", title: "Project Vela...", color: "orange", day: 1, startHour: 16.5, duration: 1.5, start: "2026-04-07T16:30:00", end: "2026-04-07T18:00:00", source: "local", isReadOnly: false },
+  { id: "14", calendarId: "cal-4", title: "Project Vela...", color: "orange", day: 2, startHour: 16.5, duration: 0.5, start: "2026-04-08T16:30:00", end: "2026-04-08T17:00:00", source: "local", isReadOnly: false },
+  { id: "18", calendarId: "cal-4", title: "Project Vela...", color: "orange", day: 3, startHour: 16.5, duration: 0.5, start: "2026-04-09T16:30:00", end: "2026-04-09T17:00:00", source: "local", isReadOnly: false },
+  { id: "24", calendarId: "cal-4", title: "Project Vela...", color: "orange", day: 4, startHour: 16.5, duration: 0.5, start: "2026-04-10T16:30:00", end: "2026-04-10T17:00:00", source: "local", isReadOnly: false },
 
-  // Thursday (day 3)
-  { id: "16", title: "LEGAL_ST 221-0", location: "Harris Hall...", color: "yellow", day: 3, startHour: 13, duration: 1, start: "2026-04-09T13:00:00", end: "2026-04-09T14:00:00", source: "google", isReadOnly: true },
-  { id: "17", title: "LEGAL_ST 2...", location: "Kresge Cen...", color: "yellow", day: 3, startHour: 16, duration: 1, start: "2026-04-09T16:00:00", end: "2026-04-09T17:00:00", source: "local", isReadOnly: false },
-  { id: "18", title: "Project Vela...", color: "orange", day: 3, startHour: 16.5, duration: 0.5, start: "2026-04-09T16:30:00", end: "2026-04-09T17:00:00", source: "local", isReadOnly: false },
-  { id: "19", title: "Dinner w Evan", color: "cyan", day: 3, startHour: 18, duration: 1, start: "2026-04-09T18:00:00", end: "2026-04-09T19:00:00", source: "local", isReadOnly: false },
-
-  // Friday (day 4)
-  { id: "20", title: "MATH 240-0", location: "Lunt 105", color: "mint", day: 4, startHour: 10, duration: 1, start: "2026-04-10T10:00:00", end: "2026-04-10T11:00:00", source: "google", isReadOnly: true },
-  { id: "21", title: "HISTORY 38...", location: "Locy Hall 111", color: "blue", day: 4, startHour: 11, duration: 1, start: "2026-04-10T11:00:00", end: "2026-04-10T12:00:00", source: "google", isReadOnly: true },
-  { id: "22", title: "Innovation L...", location: "Microsoft T...", color: "orange", day: 4, startHour: 13, duration: 1, start: "2026-04-10T13:00:00", end: "2026-04-10T14:00:00", source: "local", isReadOnly: false },
-  { id: "23", title: "HISTORY 38...", location: "Kresge Cen...", color: "blue", day: 4, startHour: 14, duration: 1, start: "2026-04-10T14:00:00", end: "2026-04-10T15:00:00", source: "google", isReadOnly: true },
-  { id: "24", title: "Project Vela...", color: "orange", day: 4, startHour: 16.5, duration: 0.5, start: "2026-04-10T16:30:00", end: "2026-04-10T17:00:00", source: "local", isReadOnly: false },
-  { id: "25", title: "Hotpot", color: "cyan", day: 4, startHour: 18, duration: 3, start: "2026-04-10T18:00:00", end: "2026-04-10T21:00:00", source: "local", isReadOnly: false },
+  // Social Calendar (cal-5)
+  { id: "15", calendarId: "cal-5", title: "Feiyi Recital", location: "Galvin Reci...", color: "cyan", day: 2, startHour: 18, duration: 1, start: "2026-04-08T18:00:00", end: "2026-04-08T19:00:00", source: "google", isReadOnly: true },
 ]
 
 // API Hook: Replace mockSyncStatus with fetch call here
@@ -105,9 +107,11 @@ function GoogleIcon() {
 
 interface ScheduleViewProps {
   onSyncWithGoogle?: () => void
+  visibleCalendarIds?: string[]
+  calendars?: Calendar[]
 }
 
-export function ScheduleView({ onSyncWithGoogle }: ScheduleViewProps) {
+export function ScheduleView({ onSyncWithGoogle, visibleCalendarIds, calendars }: ScheduleViewProps) {
   const [viewMode, setViewMode] = useState<ViewMode>("7days")
   const [tabMode, setTabMode] = useState<TabMode>("schedule")
   const [selectedDate, setSelectedDate] = useState<Date>(new Date(2026, 3, 11)) // April 11, 2026
@@ -115,9 +119,20 @@ export function ScheduleView({ onSyncWithGoogle }: ScheduleViewProps) {
   const [isSyncing, setIsSyncing] = useState(false)
 
   // API Hook: Replace with useCalendarEvents()
-  const events = mockEvents
+  const allEvents = mockEvents
   const syncStatus = mockSyncStatus
   const scheduleStatus = mockScheduleStatus
+
+  // Filter events based on visible calendars
+  const events = visibleCalendarIds 
+    ? allEvents.filter(event => visibleCalendarIds.includes(event.calendarId))
+    : allEvents
+
+  // Get calendar color for an event
+  const getEventColor = (event: CalendarEvent): string => {
+    const calendar = calendars?.find(cal => cal.id === event.calendarId)
+    return calendar?.color || colorClasses[event.color].split(" ")[0].replace("bg-[", "").replace("]", "")
+  }
 
   const handleSyncWithGoogle = async () => {
     setIsSyncing(true)
@@ -142,6 +157,25 @@ export function ScheduleView({ onSyncWithGoogle }: ScheduleViewProps) {
       top: `${top}px`,
       height: `${Math.max(height, 18)}px`,
     }
+  }
+
+  // Get event background color from calendar
+  const getEventColorStyle = (event: CalendarEvent) => {
+    const calendar = calendars?.find(cal => cal.id === event.calendarId)
+    if (calendar) {
+      // Convert hex to rgba for background with good text contrast
+      const hex = calendar.color
+      const r = parseInt(hex.slice(1, 3), 16)
+      const g = parseInt(hex.slice(3, 5), 16)
+      const b = parseInt(hex.slice(5, 7), 16)
+      const brightness = (r * 299 + g * 587 + b * 114) / 1000
+      const textColor = brightness > 128 ? "#1a1a1a" : "#ffffff"
+      return {
+        backgroundColor: calendar.color,
+        color: textColor,
+      }
+    }
+    return {}
   }
 
   // Navigation helpers
@@ -411,7 +445,7 @@ export function ScheduleView({ onSyncWithGoogle }: ScheduleViewProps) {
         {viewMode === "1month" ? (
           <div className="flex-1 flex flex-col">
             {/* Month navigation */}
-            <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center justify-center gap-4 mb-4">
               <Button
                 variant="ghost"
                 size="sm"
@@ -541,8 +575,13 @@ export function ScheduleView({ onSyncWithGoogle }: ScheduleViewProps) {
                       .map((event) => (
                         <div
                           key={event.id}
-                          className={`absolute left-0.5 right-0.5 rounded px-1 py-0.5 overflow-hidden ${colorClasses[event.color]} ${event.isReadOnly ? "opacity-90" : ""}`}
-                          style={getEventStyle(event)}
+                          className={`absolute left-0.5 right-0.5 rounded px-1 py-0.5 overflow-hidden ${
+                            calendars ? "" : colorClasses[event.color]
+                          } ${event.isReadOnly ? "opacity-90" : ""}`}
+                          style={{
+                            ...getEventStyle(event),
+                            ...(calendars ? getEventColorStyle(event) : {}),
+                          }}
                         >
                           {/* Google icon for synced events */}
                           {event.source === "google" && <GoogleIcon />}
@@ -565,3 +604,6 @@ export function ScheduleView({ onSyncWithGoogle }: ScheduleViewProps) {
     </Card>
   )
 }
+
+// Export mock events for use elsewhere
+export { mockEvents }
