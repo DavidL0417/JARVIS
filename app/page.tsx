@@ -11,7 +11,13 @@ import { StatusPanel } from "@/components/dashboard/status-panel"
 import { CalendarsSidebar, initialCalendars, type Calendar } from "@/components/dashboard/calendars-sidebar"
 import { TaskManager, initialTasks, type Task } from "@/components/dashboard/task-manager"
 import { Button } from "@/components/ui/button"
+import { TaskSidebar } from "@/components/dashboard/task-sidebar"
 import { X, Book } from "lucide-react"
+// ##### BACKEND API #####
+// DO NOT MODIFY UNLESS BACKEND OWNER
+import { getDashboardData } from "@/lib/data/dashboard"
+import type { DashboardResponse } from "@/types"
+// ##### END BACKEND #####
 
 type MobileSection = "command" | "schedule" | "status"
 
@@ -62,6 +68,39 @@ export default function DashboardPage() {
   return (
     <div className={`h-screen overflow-hidden text-foreground p-3 md:p-4 ${isDarkMode ? "bg-[#0a0a0a]" : "bg-gray-50"}`}>
       <div className="max-w-[1600px] mx-auto h-full flex flex-col">
+  
+  // Calendar sidebar state
+  const { calendarSidebarOpen, setCalendarSidebarOpen } = useCalendarStore()
+  
+  // ##### BACKEND API #####
+  // DO NOT MODIFY UNLESS BACKEND OWNER
+  const [dashboardData, setDashboardData] = useState<DashboardResponse | null>(null)
+
+  useEffect(() => {
+    let isActive = true
+
+    async function loadDashboard() {
+      const data = await getDashboardData()
+
+      if (!isActive || !data) {
+        return
+      }
+
+      console.log("Loaded dashboard data", data)
+      setDashboardData(data)
+    }
+
+    loadDashboard()
+
+    return () => {
+      isActive = false
+    }
+  }, [])
+  // ##### END BACKEND #####
+
+  return (
+    <div className="min-h-screen bg-background dark:bg-[#0a0a0a] text-foreground p-4 md:p-5">
+      <div className="max-w-[1800px] mx-auto h-[calc(100vh-40px)] flex flex-col">
         {/* Header */}
         <DashboardHeader 
           onTogglePanels={() => setPanelsHidden(!panelsHidden)} 
@@ -80,6 +119,12 @@ export default function DashboardPage() {
           onCalendarsChange={setCalendars}
           onSelectCalendar={setActiveCalendarId}
           activeCalendarId={activeCalendarId}
+        />
+        
+        {/* Calendar Sidebar */}
+        <CalendarsSidebar 
+          open={calendarSidebarOpen} 
+          onOpenChange={setCalendarSidebarOpen} 
         />
 
         {/* Mobile Navigation Menu */}
@@ -157,7 +202,7 @@ export default function DashboardPage() {
               variant={mobileSection === section.id ? "default" : "ghost"}
               size="sm"
               onClick={() => setMobileSection(section.id)}
-              className={`flex-1 ${
+              className={`flex-1 text-sm font-semibold ${
                 mobileSection === section.id
                   ? "bg-[#3b82f6] text-white text-xs h-7 font-semibold"
                   : "text-muted-foreground hover:text-foreground text-xs h-7 font-semibold"
@@ -171,11 +216,11 @@ export default function DashboardPage() {
         {/* Mobile Content */}
         <div className="md:hidden flex-1 overflow-auto">
           {mobileSection === "command" && (
-            <div className="flex flex-col gap-3">
-              <WorkspaceSnapshot />
+            <div className="flex flex-col gap-3 h-full overflow-auto">
+              <WorkspaceSnapshot stats={dashboardData?.stats} />
               <PanelTabs />
               <MasterInput />
-              <WhatToDoNow />
+              <WhatToDoNow currentTask={dashboardData?.currentTask} />
             </div>
           )}
           {mobileSection === "schedule" && (
@@ -210,7 +255,7 @@ export default function DashboardPage() {
               <WorkspaceSnapshot />
               <PanelTabs />
               <MasterInput />
-              <WhatToDoNow />
+              <WhatToDoNow currentTask={dashboardData?.currentTask} />
             </div>
           )}
 

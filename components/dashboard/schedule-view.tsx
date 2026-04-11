@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useMemo } from "react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { MapPin, ChevronLeft, ChevronRight, RefreshCw, Loader2 } from "lucide-react"
@@ -146,8 +146,10 @@ export function ScheduleView({ onSyncWithGoogle, visibleCalendarIds, calendars }
     console.log("Replanning now")
   }
 
-  const handleResetReplan = () => {
-    console.log("Reset and replan")
+  // Handle clicking a date in month view
+  const handleDateClick = (date: Date) => {
+    setSelectedDate(date)
+    setViewMode("1day")
   }
 
   const getEventStyle = (event: CalendarEvent) => {
@@ -360,7 +362,7 @@ export function ScheduleView({ onSyncWithGoogle, visibleCalendarIds, calendars }
               variant={tabMode === "calendars" ? "default" : "ghost"}
               size="sm"
               onClick={() => setTabMode("calendars")}
-              className={
+              className={`h-8 px-3 text-sm font-semibold ${
                 tabMode === "calendars"
                   ? "bg-secondary text-foreground text-xs h-7 px-3 font-semibold"
                   : "text-muted-foreground hover:text-foreground hover:bg-secondary text-xs h-7 px-3 font-semibold"
@@ -372,7 +374,7 @@ export function ScheduleView({ onSyncWithGoogle, visibleCalendarIds, calendars }
               variant={tabMode === "schedule" ? "default" : "ghost"}
               size="sm"
               onClick={() => setTabMode("schedule")}
-              className={
+              className={`h-8 px-3 text-sm font-semibold ${
                 tabMode === "schedule"
                   ? "bg-[#3b82f6] text-white text-xs h-7 px-3 font-semibold"
                   : "text-muted-foreground hover:text-foreground hover:bg-secondary text-xs h-7 px-3 font-semibold"
@@ -380,13 +382,25 @@ export function ScheduleView({ onSyncWithGoogle, visibleCalendarIds, calendars }
             >
               Schedule
             </Button>
+          </div>
+
+          {/* Center - Navigation */}
+          <div className="flex items-center gap-2">
             <Button
               variant="ghost"
+              size="icon"
+              onClick={navigatePrevious}
+              className="h-8 w-8"
+            >
+              <ChevronLeft className="w-5 h-5" />
+            </Button>
+            <Button
+              variant="outline"
               size="sm"
               onClick={handleReplanNow}
               className="text-muted-foreground hover:text-foreground hover:bg-secondary text-xs h-7 px-3 font-semibold"
             >
-              Replan Now
+              Today
             </Button>
             <Button
               variant="ghost"
@@ -394,7 +408,7 @@ export function ScheduleView({ onSyncWithGoogle, visibleCalendarIds, calendars }
               onClick={handleResetReplan}
               className="text-muted-foreground hover:text-foreground hover:bg-secondary text-xs h-7 px-3 font-semibold"
             >
-              Reset & Replan
+              <ChevronRight className="w-5 h-5" />
             </Button>
           </div>
           <div className="flex items-center gap-2">
@@ -535,6 +549,107 @@ export function ScheduleView({ onSyncWithGoogle, visibleCalendarIds, calendars }
                 </div>
               ))}
             </div>
+            {/* Date grid */}
+            <div className="grid grid-cols-7 gap-px bg-border/50">
+              {getMonthGrid().map((date, i) => (
+                <div
+                  key={i}
+                  className={`min-h-[100px] p-2 bg-card dark:bg-[#1a1a1a] ${
+                    date ? "cursor-pointer hover:bg-secondary/50 dark:hover:bg-[#252525] transition-colors" : ""
+                  }`}
+                  onClick={() => date && handleDateClick(date)}
+                >
+                  {date && (
+                    <>
+                      <div className={`flex items-center justify-center w-8 h-8 mb-1 rounded-full text-sm font-semibold ${
+                        isToday(date)
+                          ? "bg-primary text-primary-foreground"
+                          : "text-foreground"
+                      }`}>
+                        {date.getDate()}
+                      </div>
+                      {/* Event indicators */}
+                      <div className="space-y-1">
+                        {getEventsForDate(date).slice(0, 3).map((event) => (
+                          <div
+                            key={event.id}
+                            className="flex items-center gap-1 text-xs truncate"
+                            style={{ color: getEventColor(event) }}
+                          >
+                            <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: getEventColor(event) }} />
+                            <span className="truncate font-medium">{event.title}</span>
+                            {event.source === "google" && (
+                              <GoogleIcon className="w-3 h-3 flex-shrink-0" />
+                            )}
+                          </div>
+                        ))}
+                        {getEventsForDate(date).length > 3 && (
+                          <div className="text-xs text-muted-foreground font-semibold">
+                            +{getEventsForDate(date).length - 3} more
+                          </div>
+                        )}
+                      </div>
+                    </>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : (
+          /* Calendar Grid - Day Views (1, 3, 7 days) */
+          <div className="flex-1 overflow-auto relative">
+            {/* Day Headers */}
+            <div 
+              className={`grid gap-px sticky top-0 z-10 bg-card dark:bg-[#141414] ${
+                viewMode === "1day" 
+                  ? "grid-cols-[60px_1fr]" 
+                  : viewMode === "3days" 
+                  ? "grid-cols-[60px_repeat(3,1fr)]" 
+                  : "grid-cols-[60px_repeat(7,1fr)]"
+              }`}
+            >
+              <div className="h-12" /> {/* Empty corner cell */}
+              {displayDates.map((date, i) => (
+                <div 
+                  key={i} 
+                  className="h-12 flex flex-col items-center justify-center border-l border-border dark:border-[#2a2a2a] bg-card dark:bg-[#1a1a1a]"
+                >
+                  <span className="text-xs font-semibold text-muted-foreground">
+                    {dayNames[date.getDay()]}
+                  </span>
+                  <span className={`text-base font-bold flex items-center justify-center w-8 h-8 rounded-full ${
+                    isToday(date)
+                      ? "bg-primary text-primary-foreground"
+                      : "text-foreground"
+                  }`}>
+                    {date.getDate()}
+                  </span>
+                </div>
+              ))}
+            </div>
+            
+            {/* Time Grid */}
+            <div 
+              className={`grid gap-px ${
+                viewMode === "1day" 
+                  ? "grid-cols-[60px_1fr]" 
+                  : viewMode === "3days" 
+                  ? "grid-cols-[60px_repeat(3,1fr)]" 
+                  : "grid-cols-[60px_repeat(7,1fr)]"
+              }`}
+              style={{ minHeight: `${24 * 48}px` }}
+            >
+              {/* Time column */}
+              <div className="flex flex-col">
+                {timeSlots.map((time, i) => (
+                  <div 
+                    key={i} 
+                    className="h-[48px] text-xs font-semibold text-muted-foreground pr-2 text-right flex items-start pt-0.5"
+                  >
+                    {time}
+                  </div>
+                ))}
+              </div>
 
             {/* Scrollable time grid */}
             <div className="flex-1 overflow-auto">

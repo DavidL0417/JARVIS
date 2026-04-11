@@ -2,6 +2,7 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import type { DashboardCurrentTask } from "@/types"
 
 // API Hook: Replace mockCurrentTask with fetch call here
 // Example: const { data: currentTask } = useSWR('/api/tasks/current', fetcher)
@@ -12,9 +13,35 @@ const mockCurrentTask = {
   status: "You're all caught up.",
 }
 
-export function WhatToDoNow() {
-  // API Hook: Replace mockCurrentTask with fetched data
-  const task = mockCurrentTask
+interface WhatToDoNowProps {
+  currentTask?: DashboardCurrentTask | null
+}
+
+function getTaskSubtitle(status: DashboardCurrentTask["status"]) {
+  if (status === "scheduled") {
+    return "Live dashboard data is now driving this recommendation."
+  }
+
+  if (status === "completed") {
+    return "This task is already complete."
+  }
+
+  if (status === "missed") {
+    return "This task missed its planned slot and may need a replan."
+  }
+
+  return "This task is ready to be scheduled."
+}
+
+export function WhatToDoNow({ currentTask }: WhatToDoNowProps) {
+  const task = currentTask
+    ? {
+        hasRecommendation: true,
+        title: currentTask.title,
+        subtitle: getTaskSubtitle(currentTask.status),
+        status: `Status: ${currentTask.status}`,
+      }
+    : mockCurrentTask
 
   // API Hook: Replace with actual action handlers
   // Example: const { trigger: markDone } = useSWRMutation('/api/tasks/done', postFetcher)

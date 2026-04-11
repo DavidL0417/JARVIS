@@ -1,6 +1,7 @@
 "use client"
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import type { DashboardStats } from "@/types"
 
 // API Hook: Replace mockStatusData with fetch call here
 // Example: const { data: status } = useSWR('/api/status', fetcher)
@@ -18,6 +19,10 @@ interface StatusItemProps {
   value: string | number
 }
 
+interface StatusPanelProps {
+  stats?: DashboardStats
+}
+
 function StatusItem({ label, value }: StatusItemProps) {
   return (
     <div className="space-y-0.5">
@@ -27,9 +32,25 @@ function StatusItem({ label, value }: StatusItemProps) {
   )
 }
 
-export function StatusPanel() {
-  // API Hook: Replace mockStatusData with fetched data
-  const status = mockStatusData
+function formatCheckIns(value: DashboardStats["checkInMode"]) {
+  return value.charAt(0).toUpperCase() + value.slice(1)
+}
+
+export function StatusPanel({ stats }: StatusPanelProps) {
+  const status = stats
+    ? {
+        checkIns: formatCheckIns(stats.checkInMode),
+        overdue: stats.overdue,
+        unscheduled: stats.unscheduled,
+        checkInsMessage: "Backend check-in state is connected to the dashboard mock endpoint.",
+        overdueMessage:
+          stats.overdue === 0 ? "No overdue tasks." : `${stats.overdue} tasks need attention.`,
+        estimatesMessage:
+          stats.unscheduled === 0
+            ? "All tasks are currently scheduled."
+            : `${stats.unscheduled} tasks are still waiting for a slot.`,
+      }
+    : mockStatusData
 
   return (
     <div className="space-y-3">
