@@ -11,7 +11,7 @@ import { StatusPanel } from "@/components/dashboard/status-panel"
 import { CalendarsSidebar, initialCalendars, type Calendar } from "@/components/dashboard/calendars-sidebar"
 import { TaskManager, initialTasks, type Task } from "@/components/dashboard/task-manager"
 import { Button } from "@/components/ui/button"
-import { X, Book } from "lucide-react"
+import { X } from "lucide-react"
 
 type MobileSection = "command" | "schedule" | "status"
 
@@ -121,23 +121,6 @@ export default function DashboardPage() {
             </div>
           </div>
         )}
-
-        {/* Page Title - Desktop */}
-        <div className="hidden md:flex items-center gap-3 mb-2">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handleOpenCalendarsSidebar}
-            className="text-muted-foreground hover:text-foreground hover:bg-secondary h-8 w-8 p-0"
-            title="Open Calendars"
-          >
-            <Book className="w-5 h-5" />
-          </Button>
-          <div>
-            <h2 className="text-xl font-bold text-foreground">Today</h2>
-            <p className="text-xs text-muted-foreground font-medium">Your plan, quick actions, and schedule</p>
-          </div>
-        </div>
 
         {/* Hide Panels Toggle - Desktop only */}
         <div className="hidden md:flex mb-3 items-center gap-3">
