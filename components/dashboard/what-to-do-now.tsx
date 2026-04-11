@@ -3,31 +3,58 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 
+// API Hook: Replace mockCurrentTask with fetch call here
+// Example: const { data: currentTask } = useSWR('/api/tasks/current', fetcher)
+const mockCurrentTask = {
+  hasRecommendation: false,
+  title: "No task to recommend yet.",
+  subtitle: "Sync tasks and schedule to get started.",
+  status: "You're all caught up.",
+}
+
 export function WhatToDoNow() {
+  // API Hook: Replace mockCurrentTask with fetched data
+  const task = mockCurrentTask
+
+  // API Hook: Replace with actual action handlers
+  // Example: const { trigger: markDone } = useSWRMutation('/api/tasks/done', postFetcher)
+  const handleDone = () => {
+    console.log("Marking task done")
+  }
+
+  const handleSomethingElse = () => {
+    console.log("Something else clicked")
+  }
+
   return (
     <Card className="bg-[#141414] border-[#2a2a2a]">
-      <CardHeader className="pb-2">
-        <div className="flex items-center gap-2">
-          <div className="w-2 h-2 rounded-full bg-[#3b82f6]" />
-          <CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-            现在该做什么
+      <CardHeader className="p-3 pb-1">
+        <div className="flex items-center gap-1.5">
+          <div className="w-1.5 h-1.5 rounded-full bg-[#3b82f6]" />
+          <CardTitle className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
+            What to do now
           </CardTitle>
         </div>
       </CardHeader>
-      <CardContent className="space-y-2">
-        <p className="text-sm font-medium text-foreground">暂无推荐任务。</p>
-        <p className="text-xs text-muted-foreground">同步任务并安排日程以开始。</p>
-        <p className="text-xs text-muted-foreground">你已经全部完成了。</p>
-        <div className="flex gap-2 pt-2">
-          <Button size="sm" className="bg-[#3b82f6] hover:bg-[#2563eb] text-white text-xs h-8">
-            完成
+      <CardContent className="p-3 pt-2 space-y-1.5">
+        <p className="text-xs font-medium text-foreground">{task.title}</p>
+        <p className="text-[10px] text-muted-foreground">{task.subtitle}</p>
+        <p className="text-[10px] text-muted-foreground">{task.status}</p>
+        <div className="flex gap-2 pt-1">
+          <Button 
+            size="sm" 
+            onClick={handleDone}
+            className="bg-[#3b82f6] hover:bg-[#2563eb] text-white text-[10px] h-6 px-3"
+          >
+            Done
           </Button>
           <Button 
             size="sm" 
             variant="outline" 
-            className="border-[#2a2a2a] text-foreground hover:bg-[#1f1f1f] text-xs h-8"
+            onClick={handleSomethingElse}
+            className="border-[#2a2a2a] text-foreground hover:bg-[#1f1f1f] text-[10px] h-6 px-3"
           >
-            其他
+            Something else
           </Button>
         </div>
       </CardContent>

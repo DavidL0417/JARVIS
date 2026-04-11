@@ -2,6 +2,15 @@
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 
+// API Hook: Replace mockWorkspaceStats with fetch call here
+// Example: const { data: stats } = useSWR('/api/workspace/stats', fetcher)
+const mockWorkspaceStats = {
+  openTasks: 23,
+  inbox: 0,
+  overdue: 0,
+  checkIns: "Quiet",
+}
+
 interface StatItemProps {
   label: string
   value: string | number
@@ -9,28 +18,31 @@ interface StatItemProps {
 
 function StatItem({ label, value }: StatItemProps) {
   return (
-    <div className="space-y-1">
-      <p className="text-xs text-muted-foreground">{label}</p>
-      <p className="text-2xl font-semibold text-foreground">{value}</p>
+    <div className="space-y-0.5">
+      <p className="text-[10px] text-muted-foreground uppercase tracking-wide">{label}</p>
+      <p className="text-lg font-semibold text-foreground">{value}</p>
     </div>
   )
 }
 
 export function WorkspaceSnapshot() {
+  // API Hook: Replace mockWorkspaceStats with fetched data
+  const stats = mockWorkspaceStats
+
   return (
     <Card className="bg-[#141414] border-[#2a2a2a]">
-      <CardHeader className="pb-2">
-        <CardTitle className="text-sm font-medium text-foreground">工作空间概览</CardTitle>
-        <CardDescription className="text-xs text-muted-foreground">
-          关键数据一览。点击下方面板专注处理。
+      <CardHeader className="p-3 pb-1">
+        <CardTitle className="text-xs font-medium text-foreground">Workspace Snapshot</CardTitle>
+        <CardDescription className="text-[10px] text-muted-foreground leading-tight">
+          Key counts at a glance. Open a panel below to work on one area at a time.
         </CardDescription>
       </CardHeader>
-      <CardContent>
-        <div className="grid grid-cols-2 gap-4">
-          <StatItem label="待办任务" value={23} />
-          <StatItem label="收件箱" value={0} />
-          <StatItem label="已逾期" value={0} />
-          <StatItem label="签到" value="静默" />
+      <CardContent className="p-3 pt-2">
+        <div className="grid grid-cols-2 gap-3">
+          <StatItem label="Open tasks" value={stats.openTasks} />
+          <StatItem label="Inbox" value={stats.inbox} />
+          <StatItem label="Overdue" value={stats.overdue} />
+          <StatItem label="Check-ins" value={stats.checkIns} />
         </div>
       </CardContent>
     </Card>

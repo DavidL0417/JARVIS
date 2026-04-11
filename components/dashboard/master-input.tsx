@@ -8,29 +8,41 @@ import { Textarea } from "@/components/ui/textarea"
 export function MasterInput() {
   const [message, setMessage] = useState("")
 
+  // API Hook: Replace with actual submission handler
+  // Example: const { trigger: submitMessage } = useSWRMutation('/api/assistant/message', postFetcher)
+  const handleSubmit = async () => {
+    if (!message.trim()) return
+    // API Hook: Call submitMessage(message) here
+    console.log("Submitting message:", message)
+    setMessage("")
+  }
+
   return (
     <Card className="bg-[#141414] border-[#2a2a2a] flex-1">
-      <CardHeader className="pb-2">
-        <CardTitle className="text-sm font-medium text-foreground">主输入</CardTitle>
-        <CardDescription className="text-xs text-muted-foreground">
-          用自然语言提问。我可以编辑任务、重新规划，以及保存/移除助手记忆。
+      <CardHeader className="p-3 pb-1">
+        <CardTitle className="text-xs font-medium text-foreground">Master Input</CardTitle>
+        <CardDescription className="text-[10px] text-muted-foreground leading-tight">
+          Ask in plain language. I can edit tasks, replan, and save/remove assistant memory.
         </CardDescription>
       </CardHeader>
-      <CardContent className="flex flex-col h-full">
-        <div className="flex-1 bg-[#1a1a1a] rounded-lg p-3 mb-3 min-h-[120px]">
-          <p className="text-sm text-muted-foreground">
-            告诉我有什么变化，我会更新计划。我可以安排日程、重新规划、编辑任务，以及记住长期偏好。
+      <CardContent className="p-3 pt-2 flex flex-col">
+        <div className="bg-[#1a1a1a] rounded-md p-2 mb-2 min-h-[80px]">
+          <p className="text-[11px] text-muted-foreground leading-relaxed">
+            Tell me what changed and I&apos;ll update the plan. I can schedule, replan, edit tasks, and remember long-term preferences.
           </p>
         </div>
         <div className="flex items-center gap-2">
           <Textarea
-            placeholder="输入请求..."
+            placeholder="Type a request..."
             value={message}
             onChange={(e) => setMessage(e.target.value)}
-            className="flex-1 bg-[#1a1a1a] border-[#2a2a2a] text-foreground placeholder:text-muted-foreground resize-none min-h-[40px] h-10"
+            className="flex-1 bg-[#1a1a1a] border-[#2a2a2a] text-foreground placeholder:text-muted-foreground resize-none min-h-[32px] h-8 text-xs py-2"
           />
-          <Button className="bg-[#3b82f6] hover:bg-[#2563eb] text-white px-6">
-            发送
+          <Button 
+            onClick={handleSubmit}
+            className="bg-[#3b82f6] hover:bg-[#2563eb] text-white px-4 h-8 text-xs"
+          >
+            Send
           </Button>
         </div>
       </CardContent>

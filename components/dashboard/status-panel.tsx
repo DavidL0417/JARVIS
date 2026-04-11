@@ -2,6 +2,17 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 
+// API Hook: Replace mockStatusData with fetch call here
+// Example: const { data: status } = useSWR('/api/status', fetcher)
+const mockStatusData = {
+  checkIns: "Quiet",
+  overdue: 0,
+  unscheduled: 0,
+  checkInsMessage: "No check-ins needed yet.",
+  overdueMessage: "No overdue tasks.",
+  estimatesMessage: "All tasks have an estimate or title duration hint.",
+}
+
 interface StatusItemProps {
   label: string
   value: string | number
@@ -9,59 +20,60 @@ interface StatusItemProps {
 
 function StatusItem({ label, value }: StatusItemProps) {
   return (
-    <div className="space-y-1">
-      <p className="text-xs text-muted-foreground">{label}</p>
-      <p className="text-lg font-semibold text-foreground">{value}</p>
+    <div className="space-y-0.5">
+      <p className="text-[10px] text-muted-foreground uppercase tracking-wide">{label}</p>
+      <p className="text-sm font-semibold text-foreground">{value}</p>
     </div>
   )
 }
 
 export function StatusPanel() {
+  // API Hook: Replace mockStatusData with fetched data
+  const status = mockStatusData
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       {/* Status Grid */}
       <Card className="bg-[#141414] border-[#2a2a2a]">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-medium text-foreground">状态</CardTitle>
+        <CardHeader className="p-3 pb-1">
+          <CardTitle className="text-xs font-medium text-foreground">Status</CardTitle>
         </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-2 gap-4">
-            <StatusItem label="签到" value="静默" />
-            <StatusItem label="已逾期" value={0} />
-            <StatusItem label="未安排" value={0} />
+        <CardContent className="p-3 pt-2">
+          <div className="grid grid-cols-2 gap-3">
+            <StatusItem label="Check-ins" value={status.checkIns} />
+            <StatusItem label="Overdue" value={status.overdue} />
+            <StatusItem label="Unscheduled" value={status.unscheduled} />
           </div>
         </CardContent>
       </Card>
 
       {/* Check-ins */}
       <Card className="bg-[#141414] border-[#2a2a2a]">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-medium text-foreground">签到</CardTitle>
+        <CardHeader className="p-3 pb-1">
+          <CardTitle className="text-xs font-medium text-foreground">Check-ins</CardTitle>
         </CardHeader>
-        <CardContent>
-          <p className="text-sm text-muted-foreground">暂无需签到。</p>
+        <CardContent className="p-3 pt-2">
+          <p className="text-[11px] text-muted-foreground">{status.checkInsMessage}</p>
         </CardContent>
       </Card>
 
       {/* Overdue */}
       <Card className="bg-[#141414] border-[#2a2a2a]">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-medium text-foreground">已逾期</CardTitle>
+        <CardHeader className="p-3 pb-1">
+          <CardTitle className="text-xs font-medium text-foreground">Overdue</CardTitle>
         </CardHeader>
-        <CardContent>
-          <p className="text-sm text-muted-foreground">无逾期任务。</p>
+        <CardContent className="p-3 pt-2">
+          <p className="text-[11px] text-muted-foreground">{status.overdueMessage}</p>
         </CardContent>
       </Card>
 
       {/* Missing explicit estimates */}
       <Card className="bg-[#141414] border-[#2a2a2a]">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-medium text-foreground">缺少明确估算</CardTitle>
+        <CardHeader className="p-3 pb-1">
+          <CardTitle className="text-xs font-medium text-foreground">Missing explicit estimates</CardTitle>
         </CardHeader>
-        <CardContent>
-          <p className="text-sm text-muted-foreground">
-            所有任务都有估算或标题时长提示。
-          </p>
+        <CardContent className="p-3 pt-2">
+          <p className="text-[11px] text-muted-foreground">{status.estimatesMessage}</p>
         </CardContent>
       </Card>
     </div>

@@ -7,8 +7,8 @@ const _geist = Geist({ subsets: ["latin"] });
 const _geistMono = Geist_Mono({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: 'SecretaryScheduler - AI 生产力仪表盘',
-  description: 'AI驱动的日程安排和任务管理仪表盘',
+  title: 'SecretaryScheduler - AI Productivity Dashboard',
+  description: 'AI-powered scheduling and task management dashboard',
   generator: 'v0.app',
   icons: {
     icon: [
@@ -35,7 +35,7 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="zh-CN" className="dark">
+    <html lang="en" className="dark">
       <body className="font-sans antialiased bg-[#0a0a0a]">
         {children}
         {process.env.NODE_ENV === 'production' && <Analytics />}
