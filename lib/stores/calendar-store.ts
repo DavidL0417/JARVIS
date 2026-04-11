@@ -124,11 +124,13 @@ interface CalendarStore {
 // Helper to generate unique IDs
 const generateId = () => Math.random().toString(36).substring(2, 11)
 
+// Use a fixed mock week so SSR and client hydration render the same calendar positions.
+const MOCK_WEEK_START_ISO = "2026-04-06T00:00:00.000Z"
+const MOCK_CREATED_AT_ISO = "2026-04-11T12:00:00.000Z"
+
 // Helper to get ISO date strings
 const getISOString = (day: number, startHour: number, duration: number) => {
-  const today = new Date()
-  const startOfWeek = new Date(today)
-  startOfWeek.setDate(today.getDate() - today.getDay() + 1) // Monday
+  const startOfWeek = new Date(MOCK_WEEK_START_ISO)
   
   const eventDate = new Date(startOfWeek)
   eventDate.setDate(eventDate.getDate() + day)
@@ -148,7 +150,7 @@ const defaultCalendars: Calendar[] = [
   { id: "cal-2", name: "Personal", color: "#22d3ee", visible: true, source: "local" },
   { id: "cal-3", name: "Work", color: "#f97316", visible: true, source: "local" },
   { id: "cal-4", name: "Project Vela", color: "#a855f7", visible: true, source: "local" },
-  { id: "cal-google", name: "Google Calendar", color: "#4285f4", visible: true, source: "google" },
+  { id: "cal-google", name: "Google Calendar", color: "#3b82f6", visible: true, source: "google" },
 ]
 
 // Default events with new data model
@@ -199,11 +201,11 @@ const defaultEvents: CalendarEvent[] = [
 
 // Default tasks
 const defaultTasks: CalendarTask[] = [
-  { id: "task-1", calendarId: "cal-1", title: "Review MATH 240 problem set", completed: false, createdAt: new Date().toISOString() },
-  { id: "task-2", calendarId: "cal-1", title: "Read Chapter 5 for HISTORY", completed: false, createdAt: new Date().toISOString() },
-  { id: "task-3", calendarId: "cal-4", title: "Update project documentation", completed: false, createdAt: new Date().toISOString() },
-  { id: "task-4", calendarId: "cal-4", title: "Design review meeting prep", completed: true, createdAt: new Date().toISOString(), completedAt: new Date().toISOString() },
-  { id: "task-5", calendarId: "cal-2", title: "Book dinner reservation", completed: true, createdAt: new Date().toISOString(), completedAt: new Date().toISOString() },
+  { id: "task-1", calendarId: "cal-1", title: "Review MATH 240 problem set", completed: false, createdAt: MOCK_CREATED_AT_ISO },
+  { id: "task-2", calendarId: "cal-1", title: "Read Chapter 5 for HISTORY", completed: false, createdAt: MOCK_CREATED_AT_ISO },
+  { id: "task-3", calendarId: "cal-4", title: "Update project documentation", completed: false, createdAt: MOCK_CREATED_AT_ISO },
+  { id: "task-4", calendarId: "cal-4", title: "Design review meeting prep", completed: true, createdAt: MOCK_CREATED_AT_ISO, completedAt: MOCK_CREATED_AT_ISO },
+  { id: "task-5", calendarId: "cal-2", title: "Book dinner reservation", completed: true, createdAt: MOCK_CREATED_AT_ISO, completedAt: MOCK_CREATED_AT_ISO },
 ]
 
 export const useCalendarStore = create<CalendarStore>((set, get) => ({
@@ -215,7 +217,7 @@ export const useCalendarStore = create<CalendarStore>((set, get) => ({
   events: defaultEvents,
   syncStatus: "idle",
   lastSyncTime: null,
-  selectedDate: new Date(),
+  selectedDate: new Date(MOCK_WEEK_START_ISO),
   viewMode: "7days",
   theme: "dark",
 

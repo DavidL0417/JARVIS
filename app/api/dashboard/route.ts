@@ -4,7 +4,7 @@
 import { NextResponse } from "next/server"
 
 import {
-  getCheckInStatus,
+  getCheckInModeFromCount,
   mapScheduleEventRowToScheduleEvent,
   mapTaskRowToTask,
 } from "@/lib/data/mappers"
@@ -45,12 +45,16 @@ export async function GET() {
     const [tasksResult, eventsResult, checkinsResult] = await Promise.all([
       supabase
         .from("tasks")
-        .select("id, title, description, deadline, duration_minutes, priority, status, is_immutable, calendar_id, scheduled_for")
+        .select(
+          "id, user_id, title, description, deadline, duration_minutes, priority, status, scheduled_for, created_at, updated_at, is_immutable, calendar_id, tags",
+        )
         .eq("user_id", user.id)
         .order("created_at", { ascending: true }),
       supabase
         .from("schedule_events")
-        .select("id, title, starts_at, ends_at, source, status, is_immutable, calendar_id, location, task_id")
+        .select(
+          "id, user_id, task_id, title, starts_at, ends_at, source, status, location, external_event_id, created_at, updated_at, is_immutable, calendar_id",
+        )
         .eq("user_id", user.id)
         .order("starts_at", { ascending: true }),
       supabase.from("checkins").select("id").eq("user_id", user.id).limit(4),
@@ -78,11 +82,11 @@ export async function GET() {
         return true
       }
 
-      if (!task.dueAt || task.status === "completed") {
+      if (!task.deadline || task.status === "completed") {
         return false
       }
 
-      return new Date(task.dueAt).getTime() < Date.now()
+      return new Date(task.deadline).getTime() < Date.now()
     }).length
 
     const unscheduledCount = tasks.filter((task) => {
@@ -98,7 +102,7 @@ export async function GET() {
         tasks: tasks.length,
         overdue: overdueCount,
         unscheduled: unscheduledCount,
-        checkins: getCheckInStatus((checkinsResult.data || []).length),
+        checkInMode: getCheckInModeFromCount((checkinsResult.data || []).length),
       },
       currentTask: pickCurrentTask(tasks),
       events,
