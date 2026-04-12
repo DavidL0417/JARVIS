@@ -7,8 +7,10 @@ import {
   mapOnboardingTaskInputToTaskInsert,
   mapPreferencesToUpsert,
 } from "@/lib/data/mappers"
-import { getOrCreateDemoUser } from "@/lib/supabase/demo-user"
-import { createSupabaseAdminClient } from "@/lib/supabase/server"
+import {
+  isAuthenticationRequiredError,
+  requireAuthenticatedUser,
+} from "@/lib/supabase/auth"
 import { onboardingRequestSchema, onboardingResponseSchema } from "@/schemas/onboarding"
 import type { OnboardingResponse, UserPreferences } from "@/types"
 
@@ -42,10 +44,11 @@ export async function POST(request: Request) {
   }
 
   try {
-    const supabase = createSupabaseAdminClient()
-
-    // MVP note: this route uses a single demo user until auth is wired in.
-    const user = await getOrCreateDemoUser(supabase, { name: parsedBody.data.name })
+    const { adminClient, user } = await requireAuthenticatedUser({
+      profileOverrides: {
+        name: parsedBody.data.name,
+      },
+    })
     const mergedPreferences: UserPreferences = {
       ...DEFAULT_PREFERENCES,
       userId: user.id,
@@ -53,7 +56,7 @@ export async function POST(request: Request) {
       timezone: parsedBody.data.preferences?.timezone || parsedBody.data.timezone,
     }
 
-    const { data: preferenceRecord, error: preferenceError } = await supabase
+    const { data: preferenceRecord, error: preferenceError } = await adminClient
       .from("preferences")
       .upsert(mapPreferencesToUpsert(mergedPreferences), { onConflict: "user_id" })
       .select("id")
@@ -81,7 +84,7 @@ export async function POST(request: Request) {
     let taskIds: string[] = []
 
     if (onboardingTasks.length > 0) {
-      const { data: insertedTasks, error: taskError } = await supabase
+      const { data: insertedTasks, error: taskError } = await adminClient
         .from("tasks")
         .insert(
           onboardingTasks.map((task) =>
@@ -123,6 +126,10 @@ export async function POST(request: Request) {
 
     return NextResponse.json(parsedResponse.data)
   } catch (error) {
+    if (isAuthenticationRequiredError(error)) {
+      return NextResponse.json({ error: "Authentication required." }, { status: 401 })
+    }
+
     return NextResponse.json(
       {
         error: "Failed to persist onboarding data.",
