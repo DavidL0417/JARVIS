@@ -114,8 +114,11 @@ interface ScheduleViewProps {
 export function ScheduleView({ onSyncWithGoogle, visibleCalendarIds, calendars }: ScheduleViewProps) {
   const [viewMode, setViewMode] = useState<ViewMode>("7days")
   const [tabMode, setTabMode] = useState<TabMode>("schedule")
-  const [selectedDate, setSelectedDate] = useState<Date>(new Date(2026, 3, 11)) // April 11, 2026
-  const [monthViewDate, setMonthViewDate] = useState<Date>(new Date(2026, 3, 1)) // April 2026
+  const [selectedDate, setSelectedDate] = useState<Date>(() => new Date())
+  const [monthViewDate, setMonthViewDate] = useState<Date>(() => {
+    const now = new Date()
+    return new Date(now.getFullYear(), now.getMonth(), 1)
+  })
   const [isSyncing, setIsSyncing] = useState(false)
 
   // API Hook: Replace with useCalendarEvents()
@@ -142,8 +145,10 @@ export function ScheduleView({ onSyncWithGoogle, visibleCalendarIds, calendars }
     setTimeout(() => setIsSyncing(false), 1500) // Simulated sync
   }
 
-  const handleReplanNow = () => {
-    console.log("Replanning now")
+  const handleGoToToday = () => {
+    const today = new Date()
+    setSelectedDate(today)
+    setMonthViewDate(new Date(today.getFullYear(), today.getMonth(), 1))
   }
 
   const getEventStyle = (event: CalendarEvent) => {
@@ -177,36 +182,42 @@ export function ScheduleView({ onSyncWithGoogle, visibleCalendarIds, calendars }
 
   // Navigation helpers
   const handlePrevPeriod = () => {
-    const newDate = new Date(selectedDate)
-    if (viewMode === "1day") {
-      newDate.setDate(newDate.getDate() - 1)
-    } else if (viewMode === "3days") {
-      newDate.setDate(newDate.getDate() - 3)
-    } else if (viewMode === "7days") {
-      newDate.setDate(newDate.getDate() - 7)
+    if (viewMode === "1month") {
+      setMonthViewDate(new Date(monthViewDate.getFullYear(), monthViewDate.getMonth() - 1, 1))
+    } else {
+      const newDate = new Date(selectedDate)
+      if (viewMode === "1day") {
+        newDate.setDate(newDate.getDate() - 1)
+      } else if (viewMode === "3days") {
+        newDate.setDate(newDate.getDate() - 3)
+      } else if (viewMode === "7days") {
+        newDate.setDate(newDate.getDate() - 7)
+      }
+      setSelectedDate(newDate)
     }
-    setSelectedDate(newDate)
   }
 
   const handleNextPeriod = () => {
-    const newDate = new Date(selectedDate)
-    if (viewMode === "1day") {
-      newDate.setDate(newDate.getDate() + 1)
-    } else if (viewMode === "3days") {
-      newDate.setDate(newDate.getDate() + 3)
-    } else if (viewMode === "7days") {
-      newDate.setDate(newDate.getDate() + 7)
+    if (viewMode === "1month") {
+      setMonthViewDate(new Date(monthViewDate.getFullYear(), monthViewDate.getMonth() + 1, 1))
+    } else {
+      const newDate = new Date(selectedDate)
+      if (viewMode === "1day") {
+        newDate.setDate(newDate.getDate() + 1)
+      } else if (viewMode === "3days") {
+        newDate.setDate(newDate.getDate() + 3)
+      } else if (viewMode === "7days") {
+        newDate.setDate(newDate.getDate() + 7)
+      }
+      setSelectedDate(newDate)
     }
-    setSelectedDate(newDate)
   }
 
   const navigatePrevious = () => {
     handlePrevPeriod()
   }
 
-  const handleResetReplan = () => {
-    setSelectedDate(new Date(2026, 3, 11))
-  }
+
 
   // Month view helpers
   const getDaysInMonth = (date: Date) => {
@@ -236,8 +247,12 @@ export function ScheduleView({ onSyncWithGoogle, visibleCalendarIds, calendars }
   
   const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
 
-  const isToday = (date: Date) =>
-    date.getDate() === 11 && date.getMonth() === 3 && date.getFullYear() === 2026
+  const isToday = (date: Date) => {
+    const today = new Date()
+    return date.getDate() === today.getDate() && 
+           date.getMonth() === today.getMonth() && 
+           date.getFullYear() === today.getFullYear()
+  }
 
   const displayDates = useMemo(() => {
     const startDate = new Date(selectedDate)
@@ -270,14 +285,17 @@ export function ScheduleView({ onSyncWithGoogle, visibleCalendarIds, calendars }
     }
 
     const count = viewMode === "1day" ? 1 : viewMode === "3days" ? 3 : 7
+    const today = new Date()
     for (let i = 0; i < count; i++) {
       const date = new Date(startDate)
       date.setDate(startDate.getDate() + i)
-      const isToday = date.getDate() === 11 && date.getMonth() === 3 && date.getFullYear() === 2026
+      const isTodayDate = date.getDate() === today.getDate() && 
+                          date.getMonth() === today.getMonth() && 
+                          date.getFullYear() === today.getFullYear()
       days.push({
         name: dayNames[date.getDay()],
         date: date.getDate(),
-        isToday,
+        isToday: isTodayDate,
       })
     }
     return days
@@ -314,8 +332,11 @@ export function ScheduleView({ onSyncWithGoogle, visibleCalendarIds, calendars }
     }
     
     // Days of the month
+    const today = new Date()
     for (let day = 1; day <= daysInMonth; day++) {
-      const isToday = day === 11 && monthViewDate.getMonth() === 3 && monthViewDate.getFullYear() === 2026
+      const isTodayDate = day === today.getDate() && 
+                          monthViewDate.getMonth() === today.getMonth() && 
+                          monthViewDate.getFullYear() === today.getFullYear()
       const isSelected = selectedDate.getDate() === day && 
                          selectedDate.getMonth() === monthViewDate.getMonth() &&
                          selectedDate.getFullYear() === monthViewDate.getFullYear()
@@ -325,9 +346,9 @@ export function ScheduleView({ onSyncWithGoogle, visibleCalendarIds, calendars }
           key={day}
           onClick={() => handleDateClick(day)}
           className={`h-10 md:h-12 rounded-lg text-sm font-semibold transition-colors flex items-center justify-center
-            ${isToday ? "bg-[#3b82f6] text-white ring-2 ring-[#3b82f6] ring-offset-2 ring-offset-background" : ""}
-            ${isSelected && !isToday ? "bg-secondary text-foreground" : ""}
-            ${!isToday && !isSelected ? "hover:bg-secondary text-foreground" : ""}
+            ${isTodayDate ? "bg-[#3b82f6] text-white ring-2 ring-[#3b82f6] ring-offset-2 ring-offset-background" : ""}
+            ${isSelected && !isTodayDate ? "bg-secondary text-foreground" : ""}
+            ${!isTodayDate && !isSelected ? "hover:bg-secondary text-foreground" : ""}
           `}
         >
           {day}
@@ -421,16 +442,16 @@ export function ScheduleView({ onSyncWithGoogle, visibleCalendarIds, calendars }
             <Button
               variant="outline"
               size="sm"
-              onClick={handleReplanNow}
+              onClick={handleGoToToday}
               className="text-muted-foreground hover:text-foreground hover:bg-secondary text-xs h-7 px-3 font-semibold"
             >
               Today
             </Button>
             <Button
               variant="ghost"
-              size="sm"
-              onClick={handleResetReplan}
-              className="text-muted-foreground hover:text-foreground hover:bg-secondary text-xs h-7 px-3 font-semibold"
+              size="icon"
+              onClick={handleNextPeriod}
+              className="h-8 w-8"
             >
               <ChevronRight className="w-5 h-5" />
             </Button>
@@ -483,26 +504,34 @@ export function ScheduleView({ onSyncWithGoogle, visibleCalendarIds, calendars }
         {viewMode === "1month" ? (
           <div className="flex-1 flex flex-col">
             {/* Month navigation */}
-            <div className="flex items-center justify-center gap-4 mb-4">
+            <div className="flex items-center justify-center gap-2 mb-4">
               <Button
                 variant="ghost"
-                size="sm"
+                size="icon"
                 onClick={handlePrevMonth}
-                className="text-muted-foreground hover:text-foreground h-8 w-8 p-0"
+                className="h-8 w-8"
               >
                 <ChevronLeft className="w-5 h-5" />
               </Button>
-              <span className="text-base font-bold text-foreground">
-                {monthNames[monthViewDate.getMonth()]} {monthViewDate.getFullYear()}
-              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleGoToToday}
+                className="text-muted-foreground hover:text-foreground hover:bg-secondary text-xs h-7 px-3 font-semibold"
+              >
+                Today
+              </Button>
               <Button
                 variant="ghost"
-                size="sm"
+                size="icon"
                 onClick={handleNextMonth}
-                className="text-muted-foreground hover:text-foreground h-8 w-8 p-0"
+                className="h-8 w-8"
               >
                 <ChevronRight className="w-5 h-5" />
               </Button>
+              <span className="text-base font-bold text-foreground ml-2">
+                {monthNames[monthViewDate.getMonth()]} {monthViewDate.getFullYear()}
+              </span>
             </div>
             
             {/* Day headers */}
