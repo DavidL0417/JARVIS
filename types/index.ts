@@ -188,6 +188,43 @@ export interface DashboardResponse {
   stats: DashboardStats
   currentTask: DashboardCurrentTask | null
   events: ScheduleEvent[]
+  tasks: Task[]
+}
+
+export interface CreateTaskRequest {
+  title: string
+  description?: string | null
+  deadline?: string | null
+  durationMinutes?: number | null
+  priority?: Priority
+  status?: TaskStatus
+  isImmutable?: boolean
+  calendarId?: string | null
+  tags?: string[]
+  scheduledFor?: string | null
+}
+
+export interface UpdateTaskRequest {
+  title?: string
+  description?: string | null
+  deadline?: string | null
+  durationMinutes?: number | null
+  priority?: Priority
+  status?: TaskStatus
+  isImmutable?: boolean
+  calendarId?: string | null
+  tags?: string[]
+  scheduledFor?: string | null
+}
+
+export interface TaskMutationResponse {
+  success: true
+  task: Task
+}
+
+export interface DeleteTaskResponse {
+  success: true
+  id: string
 }
 
 export interface OnboardingPreferencesInput {

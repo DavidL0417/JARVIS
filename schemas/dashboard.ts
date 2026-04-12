@@ -3,7 +3,7 @@
 
 import { z } from "zod"
 
-import { preferredCheckInModeSchema, scheduleEventSchema, taskStatusSchema } from "@/schemas/common"
+import { preferredCheckInModeSchema, scheduleEventSchema, taskSchema, taskStatusSchema } from "@/schemas/common"
 
 export const dashboardStatsSchema = z.object({
   tasks: z.number().int().nonnegative(),
@@ -22,6 +22,7 @@ export const dashboardResponseSchema = z.object({
   stats: dashboardStatsSchema,
   currentTask: dashboardCurrentTaskSchema.nullable(),
   events: z.array(scheduleEventSchema),
+  tasks: z.array(taskSchema),
 })
 
 export type DashboardResponseInput = z.infer<typeof dashboardResponseSchema>

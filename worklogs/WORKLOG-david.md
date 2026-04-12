@@ -2,6 +2,14 @@
 
 ## Log
 
+### 2026-04-11 22:58 CDT
+
+- Wired the dashboard bootstrap contract to return real `tasks` alongside `events`, then added DB-backed task CRUD routes at [`app/api/tasks/route.ts`](./../app/api/tasks/route.ts) and [`app/api/tasks/[id]/route.ts`](./../app/api/tasks/[id]/route.ts) so the UI can create, edit, complete, and delete real tasks instead of local mocks.
+- Replaced the local task panel state in [`app/page.tsx`](./../app/page.tsx) and [`components/dashboard/task-manager.tsx`](./../components/dashboard/task-manager.tsx) with one shared DB-backed task source, making the left `Tasks` tab and right task panel stay in sync while grouping tasks into overdue, unscheduled, scheduled, and collapsed completed sections.
+- Forced planner-created task blocks in [`lib/ai/claude.ts`](./../lib/ai/claude.ts) to always emit `calendarId: "cal-tasks"` so scheduled work now renders under the single Tasks calendar instead of inheriting category calendars.
+- Status: live verification passed for dashboard task bootstrap, task create/update/delete, and a targeted `/api/schedule` call returning a `source: "task"` event in `cal-tasks`; repo-wide TypeScript still has unrelated pre-existing errors in `components/dashboard/task-sidebar.tsx` and `lib/stores/calendar-store.ts`.
+- Next step: if Cindy wants richer task editing polish, build on the new shared task state instead of reintroducing separate local task models.
+
 ### 2026-04-11 22:22 CDT
 
 - Fixed the actual 7-day navigation bug in [`components/dashboard/schedule-view.tsx`](./../components/dashboard/schedule-view.tsx): the visible range was still snapping back to Monday, which made left/right clicks appear broken until seven presses crossed into the next week.
