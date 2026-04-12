@@ -20,6 +20,7 @@ import type {
   UserPreferencesRow,
   UserPreferencesUpsertRow,
 } from "@/types"
+import { TASKS_CALENDAR_ID } from "@/lib/tasks-calendar"
 
 function normalizeNullableText(value: string | null | undefined): string | null {
   if (!value) {
@@ -184,7 +185,7 @@ export function mapOnboardingTaskInputToTaskInsert(
     scheduled_for: null,
     is_immutable: task.isImmutable ?? false,
     all_day: task.allDay ?? false,
-    calendar_id: normalizeNullableText(task.calendarId),
+    calendar_id: TASKS_CALENDAR_ID,
     tags: normalizeTags(task.tags),
   }
 }

@@ -149,7 +149,7 @@ function buildOptimisticTask(userId: string, input: CreateTaskRequest): Task {
     scheduledFor: input.scheduledFor ?? null,
     isImmutable: input.isImmutable ?? false,
     allDay: input.allDay ?? false,
-    calendarId: input.calendarId ?? null,
+    calendarId: DEFAULT_TASK_CALENDAR_ID,
     tags: input.tags ?? [],
   }
 }
@@ -172,7 +172,7 @@ function mergeTaskUpdate(task: Task, update: UpdateTaskRequest): Task {
           : task.scheduledFor,
     isImmutable: update.isImmutable ?? task.isImmutable,
     allDay: update.allDay ?? task.allDay,
-    calendarId: update.calendarId !== undefined ? update.calendarId : task.calendarId,
+    calendarId: DEFAULT_TASK_CALENDAR_ID,
     tags: update.tags ?? task.tags,
   }
 }

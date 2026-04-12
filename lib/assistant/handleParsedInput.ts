@@ -4,14 +4,15 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 
 import type { ParsedAssistantInput } from "@/lib/ai/parser-schema"
+import { TASKS_CALENDAR_ID } from "@/lib/tasks-calendar"
 import type { TaskStatus, UserPreferencesRow } from "@/types"
 
 const IS_DEV = process.env.NODE_ENV !== "production"
 const DEFAULT_TIMEZONE = "America/Chicago"
 const DEFAULT_TASK_PRIORITY = "medium"
 const DEFAULT_EVENT_DURATION_MINUTES = 60
-const ALL_DAY_START_TIME = "00:00"
-const ALL_DAY_END_TIME = "23:59"
+const ALL_DAY_EVENT_START_TIME = "00:00"
+const ALL_DAY_EVENT_END_TIME = "00:00"
 
 interface HandleParsedInputParams {
   userId: string
@@ -338,10 +339,17 @@ function resolveNaturalDateTime(
     return null
   }
 
-  const directDate = new Date(normalizedText)
+  const isPreciseTimestampInput =
+    /^\d{4}-\d{2}-\d{2}t\d{2}:\d{2}/i.test(normalizedText) ||
+    /\b(?:utc|gmt|z)\b/i.test(normalizedText) ||
+    /[+-]\d{2}:\d{2}$/.test(normalizedText)
 
-  if (Number.isFinite(directDate.getTime())) {
-    return directDate.toISOString()
+  if (isPreciseTimestampInput) {
+    const directDate = new Date(normalizedText)
+
+    if (Number.isFinite(directDate.getTime())) {
+      return directDate.toISOString()
+    }
   }
 
   const now = new Date()
@@ -370,8 +378,12 @@ function resolveAllDayRange(text: string | null, timeZone: string) {
   }
 
   return {
-    start: zonedDateTimeToUtc(dateKey, ALL_DAY_START_TIME, timeZone).toISOString(),
-    end: zonedDateTimeToUtc(dateKey, ALL_DAY_END_TIME, timeZone).toISOString(),
+    start: zonedDateTimeToUtc(dateKey, ALL_DAY_EVENT_START_TIME, timeZone).toISOString(),
+    end: zonedDateTimeToUtc(
+      addDaysToDateKey(dateKey, 1),
+      ALL_DAY_EVENT_END_TIME,
+      timeZone,
+    ).toISOString(),
   }
 }
 
@@ -461,9 +473,7 @@ async function createTask(params: {
   actionsTaken: string[]
 }) {
   const { parsed, supabase, userId, timeZone, actionsTaken } = params
-  const deadline = parsed.task.all_day
-    ? resolveAllDayRange(parsed.task.due_at, timeZone)?.end ?? null
-    : resolveNaturalDateTime(parsed.task.due_at, timeZone, { defaultTime: "23:59" })
+  const deadline = resolveNaturalDateTime(parsed.task.due_at, timeZone, { defaultTime: "23:59" })
 
   const { error } = await supabase.from("tasks").insert({
     user_id: userId,
@@ -475,8 +485,9 @@ async function createTask(params: {
     status: "todo",
     scheduled_for: null,
     is_immutable: false,
-    all_day: parsed.task.all_day,
-    calendar_id: null,
+    // Tasks without an explicit time are stored as end-of-day deadlines, not all-day blocks.
+    all_day: false,
+    calendar_id: TASKS_CALENDAR_ID,
     tags: normalizeTags(parsed.task.tags),
   })
 

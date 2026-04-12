@@ -6,6 +6,7 @@ import { NextResponse } from "next/server"
 import { mapTaskRowToTask } from "@/lib/data/mappers"
 import { getOrCreateDemoUser } from "@/lib/supabase/demo-user"
 import { createSupabaseAdminClient } from "@/lib/supabase/server"
+import { TASKS_CALENDAR_ID } from "@/lib/tasks-calendar"
 import { createTaskRequestSchema, taskMutationResponseSchema } from "@/schemas/tasks"
 import type { CreateTaskRequest, Task, TaskMutationResponse, TaskRow } from "@/types"
 
@@ -22,7 +23,7 @@ function buildTaskInsert(input: CreateTaskRequest, userId: string) {
     scheduledFor: input.scheduledFor ?? null,
     isImmutable: input.isImmutable ?? false,
     allDay: input.allDay ?? false,
-    calendarId: input.calendarId ?? null,
+    calendarId: TASKS_CALENDAR_ID,
     tags: input.tags ?? [],
   }
 

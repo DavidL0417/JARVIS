@@ -7,6 +7,7 @@ import { z } from "zod"
 import { mapTaskRowToTask, mapTaskToUpdate } from "@/lib/data/mappers"
 import { getOrCreateDemoUser } from "@/lib/supabase/demo-user"
 import { createSupabaseAdminClient } from "@/lib/supabase/server"
+import { TASKS_CALENDAR_ID } from "@/lib/tasks-calendar"
 import {
   deleteTaskResponseSchema,
   taskMutationResponseSchema,
@@ -51,6 +52,7 @@ export async function PATCH(
       .from("tasks")
       .update({
         ...mapTaskToUpdate(parsedBody.data),
+        calendar_id: TASKS_CALENDAR_ID,
         updated_at: new Date().toISOString(),
       })
       .eq("id", parsedTaskId.data)

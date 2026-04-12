@@ -8,6 +8,7 @@ import Anthropic from "@anthropic-ai/sdk"
 import { z } from "zod"
 
 import { schedulePlanResultSchema } from "@/schemas/schedule"
+import { TASKS_CALENDAR_ID, TASKS_CALENDAR_MEMORY } from "@/lib/tasks-calendar"
 import type { ReplanRequest, SchedulePlanResult, SchedulePreparationContext } from "@/types"
 
 const DEFAULT_TIMEZONE = "America/Chicago"
@@ -19,7 +20,6 @@ const MIN_SLOT_MINUTES = 15
 const FIVE_DAY_HORIZON_DAYS = 5
 const PLANNER_TOOL_NAME = "return_schedule_plan"
 const DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-4-20250514"
-const DEFAULT_TASKS_CALENDAR_ID = "cal-tasks"
 const MEMORY_DIRECTORY = path.join(process.cwd(), "data", "user-memory")
 const MASTER_SCHEDULING_PROMPT = [
   "You are scheduling tasks onto a calendar for a student productivity assistant.",
@@ -408,7 +408,7 @@ function buildPromptPayload(context: PlanningContext) {
       procrastinationPattern: context.preferences.procrastinationPattern,
       sleepPattern: context.preferences.sleepPattern,
       preferredCheckInMode: context.preferences.preferredCheckInMode,
-      defaultCalendarId: DEFAULT_TASKS_CALENDAR_ID,
+      defaultCalendarId: TASKS_CALENDAR_ID,
     },
     fixedTaskEvents: context.fixedTaskEvents.map((event) => ({
       taskId: event.taskId,
@@ -470,7 +470,7 @@ function materializeTaskPlacements(
       externalEventId: null,
       isImmutable: task.isImmutable,
       allDay: task.allDay,
-      calendarId: task.calendarId ?? DEFAULT_TASKS_CALENDAR_ID,
+      calendarId: task.calendarId ?? TASKS_CALENDAR_ID,
     }
   })
 }
@@ -626,7 +626,7 @@ function taskToFixedEvent(
     externalEventId: null,
     isImmutable: true,
     allDay: task.allDay,
-    calendarId: task.calendarId ?? DEFAULT_TASKS_CALENDAR_ID,
+    calendarId: task.calendarId ?? TASKS_CALENDAR_ID,
   }
 }
 
@@ -919,9 +919,9 @@ async function loadMemoryMarkdown(userId: string) {
 
   try {
     const markdown = await readFile(filePath, "utf8")
-    return markdown.trim()
+    return [TASKS_CALENDAR_MEMORY, markdown.trim()].filter(Boolean).join("\n\n")
   } catch {
-    return ""
+    return TASKS_CALENDAR_MEMORY
   }
 }
 

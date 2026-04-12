@@ -2,6 +2,41 @@
 
 ## Log
 
+### 2026-04-12 01:06 CDT
+
+- Fixed a timezone parsing bug for date-only task input: the assistant write layer was letting JavaScript directly parse strings like `April 20`, which produced a midnight timestamp and shifted some tasks into the previous local day.
+- `resolveNaturalDateTime()` now only trusts direct parsing for already-precise timestamp strings; natural-language dates now always flow through the explicit local-date resolver before being stored.
+- Status: `pnpm exec tsc --noEmit` passes and date-only tasks should now land on the intended day instead of showing up around 6 PM the day before.
+- Next step: retry `Do homework on April 20` and confirm the newest task row has an end-of-day deadline on April 20 local time and renders on the correct day in the calendar.
+
+### 2026-04-12 00:58 CDT
+
+- Simplified task semantics so tasks no longer use all-day mode at all; date-only task input now normalizes to a standard end-of-day deadline instead of `all_day = true`.
+- Updated the assistant write layer to always store tasks with `all_day = false`, and updated calendar task rendering so deadline-only tasks display as timed blocks ending at the deadline rather than in the all-day lane.
+- Status: `pnpm exec tsc --noEmit` passes and old task `all_day` flags are ignored by the calendar renderer.
+- Next step: retry a prompt like `Do homework on April 21st` and confirm the new task row has a populated end-of-day deadline and appears near the end of that day in the calendar.
+
+### 2026-04-12 00:43 CDT
+
+- Fixed a parser-to-DB gap for all-day tasks: if Claude leaves `task.due_at` blank, the parser now backfills the temporal phrase from the raw message before the assistant write layer resolves the deadline.
+- This was the root cause behind all-day task rows being inserted with `deadline = NULL` even when the UI summary clearly said something like `on April 20`.
+- Status: `pnpm exec tsc --noEmit` passes and date-only task prompts should now persist a real end-of-day deadline instead of a null deadline.
+- Next step: retry `Do homework on April 20` and confirm the new task row has a populated deadline and appears in the correct all-day lane.
+
+### 2026-04-12 00:34 CDT
+
+- Split all-day semantics so assistant-created all-day tasks now store an end-of-day deadline, while all-day events store a true full-day range from local 00:00 to next-day 00:00.
+- Updated `ScheduleView` task mapping so all-day tasks anchor to the start of their local calendar day instead of using the deadline timestamp as the visible start.
+- Status: `pnpm exec tsc --noEmit` passes and the all-day task/event model is now explicit instead of sharing one ambiguous helper.
+- Next step: retry a date-only task like `On Monday April 20 I need to do homework` and a date-only event to confirm both land on the intended day in the calendar UI.
+
+### 2026-04-12 00:28 CDT
+
+- Added a shared backend Tasks-calendar policy in `lib/tasks-calendar.ts` and updated scheduler memory loading so Claude now always sees “all tasks are stored in the Tasks calendar (`cal-tasks`).”
+- Enforced `cal-tasks` across task creation/update paths in `/api/tasks`, assistant-created tasks, onboarding task inserts, and the page’s optimistic task state so task calendar assignment no longer drifts.
+- Status: `pnpm exec tsc --noEmit` passes and the Tasks calendar rule is now true in both persisted data and scheduling memory.
+- Next step: optionally remove or lock the task calendar selector in the frontend task form so the UI no longer suggests tasks can live on other calendars.
+
 ### 2026-04-12 00:11 CDT
 
 - Hardened the scheduler Claude tool parsing so a missing `summary` field no longer crashes the whole `/api/schedule` flow after the tool payload comes back.

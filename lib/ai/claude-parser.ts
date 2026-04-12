@@ -40,7 +40,7 @@ You must:
 1. Classify the message into exactly one primary intent.
 2. Extract only information explicitly stated or strongly implied.
 3. Distinguish between mutable tasks, fixed events, replanning requests, task edits, and memory/preferences.
-4. Mark \`task.all_day\` or \`event.all_day\` true only when the user clearly indicates all-day intent.
+4. Mark \`event.all_day\` true only when the user clearly indicates all-day event intent.
 5. If information is missing or ambiguous, set \`needs_clarification\` to true and briefly explain why in \`clarification_reason\`.
 6. Return exactly one JSON object matching the required schema.
 7. If the message contains multiple actions, include the extras in \`secondary_intents\`.
@@ -51,8 +51,9 @@ Interpretation rules:
 - Use \`create_fixed_event\` for calendar-like commitments and timeboxed event blocks.
 - Set \`event.is_immutable\` to true for hard commitments that should not be auto-moved.
 - Set \`event.is_immutable\` to false for flexible timeboxed blocks like workouts, study blocks, or focus blocks.
-- If the user explicitly says "all day", mark the relevant task or event with \`all_day: true\`.
-- If the user provides a day or date but no time for a task or event, assume it is all day rather than asking for a time.
+- If the user explicitly says "all day" for an event, mark \`event.all_day: true\`.
+- For tasks, do not use all-day mode. If the user gives a day or date but no time, treat it as a normal task due by the end of that day.
+- If the user provides a day or date but no time for an event, assume the event is all day rather than asking for a time.
 - A real-world commitment tied to a date, day, person, or place should usually be treated as a fixed event, even if no exact start time is given.
 - Social plans, appointments, meetings, dinners, shopping trips, and hangouts tied to dates are usually fixed events.
 - Homework, studying, chores, cleaning, project work, and things to complete are usually tasks.
@@ -102,12 +103,12 @@ Example G output:
 Example H input:
 "Work on taxes all day tomorrow"
 Example H output:
-{"primary_intent":"create_task","secondary_intents":[],"needs_clarification":false,"clarification_reason":null,"user_facing_summary":"This looks like an all-day task request.","task":{"title":"Work on taxes","duration_minutes":null,"due_at":"tomorrow","priority":null,"tags":[],"all_day":true,"is_immutable":false},"event":{"title":null,"start_at":null,"end_at":null,"calendar_id":null,"all_day":false,"is_immutable":true},"task_edit":{"target_task_text":null,"operation":null,"new_value":null},"memory":{"operation":null,"content":null}}
+{"primary_intent":"create_task","secondary_intents":[],"needs_clarification":false,"clarification_reason":null,"user_facing_summary":"This looks like a task request due by the end of tomorrow.","task":{"title":"Work on taxes","duration_minutes":null,"due_at":"tomorrow","priority":null,"tags":[],"all_day":false,"is_immutable":false},"event":{"title":null,"start_at":null,"end_at":null,"calendar_id":null,"all_day":false,"is_immutable":true},"task_edit":{"target_task_text":null,"operation":null,"new_value":null},"memory":{"operation":null,"content":null}}
 
 Example I input:
 "Finish CS213 homework on April 16"
 Example I output:
-{"primary_intent":"create_task","secondary_intents":[],"needs_clarification":false,"clarification_reason":null,"user_facing_summary":"This looks like an all-day task request.","task":{"title":"Finish CS213 homework","duration_minutes":null,"due_at":"April 16","priority":null,"tags":["CS213"],"all_day":true,"is_immutable":false},"event":{"title":null,"start_at":null,"end_at":null,"calendar_id":null,"all_day":false,"is_immutable":true},"task_edit":{"target_task_text":null,"operation":null,"new_value":null},"memory":{"operation":null,"content":null}}
+{"primary_intent":"create_task","secondary_intents":[],"needs_clarification":false,"clarification_reason":null,"user_facing_summary":"This looks like a task request due by the end of April 16.","task":{"title":"Finish CS213 homework","duration_minutes":null,"due_at":"April 16","priority":null,"tags":["CS213"],"all_day":false,"is_immutable":false},"event":{"title":null,"start_at":null,"end_at":null,"calendar_id":null,"all_day":false,"is_immutable":true},"task_edit":{"target_task_text":null,"operation":null,"new_value":null},"memory":{"operation":null,"content":null}}
 
 Output rules:
 - Return JSON only.
@@ -396,6 +397,14 @@ function hasExplicitTimeCue(message: string | null | undefined): boolean {
   )
 }
 
+function extractTemporalPhrase(message: string) {
+  const temporalPhrase = message.match(
+    /\b(today|tomorrow|tonight|monday|tuesday|wednesday|thursday|friday|saturday|sunday|january|february|march|april|may|june|july|august|september|october|november|december\b.*|\b\d{1,2}(:\d{2})?\s?(am|pm)\b.*)/i,
+  )
+
+  return temporalPhrase ? temporalPhrase[0].trim() : null
+}
+
 function inferEventImmutability(message: string): boolean {
   const normalized = message.toLowerCase()
 
@@ -529,10 +538,7 @@ function normalizeParsedAssistantInput(payload: unknown, rawMessage: string): Pa
     normalized.event.title = normalized.event.title || deriveTitleFromMessage(rawMessage, "create_fixed_event")
 
     if (!normalized.event.start_at) {
-      const temporalPhrase = rawMessage.match(
-        /\b(today|tomorrow|tonight|monday|tuesday|wednesday|thursday|friday|saturday|sunday|january|february|march|april|may|june|july|august|september|october|november|december\b.*|\b\d{1,2}(:\d{2})?\s?(am|pm)\b.*)/i,
-      )
-      normalized.event.start_at = temporalPhrase ? temporalPhrase[0].trim() : null
+      normalized.event.start_at = extractTemporalPhrase(rawMessage)
     }
 
     if (hasAllDayCue(rawMessage)) {
@@ -557,17 +563,22 @@ function normalizeParsedAssistantInput(payload: unknown, rawMessage: string): Pa
     normalized.task.title = normalized.task.title || deriveTitleFromMessage(rawMessage, "create_task")
     normalized.task.is_immutable = false
 
+    if (!normalized.task.due_at) {
+      normalized.task.due_at = extractTemporalPhrase(rawMessage)
+    }
+
     if (normalized.task.tags.length === 0) {
       const tagMatches = rawMessage.match(/\b[A-Z]{2,}\d{2,}\b/g)
       normalized.task.tags = tagMatches ? Array.from(new Set(tagMatches)) : []
     }
 
-    if (hasAllDayCue(rawMessage)) {
-      normalized.task.all_day = true
-    }
+    normalized.task.all_day = false
 
-    if (!normalized.task.all_day && normalized.task.due_at && !hasExplicitTimeCue(rawMessage)) {
-      normalized.task.all_day = true
+    if (/all-day task/i.test(normalized.user_facing_summary)) {
+      normalized.user_facing_summary = normalized.user_facing_summary.replace(
+        /all-day task/gi,
+        "task due by end of day",
+      )
     }
   }
 
