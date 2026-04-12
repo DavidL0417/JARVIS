@@ -2,6 +2,14 @@
 
 ## Log
 
+### 2026-04-12 02:56 CDT
+
+- Resolved the `main` merge conflicts on `david-scheduling-logic` while keeping David’s newer secretary/scheduler path intact: preserved the branch versions of [`app/api/assistant/message/route.ts`](./../app/api/assistant/message/route.ts), [`lib/ai/claude.ts`](./../lib/ai/claude.ts), and [`lib/supabase/demo-user.ts`](./../lib/supabase/demo-user.ts), and kept `main`’s cleanly merged auth/UI additions elsewhere.
+- Removed the older parser bridge files that `main` tried to reintroduce during the merge conflict: [`lib/ai/claude-parser.ts`](./../lib/ai/claude-parser.ts) and [`lib/assistant/handleParsedInput.ts`](./../lib/assistant/handleParsedInput.ts).
+- Restored the missing `DEFAULT_TASK_CALENDAR_ID` constant in [`app/page.tsx`](./../app/page.tsx) after merge so the combined tree type-checks again.
+- Status: `pnpm exec tsc --noEmit` passes after the conflict resolution merge with `main`.
+- Next step: commit the merge on `david-scheduling-logic` and push it so the PR reflects the resolved branch state.
+
 ### 2026-04-12 02:49 CDT
 
 - Fixed the secretary’s event-inspection bug in [`lib/assistant/secretary.ts`](./../lib/assistant/secretary.ts): `list_events` was handing Claude raw UTC timestamps, so noon events were being reasoned about as 5–7 PM instead of local Chicago time.

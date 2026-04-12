@@ -9,8 +9,10 @@ import {
   mapTaskRowToTask,
 } from "@/lib/data/mappers"
 import { generateSchedule } from "@/lib/ai/claude"
-import { getOrCreateDemoUser } from "@/lib/supabase/demo-user"
-import { createSupabaseAdminClient } from "@/lib/supabase/server"
+import {
+  isAuthenticationRequiredError,
+  requireAuthenticatedUser,
+} from "@/lib/supabase/auth"
 import {
   schedulePlanResultSchema,
   schedulePreparationContextSchema,
@@ -34,10 +36,9 @@ export async function POST(request: Request) {
   }
 
   try {
-    const supabase = createSupabaseAdminClient()
-    const user = await getOrCreateDemoUser(supabase)
+    const { adminClient, user } = await requireAuthenticatedUser()
 
-    let taskQuery = supabase
+    let taskQuery = adminClient
       .from("tasks")
       .select(
         "id, user_id, title, description, deadline, duration_minutes, priority, status, scheduled_for, created_at, updated_at, is_immutable, all_day, calendar_id, tags",
@@ -51,7 +52,7 @@ export async function POST(request: Request) {
 
     const [tasksResult, preferencesResult] = await Promise.all([
       taskQuery,
-      supabase
+      adminClient
         .from("preferences")
         .select(
           "id, user_id, timezone, sleep_pattern, peak_energy_window, procrastination_pattern, workday_start, workday_end, default_task_duration_minutes, break_duration_minutes, preferred_focus_block_minutes, preferred_checkin_mode, calendar_id, created_at, updated_at",
@@ -127,6 +128,10 @@ export async function POST(request: Request) {
     // TODO: This route is intentionally stubbed after planner validation until schedule_events writes are finalized.
     return NextResponse.json(parsedResponse.data)
   } catch (error) {
+    if (isAuthenticationRequiredError(error)) {
+      return NextResponse.json({ error: "Authentication required." }, { status: 401 })
+    }
+
     return NextResponse.json(
       {
         error: "Failed to prepare schedule context.",

@@ -5,14 +5,39 @@
 create extension if not exists pgcrypto;
 
 create table if not exists public.users (
-  id uuid primary key default gen_random_uuid(),
+  id uuid primary key,
   email text not null unique,
-  name text not null,
+  name text not null default '',
+  avatar_url text,
   created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
+  updated_at timestamptz not null default now(),
+  constraint users_auth_users_id_fkey foreign key (id) references auth.users(id) on delete cascade
 );
 
-comment on table public.users is 'MVP identity table for JARVIS. A single demo user can be used before auth is wired.';
+comment on table public.users is 'Application profile rows mapped 1:1 to Supabase auth.users. Existing demo rows in older environments may need cleanup before validating the auth foreign key.';
+
+alter table public.users
+  alter column id drop default;
+
+alter table public.users
+  alter column name set default '';
+
+alter table public.users
+  add column if not exists avatar_url text;
+
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'users_auth_users_id_fkey'
+  ) then
+    alter table public.users
+      add constraint users_auth_users_id_fkey
+      foreign key (id) references auth.users(id) on delete cascade not valid;
+  end if;
+end
+$$;
 
 create table if not exists public.preferences (
   id uuid primary key default gen_random_uuid(),
@@ -110,11 +135,32 @@ create table if not exists public.memory_logs (
 
 comment on table public.memory_logs is 'Distilled behavioral insights generated from onboarding and future check-ins.';
 
+create table if not exists public.user_integrations (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references public.users(id) on delete cascade,
+  provider text not null check (provider in ('google')),
+  provider_account_email text,
+  provider_user_id text,
+  access_token text,
+  refresh_token text,
+  expires_at timestamptz,
+  scope text,
+  status text not null default 'connected' check (status in ('connected', 'needs_reauth', 'disconnected', 'error')),
+  selected_calendar_id text,
+  last_synced_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (user_id, provider)
+);
+
+comment on table public.user_integrations is 'Future external account linkage for Google Calendar auth, token metadata, and selected calendar state.';
+
 create index if not exists tasks_user_id_idx on public.tasks(user_id);
 create index if not exists tasks_deadline_idx on public.tasks(deadline);
 create index if not exists schedule_events_user_id_idx on public.schedule_events(user_id);
 create index if not exists schedule_events_task_id_idx on public.schedule_events(task_id);
 create index if not exists checkins_user_id_idx on public.checkins(user_id);
 create index if not exists memory_logs_user_id_idx on public.memory_logs(user_id);
+create index if not exists user_integrations_user_id_idx on public.user_integrations(user_id);
 
 -- ##### END BACKEND #####

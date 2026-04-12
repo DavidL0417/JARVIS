@@ -4,8 +4,11 @@
 import { NextResponse } from "next/server"
 
 import { mapTaskRowToTask } from "@/lib/data/mappers"
-import { getOrCreateDemoUser } from "@/lib/supabase/demo-user"
-import { createSupabaseAdminClient } from "@/lib/supabase/server"
+import {
+  isAuthenticationRequiredError,
+  requireAuthenticatedUser,
+} from "@/lib/supabase/auth"
+import { TASKS_CALENDAR_ID } from "@/lib/tasks-calendar"
 import { createTaskRequestSchema, taskMutationResponseSchema } from "@/schemas/tasks"
 import type { CreateTaskRequest, Task, TaskMutationResponse, TaskRow } from "@/types"
 
@@ -22,7 +25,7 @@ function buildTaskInsert(input: CreateTaskRequest, userId: string) {
     scheduledFor: input.scheduledFor ?? null,
     isImmutable: input.isImmutable ?? false,
     allDay: input.allDay ?? false,
-    calendarId: input.calendarId ?? null,
+    calendarId: TASKS_CALENDAR_ID,
     tags: input.tags ?? [],
   }
 
@@ -57,10 +60,9 @@ export async function POST(request: Request) {
   }
 
   try {
-    const supabase = createSupabaseAdminClient()
-    const user = await getOrCreateDemoUser(supabase)
+    const { adminClient, user } = await requireAuthenticatedUser()
 
-    const { data, error } = await supabase
+    const { data, error } = await adminClient
       .from("tasks")
       .insert(buildTaskInsert(parsedBody.data, user.id))
       .select(
@@ -91,6 +93,10 @@ export async function POST(request: Request) {
 
     return NextResponse.json(parsedResponse.data)
   } catch (error) {
+    if (isAuthenticationRequiredError(error)) {
+      return NextResponse.json({ error: "Authentication required." }, { status: 401 })
+    }
+
     return NextResponse.json(
       {
         error: "Failed to create task.",

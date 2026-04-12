@@ -9,12 +9,32 @@ export type ScheduleEventSource = "task" | "calendar" | "focus"
 export type CheckInMood = "good" | "okay" | "stuck"
 export type CheckInOutcome = "completed" | "missed" | "partial"
 export type CheckInEnergy = "low" | "medium" | "high"
+export type IntegrationProvider = "google"
+export type UserIntegrationStatus = "connected" | "needs_reauth" | "disconnected" | "error"
 
 // Raw database row shapes. These match Supabase column names and nullability exactly.
 export interface UserRow {
   id: string
   email: string
   name: string
+  avatar_url: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface UserIntegrationRow {
+  id: string
+  user_id: string
+  provider: IntegrationProvider
+  provider_account_email: string | null
+  provider_user_id: string | null
+  access_token: string | null
+  refresh_token: string | null
+  expires_at: string | null
+  scope: string | null
+  status: UserIntegrationStatus
+  selected_calendar_id: string | null
+  last_synced_at: string | null
   created_at: string
   updated_at: string
 }
@@ -101,6 +121,33 @@ export type TaskInsertRow = Omit<TaskRow, "id" | "created_at" | "updated_at">
 export type TaskUpdateRow = Partial<Omit<TaskInsertRow, "user_id">>
 export type ScheduleEventInsertRow = Omit<ScheduleEventRow, "id" | "created_at" | "updated_at">
 export type CheckInInsertRow = Omit<CheckInRow, "id" | "created_at">
+export type UserIntegrationUpsertRow = Omit<UserIntegrationRow, "id" | "created_at" | "updated_at">
+
+export interface UserProfile {
+  id: string
+  email: string
+  name: string
+  avatarUrl: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface UserIntegration {
+  id: string
+  userId: string
+  provider: IntegrationProvider
+  providerAccountEmail: string | null
+  providerUserId: string | null
+  accessToken: string | null
+  refreshToken: string | null
+  expiresAt: string | null
+  scope: string | null
+  status: UserIntegrationStatus
+  selectedCalendarId: string | null
+  lastSyncedAt: string | null
+  createdAt: string
+  updatedAt: string
+}
 
 // App/frontend-facing models. SQL rows stay snake_case, and mapper utilities convert them to camelCase.
 export interface UserPreferences {
@@ -353,6 +400,25 @@ export interface OnboardingResponse {
   preferenceId: string | null
   taskIds: string[]
   taskCount: number
+}
+
+export interface UpdatePreferencesRequest {
+  timezone?: string
+  sleepPattern?: string | null
+  peakEnergyWindow?: string | null
+  procrastinationPattern?: string | null
+  workdayStart?: string
+  workdayEnd?: string
+  defaultTaskDurationMinutes?: number
+  breakDurationMinutes?: number
+  preferredFocusBlockMinutes?: number | null
+  preferredCheckInMode?: PreferredCheckInMode
+  calendarId?: string | null
+}
+
+export interface PreferencesResponse {
+  success: true
+  preferences: UserPreferences
 }
 
 export interface ScheduleEventInput {

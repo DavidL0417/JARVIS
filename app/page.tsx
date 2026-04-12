@@ -5,6 +5,7 @@ import dynamic from "next/dynamic"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable"
+import { AuthControls } from "@/components/auth/auth-controls"
 import { DashboardHeader } from "@/components/dashboard/dashboard-header"
 import { WorkspaceSnapshot } from "@/components/dashboard/workspace-snapshot"
 import { PanelTabs, type PanelTabId } from "@/components/dashboard/panel-tabs"
@@ -43,6 +44,7 @@ const CALENDAR_DEFAULTS: Record<string, { name: string; color: string; source: C
   APP_CALENDAR_PRESET_MAP
 
 const DEFAULT_BACKEND_CALENDAR_ID = "calendar-main"
+const DEFAULT_TASK_CALENDAR_ID = "cal-tasks"
 const FALLBACK_USER_ID = "00000000-0000-4000-8000-000000000000"
 const DASHBOARD_REFRESH_EVENT = "jarvis-dashboard-refresh"
 
@@ -143,7 +145,7 @@ function buildOptimisticTask(userId: string, input: CreateTaskRequest): Task {
     scheduledFor: input.scheduledFor ?? null,
     isImmutable: input.isImmutable ?? false,
     allDay: input.allDay ?? false,
-    calendarId: input.calendarId ?? null,
+    calendarId: DEFAULT_TASK_CALENDAR_ID,
     tags: input.tags ?? [],
   }
 }
@@ -166,7 +168,7 @@ function mergeTaskUpdate(task: Task, update: UpdateTaskRequest): Task {
           : task.scheduledFor,
     isImmutable: update.isImmutable ?? task.isImmutable,
     allDay: update.allDay ?? task.allDay,
-    calendarId: update.calendarId !== undefined ? update.calendarId : task.calendarId,
+    calendarId: DEFAULT_TASK_CALENDAR_ID,
     tags: update.tags ?? task.tags,
   }
 }
@@ -292,7 +294,16 @@ export default function DashboardPage() {
     const loadDashboard = async () => {
       const data = await getDashboardData()
 
-      if (!isActive || !data) {
+      if (!isActive) {
+        return
+      }
+
+      if (!data) {
+        setDashboardData(null)
+        setTasks([])
+        setScheduledOverlayEvents([])
+        setPlannerStatus("Not scheduled")
+        setPlannerSummary("")
         return
       }
 
@@ -584,6 +595,7 @@ export default function DashboardPage() {
           onOpenCalendars={handleOpenCalendarsSidebar}
           panelsHidden={!rightColumnOpen}
           isDarkMode={isDarkMode}
+          authControls={<AuthControls />}
         />
 
         {/* Calendars Sidebar - Slide-in from left */}

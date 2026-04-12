@@ -129,33 +129,38 @@ function mapTasksToCalendarEvents(
       return []
     }
 
-    const start = new Date(anchor)
-    const day = displayDates.findIndex((date) => isSameCalendarDay(date, start))
+    const durationHours = Math.max((task.durationMinutes ?? 60) / 60, 0.25)
+    const isScheduledTask = Boolean(task.scheduledFor)
+    const anchorEnd = new Date(anchor)
+    const anchorStart = isScheduledTask
+      ? anchorEnd
+      : new Date(anchorEnd.getTime() - durationHours * 3_600_000)
+    const day = displayDates.findIndex((date) => isSameCalendarDay(date, anchorStart))
 
     if (day === -1) {
       return []
     }
 
-    const allDay = task.allDay
-    const startHour = allDay ? 0 : start.getHours() + start.getMinutes() / 60
-    const duration = allDay ? 24 : Math.max((task.durationMinutes ?? 60) / 60, 0.25)
-    const end = new Date(start.getTime() + duration * 3_600_000).toISOString()
+    const startHour = anchorStart.getHours() + anchorStart.getMinutes() / 60
+    const end = isScheduledTask
+      ? new Date(anchorStart.getTime() + durationHours * 3_600_000).toISOString()
+      : anchorEnd.toISOString()
 
     return [
       {
         id: `task-${task.id}`,
         title: task.title,
-        start: start.toISOString(),
+        start: anchorStart.toISOString(),
         end,
         source: "task" as const,
         isReadOnly: task.isImmutable,
         calendarId: task.calendarId || "cal-tasks",
-        allDay,
+        allDay: false,
         location: undefined,
         color: getFallbackColor(task.calendarId || "cal-tasks"),
         day,
         startHour,
-        duration,
+        duration: durationHours,
       },
     ]
   })

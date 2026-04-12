@@ -16,10 +16,15 @@ import type {
   TaskRow,
   TaskStatus,
   TaskUpdateRow,
+  UserIntegration,
+  UserIntegrationRow,
+  UserProfile,
   UserPreferences,
   UserPreferencesRow,
   UserPreferencesUpsertRow,
+  UserRow,
 } from "@/types"
+import { TASKS_CALENDAR_ID } from "@/lib/tasks-calendar"
 
 function normalizeNullableText(value: string | null | undefined): string | null {
   if (!value) {
@@ -98,6 +103,36 @@ export function mapTaskRowToTask(row: TaskRow): Task {
     allDay: row.all_day,
     calendarId: normalizeNullableText(row.calendar_id),
     tags: normalizeTags(row.tags),
+  }
+}
+
+export function mapUserRowToUserProfile(row: UserRow): UserProfile {
+  return {
+    id: row.id,
+    email: row.email,
+    name: row.name,
+    avatarUrl: normalizeNullableText(row.avatar_url),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  }
+}
+
+export function mapUserIntegrationRowToUserIntegration(row: UserIntegrationRow): UserIntegration {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    provider: row.provider,
+    providerAccountEmail: normalizeNullableText(row.provider_account_email),
+    providerUserId: normalizeNullableText(row.provider_user_id),
+    accessToken: normalizeNullableText(row.access_token),
+    refreshToken: normalizeNullableText(row.refresh_token),
+    expiresAt: normalizeNullableText(row.expires_at),
+    scope: normalizeNullableText(row.scope),
+    status: row.status,
+    selectedCalendarId: normalizeNullableText(row.selected_calendar_id),
+    lastSyncedAt: normalizeNullableText(row.last_synced_at),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
   }
 }
 
@@ -184,7 +219,7 @@ export function mapOnboardingTaskInputToTaskInsert(
     scheduled_for: null,
     is_immutable: task.isImmutable ?? false,
     all_day: task.allDay ?? false,
-    calendar_id: normalizeNullableText(task.calendarId),
+    calendar_id: TASKS_CALENDAR_ID,
     tags: normalizeTags(task.tags),
   }
 }

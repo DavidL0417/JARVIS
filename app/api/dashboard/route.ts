@@ -9,8 +9,10 @@ import {
   mapTaskRowToTask,
 } from "@/lib/data/mappers"
 import { createPlaceholderCalendarEvents } from "@/lib/mock-calendar-events"
-import { getOrCreateDemoUser } from "@/lib/supabase/demo-user"
-import { createSupabaseAdminClient } from "@/lib/supabase/server"
+import {
+  isAuthenticationRequiredError,
+  requireAuthenticatedUser,
+} from "@/lib/supabase/auth"
 import { dashboardResponseSchema } from "@/schemas/dashboard"
 import type { DashboardResponse, ScheduleEvent, Task } from "@/types"
 
@@ -44,25 +46,24 @@ function getEventIdentity(event: ScheduleEvent) {
 
 export async function GET() {
   try {
-    const supabase = createSupabaseAdminClient()
-    const user = await getOrCreateDemoUser(supabase)
+    const { adminClient, user } = await requireAuthenticatedUser()
 
     const [tasksResult, eventsResult, checkinsResult] = await Promise.all([
-      supabase
+      adminClient
         .from("tasks")
         .select(
           "id, user_id, title, description, deadline, duration_minutes, priority, status, scheduled_for, created_at, updated_at, is_immutable, all_day, calendar_id, tags",
         )
         .eq("user_id", user.id)
         .order("created_at", { ascending: true }),
-      supabase
+      adminClient
         .from("schedule_events")
         .select(
           "id, user_id, task_id, title, starts_at, ends_at, source, status, location, external_event_id, created_at, updated_at, is_immutable, all_day, calendar_id",
         )
         .eq("user_id", user.id)
         .order("starts_at", { ascending: true }),
-      supabase.from("checkins").select("id").eq("user_id", user.id).limit(4),
+      adminClient.from("checkins").select("id").eq("user_id", user.id).limit(4),
     ])
 
     if (tasksResult.error || eventsResult.error || checkinsResult.error) {
@@ -134,6 +135,10 @@ export async function GET() {
 
     return NextResponse.json(parsedPayload.data)
   } catch (error) {
+    if (isAuthenticationRequiredError(error)) {
+      return NextResponse.json({ error: "Authentication required." }, { status: 401 })
+    }
+
     return NextResponse.json(
       {
         error: "Failed to load dashboard data.",

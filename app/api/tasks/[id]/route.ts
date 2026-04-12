@@ -5,8 +5,11 @@ import { NextResponse } from "next/server"
 import { z } from "zod"
 
 import { mapTaskRowToTask, mapTaskToUpdate } from "@/lib/data/mappers"
-import { getOrCreateDemoUser } from "@/lib/supabase/demo-user"
-import { createSupabaseAdminClient } from "@/lib/supabase/server"
+import {
+  isAuthenticationRequiredError,
+  requireAuthenticatedUser,
+} from "@/lib/supabase/auth"
+import { TASKS_CALENDAR_ID } from "@/lib/tasks-calendar"
 import {
   deleteTaskResponseSchema,
   taskMutationResponseSchema,
@@ -44,13 +47,13 @@ export async function PATCH(
   }
 
   try {
-    const supabase = createSupabaseAdminClient()
-    const user = await getOrCreateDemoUser(supabase)
+    const { adminClient, user } = await requireAuthenticatedUser()
 
-    const { data, error } = await supabase
+    const { data, error } = await adminClient
       .from("tasks")
       .update({
         ...mapTaskToUpdate(parsedBody.data),
+        calendar_id: TASKS_CALENDAR_ID,
         updated_at: new Date().toISOString(),
       })
       .eq("id", parsedTaskId.data)
@@ -87,6 +90,10 @@ export async function PATCH(
 
     return NextResponse.json(parsedResponse.data)
   } catch (error) {
+    if (isAuthenticationRequiredError(error)) {
+      return NextResponse.json({ error: "Authentication required." }, { status: 401 })
+    }
+
     return NextResponse.json(
       {
         error: "Failed to update task.",
@@ -108,10 +115,9 @@ export async function DELETE(
   }
 
   try {
-    const supabase = createSupabaseAdminClient()
-    const user = await getOrCreateDemoUser(supabase)
+    const { adminClient, user } = await requireAuthenticatedUser()
 
-    const { data, error } = await supabase
+    const { data, error } = await adminClient
       .from("tasks")
       .delete()
       .eq("id", parsedTaskId.data)
@@ -146,6 +152,10 @@ export async function DELETE(
 
     return NextResponse.json(parsedResponse.data)
   } catch (error) {
+    if (isAuthenticationRequiredError(error)) {
+      return NextResponse.json({ error: "Authentication required." }, { status: 401 })
+    }
+
     return NextResponse.json(
       {
         error: "Failed to delete task.",
