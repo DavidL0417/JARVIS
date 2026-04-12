@@ -2,6 +2,14 @@
 
 ## Log
 
+### 2026-04-11 21:01 CDT
+
+- Implemented the David-owned planner logic in [`lib/ai/claude.ts`](./../lib/ai/claude.ts) around a strict five-day horizon (`today` through `+4` days), structured Claude tool output, and deterministic validation for overlaps, deadlines, and horizon bounds.
+- Added per-user markdown memory loading from `data/user-memory/<userId>.md` inside the Claude layer, with missing/unreadable files treated as empty memory so scheduling does not fail when no file exists yet.
+- Aligned planner-created task blocks to the temporary `cal-tasks` default calendar id when a task does not already carry its own `calendarId`.
+- Status: David’s scope is now ready for Eric/Cindy to wire backend hard-event loading and the schedule UI onto real dashboard events without requiring planner contract changes.
+- Next step: coordinate with Eric/Cindy on the route/UI side because repo instructions still prevent David from directly changing `app/api/**`, `lib/data/**`, or `components/**`.
+
 ### 2026-04-11 18:44 CDT
 
 - Added [`sql/seed_demo_data.sql`](./../sql/seed_demo_data.sql) to reset and repopulate the single demo user with realistic sample preferences and a 20-task student workload across classes, research, career, extracurricular, admin, and personal categories.

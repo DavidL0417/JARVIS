@@ -1,9 +1,110 @@
 // ##### BACKEND API #####
 // DO NOT MODIFY UNLESS BACKEND OWNER
 
-import Anthropic from "@anthropic-ai/sdk"
+import { readFile } from "node:fs/promises"
+import path from "node:path"
 
+import Anthropic from "@anthropic-ai/sdk"
+import { z } from "zod"
+
+import { schedulePlanResultSchema } from "@/schemas/schedule"
 import type { ReplanRequest, SchedulePlanResult, SchedulePreparationContext } from "@/types"
+
+const DEFAULT_TIMEZONE = "America/Chicago"
+const DEFAULT_WORKDAY_START = "09:00"
+const DEFAULT_WORKDAY_END = "17:00"
+const DEFAULT_TASK_DURATION_MINUTES = 50
+const DEFAULT_BREAK_MINUTES = 10
+const MIN_SLOT_MINUTES = 15
+const FIVE_DAY_HORIZON_DAYS = 5
+const PLANNER_TOOL_NAME = "return_schedule_plan"
+const DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-4-20250514"
+const DEFAULT_TASKS_CALENDAR_ID = "cal-tasks"
+const MEMORY_DIRECTORY = path.join(process.cwd(), "data", "user-memory")
+const MASTER_SCHEDULING_PROMPT = [
+  "You are scheduling tasks onto a calendar for a student productivity assistant.",
+  "Think carefully about each task before placing it. Estimate how long the task should take using the task content, the user's preferences, and the memory markdown.",
+  "Return exactly one tool call with the final schedule plan.",
+  "Schedule only the provided schedulable tasks. Fixed tasks are already preserved and must not be moved.",
+  "Respect the planning horizon exactly: only place tasks between planningWindow.start and planningWindow.end.",
+  "Use the provided availability windows. Do not place tasks outside those windows, past a task deadline, or overlapping another event.",
+  "Use the memory markdown to account for user-specific preferences, habits, and friction points.",
+  "Prefer earlier placement for urgent tasks, align heavier work with stronger energy windows when possible, and leave tasks unscheduled if there is no valid slot.",
+  "Each task may appear at most once in placements.",
+  "Use ISO timestamps exactly.",
+].join("\n")
+
+const plannerToolInputSchema = z.object({
+  placements: z
+    .array(
+      z.object({
+        taskId: z.string().uuid(),
+        start: z.string().datetime(),
+        end: z.string().datetime(),
+      }),
+    )
+    .default([]),
+  unscheduledTaskIds: z.array(z.string().uuid()).default([]),
+  summary: z.string().min(1),
+})
+
+type PlannerToolInput = z.infer<typeof plannerToolInputSchema>
+
+type PlanningTask = SchedulePreparationContext["tasks"][number] & {
+  estimatedDurationMinutes: number
+}
+
+type PlanningPreferences = {
+  timezone: string
+  workdayStart: string
+  workdayEnd: string
+  defaultTaskDurationMinutes: number
+  breakDurationMinutes: number
+  preferredFocusBlockMinutes: number | null
+  peakEnergyWindow: string | null
+  procrastinationPattern: string | null
+  sleepPattern: string | null
+  preferredCheckInMode: SchedulePreparationContext["preferences"] extends infer T
+    ? T extends { preferredCheckInMode: infer Mode }
+      ? Mode
+      : "quiet"
+    : "quiet"
+  calendarId: string | null
+}
+
+type Interval = {
+  startMs: number
+  endMs: number
+  label: string
+}
+
+type AvailabilityWindow = {
+  start: string
+  end: string
+  localDay: string
+  durationMinutes: number
+}
+
+type PlanningContext = {
+  userId: string
+  nowIso: string
+  timezone: string
+  planningWindow: {
+    start: string
+    end: string
+    localStartDay: string
+    localEndDay: string
+  }
+  memoryMarkdown: string
+  preferences: PlanningPreferences
+  fixedTaskEvents: SchedulePlanResult["proposedEvents"]
+  fixedTaskIds: Set<string>
+  occupiedIntervals: Interval[]
+  availabilityWindows: AvailabilityWindow[]
+  schedulableTasks: PlanningTask[]
+  planningTaskIds: string[]
+  taskMap: Map<string, PlanningTask>
+}
 
 export function getClaudeClient() {
   const apiKey = process.env.ANTHROPIC_API_KEY
@@ -18,28 +119,759 @@ export function getClaudeClient() {
 export async function generateSchedule(input: SchedulePreparationContext): Promise<SchedulePlanResult> {
   const client = getClaudeClient()
 
-  void client
-
-  // TODO: Intentionally stubbed for the backend foundation milestone until David wires the planner prompt/output.
-  // Immutable items should be treated as fixed in time once real scheduling logic is added.
-  return {
-    plannerStatus: "stubbed",
-    proposedEvents: [],
-    unscheduledTaskIds: input.tasks.map((task) => task.id),
-    summary: "Schedule generation is stubbed until AI orchestration is connected.",
+  if (!client) {
+    throw new Error("ANTHROPIC_API_KEY is missing. Scheduling cannot run until the Claude client is configured.")
   }
+
+  const planningContext = buildPlanningContext(input)
+  planningContext.memoryMarkdown = await loadMemoryMarkdown(input.userId)
+
+  if (planningContext.planningTaskIds.length === 0) {
+    return schedulePlanResultSchema.parse({
+      plannerStatus: "ready",
+      proposedEvents: sortEventsByStart(planningContext.fixedTaskEvents),
+      unscheduledTaskIds: [],
+      summary: "No active tasks fell inside the current five-day planning window.",
+    })
+  }
+
+  if (planningContext.schedulableTasks.length === 0) {
+    return schedulePlanResultSchema.parse({
+      plannerStatus: "ready",
+      proposedEvents: sortEventsByStart(planningContext.fixedTaskEvents),
+      unscheduledTaskIds: [],
+      summary: "All pending tasks were already fixed in time, so no new scheduling was needed.",
+    })
+  }
+
+  if (planningContext.availabilityWindows.length === 0) {
+    return schedulePlanResultSchema.parse({
+      plannerStatus: "ready",
+      proposedEvents: sortEventsByStart(planningContext.fixedTaskEvents),
+      unscheduledTaskIds: planningContext.schedulableTasks.map((task) => task.id),
+      summary: "No free scheduling windows were available inside the current workday and hard-event constraints.",
+    })
+  }
+
+  const plan = await requestClaudeSchedule(client, planningContext)
+  const plannedEvents = materializeTaskPlacements(plan, planningContext)
+  const proposedEvents = sortEventsByStart([...planningContext.fixedTaskEvents, ...plannedEvents])
+  const unscheduledTaskIds = deriveUnscheduledTaskIds(plan, planningContext, plannedEvents)
+
+  validateGeneratedEvents(plannedEvents, planningContext)
+
+  return schedulePlanResultSchema.parse({
+    plannerStatus: "ready",
+    proposedEvents,
+    unscheduledTaskIds,
+    summary: plan.summary,
+  })
 }
 
 export async function replanSchedule(input: ReplanRequest) {
-  const client = getClaudeClient()
+  const userId =
+    input.pendingTasks[0]?.userId ??
+    input.preferences?.userId ??
+    null
 
-  void client
+  if (!userId) {
+    return {
+      success: false,
+      reason: input.reason,
+      message: "Replan request is missing user context, so the planner could not derive a valid schedule.",
+    }
+  }
 
-  // TODO: Intentionally stubbed until replanning logic is implemented against the persisted schedule model.
+  const schedule = await generateSchedule({
+    userId,
+    tasks: input.pendingTasks,
+    preferences: input.preferences ?? null,
+    hardEvents: input.existingEvents.map((event) => ({
+      id: event.id,
+      userId,
+      taskId: event.taskId ?? null,
+      title: event.title,
+      start: event.start,
+      end: event.end,
+      source: event.source,
+      status: event.status ?? null,
+      location: event.location ?? null,
+      externalEventId: event.externalEventId ?? null,
+      isImmutable: event.isImmutable ?? true,
+      calendarId: event.calendarId ?? null,
+    })),
+  })
+
   return {
     success: true,
     reason: input.reason,
-    message: "Replan generation is stubbed until AI orchestration is connected.",
+    message: "Replan generated from the current task list and existing event constraints.",
+    schedule,
+  }
+}
+
+function buildPlanningContext(input: SchedulePreparationContext): PlanningContext {
+  const preferences = normalizePreferences(input)
+  const now = roundUpDate(new Date(), MIN_SLOT_MINUTES)
+  const nowIso = now.toISOString()
+  const planningWindow = getPlanningWindow(now, preferences.timezone)
+  const taskMap = new Map<string, PlanningTask>()
+  const pendingTasks = input.tasks
+    .filter((task) => task.status !== "completed")
+    .map((task) => {
+      const normalizedTask: PlanningTask = {
+        ...task,
+        estimatedDurationMinutes: estimateTaskDuration(task, preferences),
+      }
+
+      taskMap.set(task.id, normalizedTask)
+      return normalizedTask
+    })
+
+  const horizonRelevantTasks = pendingTasks.filter((task) =>
+    isTaskRelevantToPlanningWindow(task, planningWindow),
+  )
+  const planningTaskIds = horizonRelevantTasks.map((task) => task.id)
+
+  const fixedTaskEvents = horizonRelevantTasks
+    .filter((task) => task.isImmutable && task.scheduledFor)
+    .map((task) => taskToFixedEvent(task, input.userId))
+    .filter((event) => isEventInsidePlanningWindow(event.start, event.end, planningWindow))
+
+  const fixedTaskIds = new Set(fixedTaskEvents.map((event) => event.taskId).filter((taskId): taskId is string => Boolean(taskId)))
+  const occupiedIntervals = [
+    ...input.hardEvents
+      .filter((event) => isEventInsidePlanningWindow(event.start, event.end, planningWindow))
+      .map((event) => ({
+        startMs: new Date(event.start).getTime(),
+        endMs: new Date(event.end).getTime(),
+        label: `hard-event:${event.title}`,
+      })),
+    ...fixedTaskEvents.map((event) => ({
+      startMs: new Date(event.start).getTime(),
+      endMs: new Date(event.end).getTime(),
+      label: `fixed-task:${event.title}`,
+    })),
+  ].sort((left, right) => left.startMs - right.startMs)
+
+  const schedulableTasks = sortTasksForPlanning(
+    horizonRelevantTasks.filter((task) => !fixedTaskIds.has(task.id)),
+    nowIso,
+  )
+
+  return {
+    userId: input.userId,
+    nowIso,
+    timezone: preferences.timezone,
+    planningWindow,
+    memoryMarkdown: "",
+    preferences,
+    fixedTaskEvents,
+    fixedTaskIds,
+    occupiedIntervals,
+    availabilityWindows: buildAvailabilityWindows({
+      now,
+      planningWindow,
+      preferences,
+      occupiedIntervals,
+    }),
+    schedulableTasks,
+    planningTaskIds,
+    taskMap,
+  }
+}
+
+async function requestClaudeSchedule(client: Anthropic, context: PlanningContext): Promise<PlannerToolInput> {
+  const message = await client.messages.create({
+    model: process.env.ANTHROPIC_MODEL || DEFAULT_ANTHROPIC_MODEL,
+    max_tokens: 1600,
+    temperature: 0,
+    system: MASTER_SCHEDULING_PROMPT,
+    messages: [
+      {
+        role: "user",
+        content: JSON.stringify(buildPromptPayload(context), null, 2),
+      },
+    ],
+    tools: [
+      {
+        name: PLANNER_TOOL_NAME,
+        description: "Return the final schedule placements and unscheduled tasks.",
+        input_schema: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            placements: {
+              type: "array",
+              items: {
+                type: "object",
+                additionalProperties: false,
+                properties: {
+                  taskId: { type: "string", format: "uuid" },
+                  start: { type: "string", format: "date-time" },
+                  end: { type: "string", format: "date-time" },
+                },
+                required: ["taskId", "start", "end"],
+              },
+            },
+            unscheduledTaskIds: {
+              type: "array",
+              items: { type: "string", format: "uuid" },
+            },
+            summary: { type: "string" },
+          },
+          required: ["placements", "unscheduledTaskIds", "summary"],
+        },
+      },
+    ],
+    tool_choice: {
+      type: "tool",
+      name: PLANNER_TOOL_NAME,
+      disable_parallel_tool_use: true,
+    },
+  })
+
+  const toolUseBlock = message.content.find(
+    (block): block is Anthropic.ToolUseBlock =>
+      block.type === "tool_use" && block.name === PLANNER_TOOL_NAME,
+  )
+
+  if (!toolUseBlock) {
+    throw new Error("Claude did not return the required schedule planning tool payload.")
+  }
+
+  return plannerToolInputSchema.parse(toolUseBlock.input)
+}
+
+function buildPromptPayload(context: PlanningContext) {
+  return {
+    currentTime: context.nowIso,
+    timezone: context.timezone,
+    planningWindow: context.planningWindow,
+    memoryMarkdown: context.memoryMarkdown,
+    preferences: {
+      timezone: context.preferences.timezone,
+      workdayStart: context.preferences.workdayStart,
+      workdayEnd: context.preferences.workdayEnd,
+      defaultTaskDurationMinutes: context.preferences.defaultTaskDurationMinutes,
+      breakDurationMinutes: context.preferences.breakDurationMinutes,
+      preferredFocusBlockMinutes: context.preferences.preferredFocusBlockMinutes,
+      peakEnergyWindow: context.preferences.peakEnergyWindow,
+      procrastinationPattern: context.preferences.procrastinationPattern,
+      sleepPattern: context.preferences.sleepPattern,
+      preferredCheckInMode: context.preferences.preferredCheckInMode,
+      defaultCalendarId: DEFAULT_TASKS_CALENDAR_ID,
+    },
+    fixedTaskEvents: context.fixedTaskEvents.map((event) => ({
+      taskId: event.taskId,
+      title: event.title,
+      start: event.start,
+      end: event.end,
+      calendarId: event.calendarId,
+    })),
+    availabilityWindows: context.availabilityWindows,
+    tasks: context.schedulableTasks.map((task) => ({
+      id: task.id,
+      title: task.title,
+      description: task.description,
+      deadline: task.deadline,
+      priority: task.priority,
+      status: task.status,
+      tags: task.tags,
+      estimatedDurationMinutes: task.estimatedDurationMinutes,
+      scheduledForHint: task.scheduledFor,
+      isImmutable: task.isImmutable,
+      calendarId: task.calendarId,
+    })),
+  }
+}
+
+function materializeTaskPlacements(
+  plan: PlannerToolInput,
+  context: PlanningContext,
+): SchedulePlanResult["proposedEvents"] {
+  const seenTaskIds = new Set<string>()
+
+  return plan.placements.map((placement) => {
+    const task = context.taskMap.get(placement.taskId)
+
+    if (!task) {
+      throw new Error(`Claude scheduled an unknown task id: ${placement.taskId}`)
+    }
+
+    if (context.fixedTaskIds.has(task.id)) {
+      throw new Error(`Claude attempted to reschedule immutable task ${task.id}.`)
+    }
+
+    if (seenTaskIds.has(task.id)) {
+      throw new Error(`Claude scheduled task ${task.id} more than once.`)
+    }
+
+    seenTaskIds.add(task.id)
+
+    return {
+      id: crypto.randomUUID(),
+      userId: context.userId,
+      taskId: task.id,
+      title: task.title,
+      start: placement.start,
+      end: placement.end,
+      source: "task" as const,
+      status: "scheduled" as const,
+      location: null,
+      externalEventId: null,
+      isImmutable: task.isImmutable,
+      calendarId: task.calendarId ?? DEFAULT_TASKS_CALENDAR_ID,
+    }
+  })
+}
+
+function deriveUnscheduledTaskIds(
+  plan: PlannerToolInput,
+  context: PlanningContext,
+  plannedEvents: SchedulePlanResult["proposedEvents"],
+): string[] {
+  const scheduledTaskIds = new Set(plannedEvents.map((event) => event.taskId).filter((taskId): taskId is string => Boolean(taskId)))
+  const unscheduled = new Set(plan.unscheduledTaskIds)
+
+  for (const task of context.schedulableTasks) {
+    if (!scheduledTaskIds.has(task.id)) {
+      unscheduled.add(task.id)
+    }
+  }
+
+  for (const fixedTaskId of context.fixedTaskIds) {
+    unscheduled.delete(fixedTaskId)
+  }
+
+  return Array.from(unscheduled).sort()
+}
+
+function validateGeneratedEvents(
+  plannedEvents: SchedulePlanResult["proposedEvents"],
+  context: PlanningContext,
+) {
+  const occupiedIntervals = [...context.occupiedIntervals]
+  const windows = context.availabilityWindows.map((window) => ({
+    startMs: new Date(window.start).getTime(),
+    endMs: new Date(window.end).getTime(),
+  }))
+
+  for (const event of plannedEvents) {
+    const startMs = new Date(event.start).getTime()
+    const endMs = new Date(event.end).getTime()
+
+    if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) {
+      throw new Error(`Claude returned an invalid time range for task ${event.taskId}.`)
+    }
+
+    const task = event.taskId ? context.taskMap.get(event.taskId) : null
+
+    if (!task) {
+      throw new Error(`Missing task context while validating event ${event.id}.`)
+    }
+
+    if (startMs < new Date(context.nowIso).getTime()) {
+      throw new Error(`Claude scheduled task ${task.id} in the past.`)
+    }
+
+    if (!isEventInsidePlanningWindow(event.start, event.end, context.planningWindow)) {
+      throw new Error(`Claude scheduled task ${task.id} outside the five-day planning horizon.`)
+    }
+
+    if (task.deadline && endMs > new Date(task.deadline).getTime()) {
+      throw new Error(`Claude scheduled task ${task.id} past its deadline.`)
+    }
+
+    const fitsWindow = windows.some((window) => startMs >= window.startMs && endMs <= window.endMs)
+
+    if (!fitsWindow) {
+      throw new Error(`Claude scheduled task ${task.id} outside the allowed availability windows.`)
+    }
+
+    const overlap = occupiedIntervals.find(
+      (interval) => startMs < interval.endMs && endMs > interval.startMs,
+    )
+
+    if (overlap) {
+      throw new Error(`Claude scheduled task ${task.id} on top of ${overlap.label}.`)
+    }
+
+    occupiedIntervals.push({
+      startMs,
+      endMs,
+      label: `planned-task:${task.title}`,
+    })
+  }
+}
+
+function normalizePreferences(input: SchedulePreparationContext): PlanningPreferences {
+  return {
+    timezone: input.preferences?.timezone || DEFAULT_TIMEZONE,
+    workdayStart: input.preferences?.workdayStart || DEFAULT_WORKDAY_START,
+    workdayEnd: input.preferences?.workdayEnd || DEFAULT_WORKDAY_END,
+    defaultTaskDurationMinutes:
+      input.preferences?.defaultTaskDurationMinutes || DEFAULT_TASK_DURATION_MINUTES,
+    breakDurationMinutes: input.preferences?.breakDurationMinutes ?? DEFAULT_BREAK_MINUTES,
+    preferredFocusBlockMinutes: input.preferences?.preferredFocusBlockMinutes ?? null,
+    peakEnergyWindow: input.preferences?.peakEnergyWindow ?? null,
+    procrastinationPattern: input.preferences?.procrastinationPattern ?? null,
+    sleepPattern: input.preferences?.sleepPattern ?? null,
+    preferredCheckInMode: input.preferences?.preferredCheckInMode ?? "quiet",
+    calendarId: input.preferences?.calendarId ?? null,
+  }
+}
+
+function estimateTaskDuration(
+  task: SchedulePreparationContext["tasks"][number],
+  preferences: PlanningPreferences,
+) {
+  if (task.durationMinutes && task.durationMinutes > 0) {
+    return task.durationMinutes
+  }
+
+  const text = [task.title, task.description ?? "", task.tags.join(" ")]
+    .join(" ")
+    .toLowerCase()
+
+  if (/(email|reply|submit|form|admin|registration|check.?in|follow up)/.test(text)) {
+    return 30
+  }
+
+  if (/(read|review|notes|slides|flashcards|quiz)/.test(text)) {
+    return 45
+  }
+
+  if (/(essay|paper|write|draft|research|project|problem set|pset|study)/.test(text)) {
+    return preferences.preferredFocusBlockMinutes ?? 90
+  }
+
+  if (task.priority === "high") {
+    return Math.max(preferences.defaultTaskDurationMinutes, 60)
+  }
+
+  if (task.priority === "low") {
+    return Math.min(preferences.defaultTaskDurationMinutes, 45)
+  }
+
+  return preferences.defaultTaskDurationMinutes
+}
+
+function taskToFixedEvent(
+  task: PlanningTask,
+  userId: string,
+): SchedulePlanResult["proposedEvents"][number] {
+  const startMs = new Date(task.scheduledFor as string).getTime()
+  const endMs = startMs + task.estimatedDurationMinutes * 60_000
+
+  return {
+    id: crypto.randomUUID(),
+    userId,
+    taskId: task.id,
+    title: task.title,
+    start: new Date(startMs).toISOString(),
+    end: new Date(endMs).toISOString(),
+    source: "task",
+    status: "scheduled",
+    location: null,
+    externalEventId: null,
+    isImmutable: true,
+    calendarId: task.calendarId ?? DEFAULT_TASKS_CALENDAR_ID,
+  }
+}
+
+function buildAvailabilityWindows(args: {
+  now: Date
+  planningWindow: PlanningContext["planningWindow"]
+  preferences: PlanningPreferences
+  occupiedIntervals: Interval[]
+}) {
+  const { now, planningWindow, preferences, occupiedIntervals } = args
+  const windows: AvailabilityWindow[] = []
+
+  for (let offset = 0; offset < FIVE_DAY_HORIZON_DAYS; offset += 1) {
+    const localDay = addDaysToDateKey(planningWindow.localStartDay, offset)
+    const workStart = zonedDateTimeToUtc(localDay, preferences.workdayStart, preferences.timezone)
+    const workEnd = zonedDateTimeToUtc(localDay, preferences.workdayEnd, preferences.timezone)
+    const dayStartMs = Math.max(workStart.getTime(), now.getTime())
+    const dayEndMs = Math.min(workEnd.getTime(), new Date(planningWindow.end).getTime())
+
+    if (dayEndMs <= dayStartMs) {
+      continue
+    }
+
+    const overlappingIntervals = occupiedIntervals.filter(
+      (interval) => interval.startMs < dayEndMs && interval.endMs > dayStartMs,
+    )
+    const freeIntervals = subtractIntervals(dayStartMs, dayEndMs, overlappingIntervals)
+
+    for (const interval of freeIntervals) {
+      windows.push({
+        start: new Date(interval.startMs).toISOString(),
+        end: new Date(interval.endMs).toISOString(),
+        localDay,
+        durationMinutes: Math.round((interval.endMs - interval.startMs) / 60_000),
+      })
+    }
+  }
+
+  return windows
+}
+
+function sortTasksForPlanning(tasks: PlanningTask[], nowIso: string) {
+  return [...tasks].sort((left, right) => {
+    const leftScore = getTaskUrgencyScore(left, nowIso)
+    const rightScore = getTaskUrgencyScore(right, nowIso)
+
+    return rightScore - leftScore
+  })
+}
+
+function getTaskUrgencyScore(task: PlanningTask, nowIso: string) {
+  let score = 0
+
+  if (task.priority === "high") score += 300
+  if (task.priority === "medium") score += 150
+  if (task.status === "missed") score += 120
+
+  if (task.deadline) {
+    const hoursUntilDeadline = (new Date(task.deadline).getTime() - new Date(nowIso).getTime()) / 3_600_000
+
+    if (hoursUntilDeadline <= 24) score += 200
+    else if (hoursUntilDeadline <= 72) score += 120
+    else if (hoursUntilDeadline <= 168) score += 60
+  }
+
+  return score
+}
+
+function subtractIntervals(startMs: number, endMs: number, intervals: Interval[]) {
+  const sortedIntervals = [...intervals].sort((left, right) => left.startMs - right.startMs)
+  const freeIntervals: Array<{ startMs: number; endMs: number }> = []
+  let cursor = startMs
+
+  for (const interval of sortedIntervals) {
+    if (interval.endMs <= cursor) {
+      continue
+    }
+
+    if (interval.startMs > cursor) {
+      freeIntervals.push({
+        startMs: cursor,
+        endMs: Math.min(interval.startMs, endMs),
+      })
+    }
+
+    cursor = Math.max(cursor, interval.endMs)
+
+    if (cursor >= endMs) {
+      break
+    }
+  }
+
+  if (cursor < endMs) {
+    freeIntervals.push({ startMs: cursor, endMs })
+  }
+
+  return freeIntervals.filter(
+    (interval) => interval.endMs - interval.startMs >= MIN_SLOT_MINUTES * 60_000,
+  )
+}
+
+function roundUpDate(date: Date, minuteIncrement: number) {
+  const rounded = new Date(date)
+  const ms = rounded.getTime()
+  const incrementMs = minuteIncrement * 60_000
+  const roundedMs = Math.ceil(ms / incrementMs) * incrementMs
+
+  rounded.setTime(roundedMs)
+  rounded.setSeconds(0, 0)
+
+  return rounded
+}
+
+function getLocalDateKey(date: Date, timeZone: string) {
+  const formatter = getDateTimeFormatter(
+    `date:${timeZone}`,
+    new Intl.DateTimeFormat("en-CA", {
+      timeZone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }),
+  )
+  const parts = formatter.formatToParts(date)
+  const year = parts.find((part) => part.type === "year")?.value
+  const month = parts.find((part) => part.type === "month")?.value
+  const day = parts.find((part) => part.type === "day")?.value
+
+  if (!year || !month || !day) {
+    throw new Error(`Failed to derive a local date key for timezone ${timeZone}.`)
+  }
+
+  return `${year}-${month}-${day}`
+}
+
+function zonedDateTimeToUtc(dateKey: string, time: string, timeZone: string) {
+  const [year, month, day] = dateKey.split("-").map(Number)
+  const [hours, minutes] = time.split(":").map(Number)
+  const localUtcGuess = Date.UTC(year, month - 1, day, hours, minutes, 0, 0)
+  let currentMs = localUtcGuess
+
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const offsetMinutes = getOffsetMinutes(new Date(currentMs), timeZone)
+    const nextMs = localUtcGuess - offsetMinutes * 60_000
+
+    if (nextMs === currentMs) {
+      break
+    }
+
+    currentMs = nextMs
+  }
+
+  return new Date(currentMs)
+}
+
+function getOffsetMinutes(date: Date, timeZone: string) {
+  const formatter = getDateTimeFormatter(
+    `offset:${timeZone}`,
+    new Intl.DateTimeFormat("en-US", {
+      timeZone,
+      timeZoneName: "shortOffset",
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+    }),
+  )
+  const offsetLabel = formatter.formatToParts(date).find((part) => part.type === "timeZoneName")?.value || "GMT"
+
+  if (offsetLabel === "GMT") {
+    return 0
+  }
+
+  const match = offsetLabel.match(/^GMT([+-])(\d{1,2})(?::?(\d{2}))?$/)
+
+  if (!match) {
+    throw new Error(`Unsupported timezone offset label "${offsetLabel}" for ${timeZone}.`)
+  }
+
+  const sign = match[1] === "-" ? -1 : 1
+  const hours = Number(match[2])
+  const minutes = Number(match[3] ?? "0")
+
+  return sign * (hours * 60 + minutes)
+}
+
+function addDaysToDateKey(dateKey: string, days: number) {
+  const [year, month, day] = dateKey.split("-").map(Number)
+  const next = new Date(Date.UTC(year, month - 1, day + days))
+  const nextYear = next.getUTCFullYear()
+  const nextMonth = String(next.getUTCMonth() + 1).padStart(2, "0")
+  const nextDay = String(next.getUTCDate()).padStart(2, "0")
+
+  return `${nextYear}-${nextMonth}-${nextDay}`
+}
+
+function differenceInDateKeys(startDateKey: string, endDateKey: string) {
+  const [startYear, startMonth, startDay] = startDateKey.split("-").map(Number)
+  const [endYear, endMonth, endDay] = endDateKey.split("-").map(Number)
+  const startMs = Date.UTC(startYear, startMonth - 1, startDay)
+  const endMs = Date.UTC(endYear, endMonth - 1, endDay)
+
+  return Math.floor((endMs - startMs) / 86_400_000)
+}
+
+function sortEventsByStart(events: SchedulePlanResult["proposedEvents"]) {
+  return [...events].sort(
+    (left, right) => new Date(left.start).getTime() - new Date(right.start).getTime(),
+  )
+}
+
+const formatterCache = new Map<string, Intl.DateTimeFormat>()
+
+function getDateTimeFormatter(cacheKey: string, formatter: Intl.DateTimeFormat) {
+  const existing = formatterCache.get(cacheKey)
+
+  if (existing) {
+    return existing
+  }
+
+  formatterCache.set(cacheKey, formatter)
+  return formatter
+}
+
+function getPlanningWindow(now: Date, timeZone: string) {
+  const localStartDay = getLocalDateKey(now, timeZone)
+  const localEndDay = addDaysToDateKey(localStartDay, FIVE_DAY_HORIZON_DAYS - 1)
+  const endOfDay = zonedDateTimeToUtc(localEndDay, "23:59", timeZone)
+  const inclusiveEnd = new Date(endOfDay.getTime() + 59_999)
+
+  return {
+    start: now.toISOString(),
+    end: inclusiveEnd.toISOString(),
+    localStartDay,
+    localEndDay,
+  }
+}
+
+function isTaskRelevantToPlanningWindow(
+  task: PlanningTask,
+  planningWindow: PlanningContext["planningWindow"],
+) {
+  if (task.scheduledFor && isTimestampInsidePlanningWindow(task.scheduledFor, planningWindow)) {
+    return true
+  }
+
+  if (task.isImmutable && task.scheduledFor) {
+    return isTimestampInsidePlanningWindow(task.scheduledFor, planningWindow)
+  }
+
+  if (task.deadline === null) {
+    return true
+  }
+
+  return new Date(task.deadline).getTime() <= new Date(planningWindow.end).getTime()
+}
+
+function isTimestampInsidePlanningWindow(
+  timestamp: string,
+  planningWindow: PlanningContext["planningWindow"],
+) {
+  const value = new Date(timestamp).getTime()
+
+  return (
+    Number.isFinite(value) &&
+    value >= new Date(planningWindow.start).getTime() &&
+    value <= new Date(planningWindow.end).getTime()
+  )
+}
+
+function isEventInsidePlanningWindow(
+  start: string,
+  end: string,
+  planningWindow: PlanningContext["planningWindow"],
+) {
+  const startMs = new Date(start).getTime()
+  const endMs = new Date(end).getTime()
+  const windowStartMs = new Date(planningWindow.start).getTime()
+  const windowEndMs = new Date(planningWindow.end).getTime()
+
+  return (
+    Number.isFinite(startMs) &&
+    Number.isFinite(endMs) &&
+    endMs > windowStartMs &&
+    startMs < windowEndMs
+  )
+}
+
+async function loadMemoryMarkdown(userId: string) {
+  const filePath = path.join(MEMORY_DIRECTORY, `${userId}.md`)
+
+  try {
+    const markdown = await readFile(filePath, "utf8")
+    return markdown.trim()
+  } catch {
+    return ""
   }
 }
 
