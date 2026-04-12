@@ -343,13 +343,9 @@ export const useCalendarStore = create<CalendarStore>((set, get) => ({
     
     switch (viewMode) {
       case "1day":
-        newDate.setDate(newDate.getDate() - 1)
-        break
       case "3days":
-        newDate.setDate(newDate.getDate() - 3)
-        break
       case "7days":
-        newDate.setDate(newDate.getDate() - 7)
+        newDate.setDate(newDate.getDate() - 1)
         break
       case "1month":
         newDate.setMonth(newDate.getMonth() - 1)
@@ -365,13 +361,9 @@ export const useCalendarStore = create<CalendarStore>((set, get) => ({
     
     switch (viewMode) {
       case "1day":
-        newDate.setDate(newDate.getDate() + 1)
-        break
       case "3days":
-        newDate.setDate(newDate.getDate() + 3)
-        break
       case "7days":
-        newDate.setDate(newDate.getDate() + 7)
+        newDate.setDate(newDate.getDate() + 1)
         break
       case "1month":
         newDate.setMonth(newDate.getMonth() + 1)

@@ -182,13 +182,7 @@ export function ScheduleView({
       setMonthViewDate(new Date(monthViewDate.getFullYear(), monthViewDate.getMonth() - 1, 1))
     } else {
       const newDate = new Date(selectedDate)
-      if (viewMode === "1day") {
-        newDate.setDate(newDate.getDate() - 1)
-      } else if (viewMode === "3days") {
-        newDate.setDate(newDate.getDate() - 3)
-      } else if (viewMode === "7days") {
-        newDate.setDate(newDate.getDate() - 7)
-      }
+      newDate.setDate(newDate.getDate() - 1)
       setSelectedDate(newDate)
     }
   }
@@ -198,13 +192,7 @@ export function ScheduleView({
       setMonthViewDate(new Date(monthViewDate.getFullYear(), monthViewDate.getMonth() + 1, 1))
     } else {
       const newDate = new Date(selectedDate)
-      if (viewMode === "1day") {
-        newDate.setDate(newDate.getDate() + 1)
-      } else if (viewMode === "3days") {
-        newDate.setDate(newDate.getDate() + 3)
-      } else if (viewMode === "7days") {
-        newDate.setDate(newDate.getDate() + 7)
-      }
+      newDate.setDate(newDate.getDate() + 1)
       setSelectedDate(newDate)
     }
   }
@@ -252,13 +240,6 @@ export function ScheduleView({
 
   const displayDates = useMemo(() => {
     const startDate = new Date(selectedDate)
-
-    if (viewMode === "7days") {
-      const dayOfWeek = startDate.getDay()
-      const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek
-      startDate.setDate(startDate.getDate() + mondayOffset)
-    }
-
     const count = viewMode === "1day" ? 1 : viewMode === "3days" ? 3 : 7
 
     return Array.from({ length: count }, (_, index) => {
@@ -280,13 +261,6 @@ export function ScheduleView({
   const getDayHeaders = () => {
     const days = []
     const startDate = new Date(selectedDate)
-    
-    // For 7 days view, start from Monday of current week
-    if (viewMode === "7days") {
-      const dayOfWeek = startDate.getDay()
-      const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek
-      startDate.setDate(startDate.getDate() + mondayOffset)
-    }
 
     const count = viewMode === "1day" ? 1 : viewMode === "3days" ? 3 : 7
     const today = new Date()
@@ -309,20 +283,17 @@ export function ScheduleView({
     const start = new Date(selectedDate)
     if (viewMode === "1day") {
       return `${monthNames[start.getMonth()]} ${start.getDate()}, ${start.getFullYear()}`
-    } else if (viewMode === "3days") {
+    }
+
+    if (viewMode === "3days") {
       const end = new Date(start)
       end.setDate(start.getDate() + 2)
       return `${monthNames[start.getMonth()]} ${start.getDate()} - ${end.getDate()}, ${start.getFullYear()}`
-    } else {
-      // 7 days - show week
-      const dayOfWeek = start.getDay()
-      const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek
-      const monday = new Date(start)
-      monday.setDate(start.getDate() + mondayOffset)
-      const sunday = new Date(monday)
-      sunday.setDate(monday.getDate() + 6)
-      return `${monthNames[monday.getMonth()]} ${monday.getDate()} - ${sunday.getDate()}, ${monday.getFullYear()}`
     }
+
+    const end = new Date(start)
+    end.setDate(start.getDate() + 6)
+    return `${monthNames[start.getMonth()]} ${start.getDate()} - ${end.getDate()}, ${start.getFullYear()}`
   }
 
   const renderMonthView = () => {

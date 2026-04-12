@@ -2,6 +2,21 @@
 
 ## Log
 
+### 2026-04-11 22:22 CDT
+
+- Fixed the actual 7-day navigation bug in [`components/dashboard/schedule-view.tsx`](./../components/dashboard/schedule-view.tsx): the visible range was still snapping back to Monday, which made left/right clicks appear broken until seven presses crossed into the next week.
+- Removed that Monday anchoring from the displayed date window and range label, so 7-day is now a rolling 7-day strip instead of a fixed calendar week.
+- Updated [`lib/mock-calendar-events.ts`](./../lib/mock-calendar-events.ts) so the placeholder schedule still opens on April 6 after converting 7-day into a rolling window.
+- Status: one left/right click should now move the visible 7-day schedule by exactly one day.
+- Next step: none unless we want a separate “calendar week” mode distinct from the rolling 7-day mode.
+
+### 2026-04-11 22:16 CDT
+
+- Normalized the remaining legacy calendar-store navigation logic in [`lib/stores/calendar-store.ts`](./../lib/stores/calendar-store.ts) so day-based views move by one day per click instead of jumping by 3 or 7 days.
+- Confirmed the active [`components/dashboard/schedule-view.tsx`](./../components/dashboard/schedule-view.tsx) path was already using one-day stepping, so this change removes stale behavior in the alternate store-backed path rather than altering the current backend-wired schedule panel.
+- Status: 1-day, 3-day, and 7-day forward/back navigation are now consistent across the codebase.
+- Next step: none for this behavior unless we later want separate “jump by span” controls in addition to daily stepping.
+
 ### 2026-04-11 22:00 CDT
 
 - Replaced the sparse backend calendar feed with the exact original placeholder week by moving the old mock `ScheduleView` events into a shared server/client module at [`lib/mock-calendar-events.ts`](./../lib/mock-calendar-events.ts).

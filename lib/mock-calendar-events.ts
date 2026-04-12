@@ -1,6 +1,6 @@
 import type { ScheduleEvent } from "@/types"
 
-export const PLACEHOLDER_SELECTED_DATE_LOCAL = "2026-04-11T12:00:00"
+export const PLACEHOLDER_SELECTED_DATE_LOCAL = "2026-04-06T12:00:00"
 export const PLACEHOLDER_MONTH_START_LOCAL = "2026-04-01T12:00:00"
 
 type PlaceholderCalendarTemplate = {
