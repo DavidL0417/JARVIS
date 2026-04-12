@@ -228,7 +228,7 @@ function PanelPlaceholder({
 }
 
 export default function DashboardPage() {
-  const [rightColumnOpen, setRightColumnOpen] = useState(false)
+  const [rightColumnOpen, setRightColumnOpen] = useState(true)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [mobileSection, setMobileSection] = useState<MobileSection>("schedule")
   const [isDarkMode, setIsDarkMode] = useState(true)
@@ -656,10 +656,10 @@ export default function DashboardPage() {
             onClick={() => setRightColumnOpen((current) => !current)}
             className="text-muted-foreground hover:text-foreground hover:bg-secondary text-xs h-7 font-semibold"
           >
-            {rightColumnOpen ? "Close Right Column" : "Open Right Column"}
+            {rightColumnOpen ? "Hide Right Column" : "Open Right Column"}
           </Button>
           <span className="text-xs text-muted-foreground font-medium">
-            Master input stays pinned on the left. Toggle the right column when you need extra detail.
+            Master input stays pinned on the left. Keep the right column open for task and status detail.
           </span>
         </div>
 
@@ -747,7 +747,7 @@ export default function DashboardPage() {
             autoSaveId={rightColumnOpen ? "dashboard-panels-with-right" : "dashboard-panels-main"}
             className="h-full w-full gap-3"
           >
-            <ResizablePanel defaultSize={36} minSize={24} maxSize={55}>
+            <ResizablePanel defaultSize={30} minSize={22} maxSize={42}>
               <div className="h-full overflow-auto pr-1">
                 <div className="flex flex-col gap-3">
                   <MasterInput />
@@ -760,7 +760,7 @@ export default function DashboardPage() {
 
             <ResizableHandle withHandle className="mx-1" />
 
-            <ResizablePanel defaultSize={rightColumnOpen ? 44 : 64} minSize={30}>
+            <ResizablePanel defaultSize={rightColumnOpen ? 50 : 70} minSize={34}>
               <div className="h-full overflow-hidden">
                 <ScheduleView 
                   onSyncWithGoogle={handleSyncWithGoogle}
@@ -779,7 +779,7 @@ export default function DashboardPage() {
             {rightColumnOpen && (
               <>
                 <ResizableHandle withHandle className="mx-1" />
-                <ResizablePanel defaultSize={20} minSize={16} maxSize={30}>
+                <ResizablePanel defaultSize={20} minSize={18} maxSize={28}>
                   <div className="h-full overflow-auto pl-1">
                     {activeCalendar ? (
                       <TaskManager 

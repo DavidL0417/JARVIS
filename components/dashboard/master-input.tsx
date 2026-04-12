@@ -316,7 +316,7 @@ export function MasterInput() {
       <CardContent className="flex flex-col gap-3 p-3 pt-0">
         <div
           ref={transcriptRef}
-          className="h-[360px] overflow-y-auto rounded-xl border border-border bg-secondary/20"
+          className="h-[240px] overflow-y-auto rounded-xl border border-border bg-secondary/20"
         >
           <div className="space-y-3 p-3">
             {transcript.map((entry) => (
@@ -442,7 +442,7 @@ export function MasterInput() {
             onChange={(event) => setMessage(event.target.value)}
             onKeyDown={handleKeyDown}
             aria-label="Secretary input request"
-            className="min-h-[88px] resize-none border-0 bg-transparent px-1 text-xs text-foreground shadow-none focus-visible:ring-0"
+            className="min-h-[72px] resize-none border-0 bg-transparent px-1 text-xs text-foreground shadow-none focus-visible:ring-0"
           />
           <div className="mt-2 flex items-center justify-between gap-2">
             <p className="text-[11px] text-muted-foreground">

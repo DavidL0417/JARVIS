@@ -4,14 +4,17 @@
 import { NextResponse } from "next/server"
 
 import { loadAssistantRuntimeContext } from "@/lib/assistant/context"
-import { getOrCreateDemoUser } from "@/lib/supabase/demo-user"
 import { createSupabaseAdminClient } from "@/lib/supabase/server"
+import {
+  isAuthenticationRequiredError,
+  requireAuthenticatedUser,
+} from "@/lib/supabase/auth"
 import { assistantContextResponseSchema } from "@/schemas/assistant"
 
 export async function GET() {
   try {
+    const { user } = await requireAuthenticatedUser()
     const supabase = createSupabaseAdminClient()
-    const user = await getOrCreateDemoUser(supabase)
     const runtime = await loadAssistantRuntimeContext(supabase, user.id)
 
     const payload = assistantContextResponseSchema.parse({
@@ -21,6 +24,16 @@ export async function GET() {
 
     return NextResponse.json(payload)
   } catch (error) {
+    if (isAuthenticationRequiredError(error)) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "Authentication required.",
+        },
+        { status: 401 },
+      )
+    }
+
     return NextResponse.json(
       {
         ok: false,

@@ -5,8 +5,11 @@ import { NextResponse } from "next/server"
 
 import { buildFallbackAssistantContextData } from "@/lib/assistant/context"
 import { runSecretaryTurn } from "@/lib/assistant/secretary"
-import { getOrCreateDemoUser } from "@/lib/supabase/demo-user"
 import { createSupabaseAdminClient } from "@/lib/supabase/server"
+import {
+  isAuthenticationRequiredError,
+  requireAuthenticatedUser,
+} from "@/lib/supabase/auth"
 import { assistantMessageRequestSchema, assistantMessageResponseSchema } from "@/schemas/assistant"
 
 export async function POST(request: Request) {
@@ -29,8 +32,8 @@ export async function POST(request: Request) {
   }
 
   try {
+    const { user } = await requireAuthenticatedUser()
     const supabase = createSupabaseAdminClient()
-    const user = await getOrCreateDemoUser(supabase)
     const result = await runSecretaryTurn({
       supabase,
       userId: user.id,
@@ -44,6 +47,21 @@ export async function POST(request: Request) {
       status: result.ok ? 200 : 500,
     })
   } catch (error) {
+    if (isAuthenticationRequiredError(error)) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "Authentication required.",
+          reply: "Please sign in to use JARVIS.",
+          toolCalls: [],
+          needsRefresh: false,
+          clarification: null,
+          context: buildFallbackAssistantContextData(),
+        },
+        { status: 401 },
+      )
+    }
+
     return NextResponse.json(
       {
         ok: false,

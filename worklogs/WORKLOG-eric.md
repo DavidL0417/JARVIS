@@ -2,6 +2,26 @@
 
 ## Log
 
+### 2026-04-12 03:18 CDT
+
+- Fixed a post-merge auth regression in the assistant routes: `app/api/assistant/message` and `app/api/assistant/context` had been reverted to `getOrCreateDemoUser(...)`, so secretary-created tasks/events were writing under the demo account while the dashboard read the authenticated user.
+- Both assistant routes now use `requireAuthenticatedUser()` again, which brings Master Input writes back into the same per-user data flow as dashboard/tasks/schedule.
+- Status: `pnpm exec tsc --noEmit --incremental false` passes and assistant-created records should now show up for the signed-in user after refresh.
+- Next step: re-test a simple event/task from Master Input and confirm it appears both in Supabase under the auth user and in the authenticated dashboard UI.
+
+### 2026-04-12 03:15 CDT
+
+- Removed the legacy placeholder calendar injection from `/api/dashboard`, so the frontend schedule now renders only real `schedule_events` from Supabase plus task-derived overlays instead of the old seeded class/social mocks.
+- Status: `pnpm exec tsc --noEmit --incremental false` passes and the dummy calendar blocks should disappear after a refresh.
+- Next step: if the team still wants a demo seed mode later, reintroduce it behind an explicit dev-only flag instead of always merging mock events into authenticated user data.
+
+### 2026-04-12 03:12 CDT
+
+- Stabilized the post-merge dashboard shell after David’s secretary/scheduler UI landed: restored the right detail column to open by default and rebalanced desktop panel sizing so the schedule is not visually crowded out.
+- Trimmed the merged `MasterInput` transcript footprint so the left rail reads like a dashboard panel again instead of a full chat surface, without removing the new assistant functionality.
+- Status: `pnpm exec tsc --noEmit --incremental false` passes after the layout cleanup.
+- Next step: if Cindy wants a fuller visual restore, reconcile `app/page.tsx` against her intended component composition rather than letting the merged page keep drifting toward the older placeholder-heavy layout.
+
 ### 2026-04-12 02:34 CDT
 
 - Added an authenticated preferences backend path at `app/api/preferences/route.ts` so user settings can now be read and upserted through the app’s Supabase auth context instead of manual SQL editor writes.
