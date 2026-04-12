@@ -10,7 +10,7 @@ import {
   AvatarFallback,
   AvatarImage,
 } from "@/components/ui/avatar"
-import { createSupabaseBrowserClient } from "@/lib/supabase/client"
+import { tryCreateSupabaseBrowserClient } from "@/lib/supabase/client"
 
 type AuthViewState =
   | { status: "loading" }
@@ -40,11 +40,16 @@ function getFallbackInitials(name: string, email: string) {
 
 export function AuthControls() {
   const router = useRouter()
-  const supabase = useMemo(() => createSupabaseBrowserClient(), [])
+  const supabase = useMemo(() => tryCreateSupabaseBrowserClient(), [])
   const [authState, setAuthState] = useState<AuthViewState>({ status: "loading" })
   const [isMutating, setIsMutating] = useState(false)
 
   useEffect(() => {
+    if (!supabase) {
+      setAuthState({ status: "signed-out" })
+      return
+    }
+
     let isMounted = true
 
     const syncUser = async () => {
@@ -91,6 +96,10 @@ export function AuthControls() {
   }, [router, supabase])
 
   const handleSignIn = async () => {
+    if (!supabase) {
+      return
+    }
+
     setIsMutating(true)
 
     const next = `${window.location.pathname}${window.location.search}`
@@ -99,6 +108,14 @@ export function AuthControls() {
       provider: "google",
       options: {
         redirectTo,
+        scopes: [
+          "https://www.googleapis.com/auth/calendar.readonly",
+          "https://www.googleapis.com/auth/calendar.events",
+        ].join(" "),
+        queryParams: {
+          access_type: "offline",
+          prompt: "consent",
+        },
       },
     })
 
@@ -109,6 +126,10 @@ export function AuthControls() {
   }
 
   const handleSignOut = async () => {
+    if (!supabase) {
+      return
+    }
+
     setIsMutating(true)
 
     try {
@@ -142,6 +163,21 @@ export function AuthControls() {
   }
 
   if (authState.status === "signed-out") {
+    if (!supabase) {
+      return (
+        <Button
+          variant="outline"
+          size="sm"
+          disabled
+          className="text-xs h-8 px-3 font-semibold"
+          title="Add NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY to enable auth."
+        >
+          <LogIn className="w-3 h-3 mr-2" />
+          Auth unavailable
+        </Button>
+      )
+    }
+
     return (
       <Button
         variant="outline"

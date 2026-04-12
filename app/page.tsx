@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import dynamic from "next/dynamic"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -12,14 +12,24 @@ import { PanelTabs, type PanelTabId } from "@/components/dashboard/panel-tabs"
 import { MasterInput } from "@/components/dashboard/master-input"
 import { WhatToDoNow } from "@/components/dashboard/what-to-do-now"
 import { StatusPanel } from "@/components/dashboard/status-panel"
-import { CalendarsSidebar, initialCalendars, type Calendar } from "@/components/dashboard/calendars-sidebar"
+import {
+  CalendarsSidebar,
+  sortCalendars,
+  toSidebarCalendar,
+  type Calendar,
+} from "@/components/dashboard/calendars-sidebar"
+import { CheckInSidebar } from "@/components/dashboard/checkin-sidebar"
 import { TaskManager } from "@/components/dashboard/task-manager"
-import { APP_CALENDAR_PRESET_MAP } from "@/lib/calendar-config"
+import { TaskSidebar } from "@/components/dashboard/task-sidebar"
+import { TASKS_CALENDAR_ID } from "@/lib/tasks-calendar"
 import { X, Book } from "lucide-react"
 // ##### BACKEND API #####
 // DO NOT MODIFY UNLESS BACKEND OWNER
+import { getCalendarsData } from "@/lib/data/calendars"
+import { getPendingCheckInApprovals } from "@/lib/data/checkins"
 import { getDashboardData } from "@/lib/data/dashboard"
 import type {
+  CheckInApprovalItem,
   CreateTaskRequest,
   DashboardResponse,
   DeleteTaskResponse,
@@ -40,39 +50,10 @@ const ScheduleView = dynamic(
   { ssr: false },
 )
 
-const CALENDAR_DEFAULTS: Record<string, { name: string; color: string; source: Calendar["source"] }> =
-  APP_CALENDAR_PRESET_MAP
-
 const DEFAULT_BACKEND_CALENDAR_ID = "calendar-main"
 const DEFAULT_TASK_CALENDAR_ID = "cal-tasks"
 const FALLBACK_USER_ID = "00000000-0000-4000-8000-000000000000"
 const DASHBOARD_REFRESH_EVENT = "jarvis-dashboard-refresh"
-
-function getDisplayCalendarId(calendarId: string | null | undefined) {
-  return calendarId || DEFAULT_BACKEND_CALENDAR_ID
-}
-
-function createCalendarFromId(calendarId: string): Calendar {
-  const preset = CALENDAR_DEFAULTS[calendarId]
-
-  if (preset) {
-    return {
-      id: calendarId,
-      name: preset.name,
-      color: preset.color,
-      isVisible: true,
-      source: preset.source,
-    }
-  }
-
-  return {
-    id: calendarId,
-    name: calendarId.replace(/[-_]/g, " "),
-    color: "#a78bfa",
-    isVisible: true,
-    source: "local",
-  }
-}
 
 function mergeScheduleEvents(baseEvents: ScheduleEvent[], overlayEvents: ScheduleEvent[]) {
   if (overlayEvents.length === 0) {
@@ -105,11 +86,15 @@ function toScheduleEventInput(event: ScheduleEvent): ScheduleEventInput {
     start: event.start,
     end: event.end,
     source: event.source,
+    priority: event.priority,
     taskId: event.taskId,
     status: event.status,
     location: event.location,
     externalEventId: event.externalEventId,
+    gcalEventId: event.gcalEventId,
+    lastSyncedFrom: event.lastSyncedFrom,
     isImmutable: event.isImmutable,
+    isCheckedIn: event.isCheckedIn,
     allDay: event.allDay,
     calendarId: event.calendarId,
   }
@@ -145,7 +130,7 @@ function buildOptimisticTask(userId: string, input: CreateTaskRequest): Task {
     scheduledFor: input.scheduledFor ?? null,
     isImmutable: input.isImmutable ?? false,
     allDay: input.allDay ?? false,
-    calendarId: DEFAULT_TASK_CALENDAR_ID,
+    calendarId: input.calendarId ?? DEFAULT_TASK_CALENDAR_ID,
     tags: input.tags ?? [],
   }
 }
@@ -168,7 +153,7 @@ function mergeTaskUpdate(task: Task, update: UpdateTaskRequest): Task {
           : task.scheduledFor,
     isImmutable: update.isImmutable ?? task.isImmutable,
     allDay: update.allDay ?? task.allDay,
-    calendarId: DEFAULT_TASK_CALENDAR_ID,
+    calendarId: update.calendarId !== undefined ? update.calendarId : task.calendarId,
     tags: update.tags ?? task.tags,
   }
 }
@@ -231,13 +216,14 @@ export default function DashboardPage() {
   const [rightColumnOpen, setRightColumnOpen] = useState(true)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [mobileSection, setMobileSection] = useState<MobileSection>("schedule")
-  const [isDarkMode, setIsDarkMode] = useState(true)
+  const [isDarkMode, setIsDarkMode] = useState(false)
   const [activePanelTab, setActivePanelTab] = useState<PanelTabId>("focus")
   
   // Calendar management state
   const [calendarsSidebarOpen, setCalendarsSidebarOpen] = useState(false)
-  const [calendars, setCalendars] = useState<Calendar[]>(initialCalendars)
+  const [calendars, setCalendars] = useState<Calendar[]>([])
   const [activeCalendarId, setActiveCalendarId] = useState<string | null>(null)
+  const [pendingCheckInItems, setPendingCheckInItems] = useState<CheckInApprovalItem[]>([])
   
   // Task management state
   const [tasks, setTasks] = useState<Task[]>([])
@@ -253,16 +239,33 @@ export default function DashboardPage() {
   // ##### END BACKEND #####
 
   // Get visible calendar IDs for filtering events
-  const visibleCalendarIds = calendars.filter(cal => cal.isVisible).map(cal => cal.id)
+  const visibleCalendarIds = useMemo<string[] | undefined>(() => {
+    if (calendars.length === 0) {
+      return undefined
+    }
+
+    const nextIds = calendars.filter((calendar) => calendar.isVisible).map((calendar) => calendar.id)
+
+    if (!nextIds.includes(DEFAULT_BACKEND_CALENDAR_ID)) {
+      nextIds.push(DEFAULT_BACKEND_CALENDAR_ID)
+    }
+
+    return nextIds
+  }, [calendars])
   const mergedScheduleEvents = useMemo(
     () => mergeScheduleEvents(dashboardData?.events || [], scheduledOverlayEvents),
     [dashboardData?.events, scheduledOverlayEvents],
+  )
+  const pendingCheckInEvents = useMemo(
+    () => pendingCheckInItems.map((item) => item.event),
+    [pendingCheckInItems],
   )
   
   // Get the active calendar object
   const activeCalendar = activeCalendarId 
     ? calendars.find(cal => cal.id === activeCalendarId) || null 
     : null
+  const isTaskCalendarActive = activeCalendar?.id === TASKS_CALENDAR_ID
 
   // Toggle dark/light mode
   useEffect(() => {
@@ -277,22 +280,50 @@ export default function DashboardPage() {
     setIsDarkMode(!isDarkMode)
   }
 
-  // API Hook: Replace with actual Google Calendar sync
-  const handleSyncWithGoogle = () => {
-    console.log("Syncing with Google Calendar...")
-  }
-
   const handleOpenCalendarsSidebar = () => {
     setCalendarsSidebarOpen(true)
   }
   
   // ##### BACKEND API #####
   // DO NOT MODIFY UNLESS BACKEND OWNER
+  const loadDashboard = useCallback(async () => {
+    const [data, calendarData, checkInData] = await Promise.all([
+      getDashboardData(),
+      getCalendarsData(),
+      getPendingCheckInApprovals(),
+    ])
+
+    if (!data) {
+      setDashboardData(null)
+      setCalendars([])
+      setPendingCheckInItems([])
+      setTasks([])
+      setScheduledOverlayEvents([])
+      setPlannerStatus("Not scheduled")
+      setPlannerSummary("")
+      return
+    }
+
+    console.log("Loaded dashboard data", data)
+    setDashboardData(data)
+    setTasks(data.tasks)
+    setScheduledOverlayEvents([])
+    setPendingCheckInItems(checkInData ?? [])
+
+    if (calendarData) {
+      setCalendars(sortCalendars(calendarData.map(toSidebarCalendar)))
+    }
+  }, [])
+
   useEffect(() => {
     let isActive = true
 
-    const loadDashboard = async () => {
-      const data = await getDashboardData()
+    const loadDashboardSafely = async () => {
+      const [data, calendarData, checkInData] = await Promise.all([
+        getDashboardData(),
+        getCalendarsData(),
+        getPendingCheckInApprovals(),
+      ])
 
       if (!isActive) {
         return
@@ -300,6 +331,8 @@ export default function DashboardPage() {
 
       if (!data) {
         setDashboardData(null)
+        setCalendars([])
+        setPendingCheckInItems([])
         setTasks([])
         setScheduledOverlayEvents([])
         setPlannerStatus("Not scheduled")
@@ -310,55 +343,32 @@ export default function DashboardPage() {
       console.log("Loaded dashboard data", data)
       setDashboardData(data)
       setTasks(data.tasks)
+      setScheduledOverlayEvents([])
+      setPendingCheckInItems(checkInData ?? [])
+
+      if (calendarData) {
+        setCalendars(sortCalendars(calendarData.map(toSidebarCalendar)))
+      }
     }
 
     const handleDashboardRefresh = () => {
       void loadDashboard()
     }
 
-    void loadDashboard()
+    void loadDashboardSafely()
     window.addEventListener(DASHBOARD_REFRESH_EVENT, handleDashboardRefresh)
 
     return () => {
       isActive = false
       window.removeEventListener(DASHBOARD_REFRESH_EVENT, handleDashboardRefresh)
     }
-  }, [])
+  }, [loadDashboard])
 
   useEffect(() => {
-    setCalendars((currentCalendars) => {
-      const knownCalendarIds = new Set(currentCalendars.map((calendar) => calendar.id))
-      const nextCalendars = [...currentCalendars]
-
-      for (const task of tasks) {
-        if (!task.calendarId) {
-          continue
-        }
-
-        const displayCalendarId = getDisplayCalendarId(task.calendarId)
-
-        if (knownCalendarIds.has(displayCalendarId)) {
-          continue
-        }
-
-        nextCalendars.push(createCalendarFromId(displayCalendarId))
-        knownCalendarIds.add(displayCalendarId)
-      }
-
-      for (const event of mergedScheduleEvents) {
-        const displayCalendarId = getDisplayCalendarId(event.calendarId)
-
-        if (knownCalendarIds.has(displayCalendarId)) {
-          continue
-        }
-
-        nextCalendars.push(createCalendarFromId(displayCalendarId))
-        knownCalendarIds.add(displayCalendarId)
-      }
-
-      return nextCalendars.length === currentCalendars.length ? currentCalendars : nextCalendars
-    })
-  }, [mergedScheduleEvents, tasks])
+    if (activeCalendarId && !calendars.some((calendar) => calendar.id === activeCalendarId)) {
+      setActiveCalendarId(null)
+    }
+  }, [activeCalendarId, calendars])
 
   const clearTaskError = () => {
     setTaskErrorMessage("")
@@ -497,7 +507,7 @@ export default function DashboardPage() {
     }
   }
 
-  const handleSchedule = async () => {
+  const handleSchedule = async (taskIds: string[] = []) => {
     if (isScheduling || !dashboardData) {
       return
     }
@@ -507,8 +517,15 @@ export default function DashboardPage() {
     setPlannerSummary("")
 
     try {
+      const selectedTaskIds = new Set(taskIds)
       const visibleHardEvents = dashboardData.events
-        .filter((event) => !event.calendarId || visibleCalendarIds.includes(event.calendarId))
+        .filter(
+          (event) =>
+            !visibleCalendarIds ||
+            !event.calendarId ||
+            visibleCalendarIds.includes(event.calendarId),
+        )
+        .filter((event) => !event.taskId || !selectedTaskIds.has(event.taskId))
         .map(toScheduleEventInput)
 
       const response = await fetch("/api/schedule", {
@@ -517,7 +534,7 @@ export default function DashboardPage() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          taskIds: [],
+          taskIds,
           hardEvents: visibleHardEvents,
         }),
       })
@@ -534,6 +551,7 @@ export default function DashboardPage() {
       setTasks((current) => applyScheduleToTasks(current, scheduleResponse.schedule))
       setPlannerStatus(scheduleResponse.schedule.plannerStatus === "ready" ? "Ready" : "Not scheduled")
       setPlannerSummary(scheduleResponse.schedule.summary)
+      void loadDashboard()
     } catch (error) {
       setPlannerStatus("Error")
       setPlannerSummary(error instanceof Error ? error.message : "Scheduling failed.")
@@ -541,7 +559,48 @@ export default function DashboardPage() {
       setIsScheduling(false)
     }
   }
+
+  const handleScheduleTask = async (taskId: string) => {
+    await handleSchedule([taskId])
+  }
   // ##### END BACKEND #####
+
+  const handleEventApproved = useCallback((approvedEvent: ScheduleEvent) => {
+    setPendingCheckInItems((currentItems) =>
+      currentItems.filter((item) => item.event.id !== approvedEvent.id),
+    )
+
+    setDashboardData((currentData) => {
+      if (!currentData) {
+        return currentData
+      }
+
+      return {
+        ...currentData,
+        events: currentData.events.map((event) =>
+          event.id === approvedEvent.id ? approvedEvent : event,
+        ),
+      }
+    })
+
+    setScheduledOverlayEvents((currentEvents) =>
+      currentEvents.map((event) => (event.id === approvedEvent.id ? approvedEvent : event)),
+    )
+
+    if (approvedEvent.taskId) {
+      setTasks((currentTasks) =>
+        currentTasks.map((task) =>
+          task.id === approvedEvent.taskId
+            ? {
+                ...task,
+                priority: approvedEvent.priority,
+                isImmutable: approvedEvent.isImmutable,
+              }
+            : task,
+        ),
+      )
+    }
+  }, [])
 
   const renderLeftPanelContent = () => {
     if (activePanelTab === "tasks") {
@@ -584,8 +643,56 @@ export default function DashboardPage() {
     )
   }
 
+  const renderContextSidebar = () => {
+    if (activeCalendar) {
+      if (isTaskCalendarActive) {
+        return (
+          <TaskSidebar
+            tasks={tasks}
+            scheduleEvents={mergedScheduleEvents}
+            errorMessage={taskErrorMessage}
+            onClearError={clearTaskError}
+            onCreateTask={handleCreateTask}
+            onUpdateTask={handleUpdateTask}
+            onDeleteTask={handleDeleteTask}
+            onScheduleTask={handleScheduleTask}
+          />
+        )
+      }
+
+      return (
+        <TaskManager
+          mode="calendar"
+          calendar={activeCalendar}
+          calendars={calendars}
+          tasks={tasks}
+          errorMessage={taskErrorMessage}
+          onClearError={clearTaskError}
+          onCreateTask={handleCreateTask}
+          onUpdateTask={handleUpdateTask}
+          onDeleteTask={handleDeleteTask}
+        />
+      )
+    }
+
+    return <StatusPanel stats={dashboardData?.stats} />
+  }
+
+  const renderRightPanelContent = () => {
+    return (
+      <div className="space-y-3">
+        <CheckInSidebar
+          events={pendingCheckInEvents}
+          calendars={calendars}
+          onEventApproved={handleEventApproved}
+        />
+        {renderContextSidebar()}
+      </div>
+    )
+  }
+
   return (
-    <div className={`h-screen overflow-hidden text-foreground p-3 md:p-4 ${isDarkMode ? "bg-[#0a0a0a]" : "bg-gray-50"}`}>
+    <div className="h-screen overflow-hidden p-3 text-foreground md:p-4">
       <div className="max-w-[1600px] mx-auto h-full flex flex-col">
         {/* Header */}
         <DashboardHeader 
@@ -610,8 +717,8 @@ export default function DashboardPage() {
         
         {/* Mobile Navigation Menu */}
         {mobileMenuOpen && (
-          <div className={`fixed inset-0 z-50 ${isDarkMode ? "bg-[#0a0a0a]" : "bg-gray-50"} md:hidden`}>
-            <div className="flex items-center justify-between p-4 border-b border-border">
+          <div className="fixed inset-0 z-50 bg-background/95 backdrop-blur-xl md:hidden">
+            <div className="flex items-center justify-between border-b border-border p-4">
               <h2 className="text-base font-bold text-foreground">Navigation</h2>
               <Button
                 variant="ghost"
@@ -633,7 +740,7 @@ export default function DashboardPage() {
                   variant={mobileSection === section.id ? "default" : "ghost"}
                   className={`w-full justify-start text-sm font-semibold ${
                     mobileSection === section.id
-                      ? "bg-[#3b82f6] text-white"
+                      ? "bg-rose-300 text-rose-950 shadow-sm hover:bg-rose-300"
                       : "text-muted-foreground hover:text-foreground hover:bg-secondary"
                   }`}
                   onClick={() => {
@@ -685,7 +792,7 @@ export default function DashboardPage() {
               onClick={() => setMobileSection(section.id)}
               className={`flex-1 text-sm font-semibold ${
                 mobileSection === section.id
-                  ? "bg-[#3b82f6] text-white text-xs h-7 font-semibold"
+                  ? "bg-rose-300 text-rose-950 text-xs h-7 font-semibold shadow-sm hover:bg-rose-300"
                   : "text-muted-foreground hover:text-foreground text-xs h-7 font-semibold"
               }`}
             >
@@ -707,7 +814,6 @@ export default function DashboardPage() {
           {mobileSection === "schedule" && (
             <div className="h-full">
               <ScheduleView 
-                onSyncWithGoogle={handleSyncWithGoogle}
                 visibleCalendarIds={visibleCalendarIds}
                 calendars={calendars}
                 events={mergedScheduleEvents}
@@ -720,23 +826,7 @@ export default function DashboardPage() {
             </div>
           )}
           {mobileSection === "status" && (
-            <div>
-              {activeCalendar ? (
-                <TaskManager 
-                  mode="calendar"
-                  calendar={activeCalendar}
-                  calendars={calendars}
-                  tasks={tasks}
-                  errorMessage={taskErrorMessage}
-                  onClearError={clearTaskError}
-                  onCreateTask={handleCreateTask}
-                  onUpdateTask={handleUpdateTask}
-                  onDeleteTask={handleDeleteTask}
-                />
-              ) : (
-                <StatusPanel stats={dashboardData?.stats} />
-              )}
-            </div>
+            <div className="space-y-3">{renderRightPanelContent()}</div>
           )}
         </div>
 
@@ -763,7 +853,6 @@ export default function DashboardPage() {
             <ResizablePanel defaultSize={rightColumnOpen ? 50 : 70} minSize={34}>
               <div className="h-full overflow-hidden">
                 <ScheduleView 
-                  onSyncWithGoogle={handleSyncWithGoogle}
                   visibleCalendarIds={visibleCalendarIds}
                   calendars={calendars}
                   events={mergedScheduleEvents}
@@ -781,21 +870,7 @@ export default function DashboardPage() {
                 <ResizableHandle withHandle className="mx-1" />
                 <ResizablePanel defaultSize={20} minSize={18} maxSize={28}>
                   <div className="h-full overflow-auto pl-1">
-                    {activeCalendar ? (
-                      <TaskManager 
-                        mode="calendar"
-                        calendar={activeCalendar}
-                        calendars={calendars}
-                        tasks={tasks}
-                        errorMessage={taskErrorMessage}
-                        onClearError={clearTaskError}
-                        onCreateTask={handleCreateTask}
-                        onUpdateTask={handleUpdateTask}
-                        onDeleteTask={handleDeleteTask}
-                      />
-                    ) : (
-                      <StatusPanel stats={dashboardData?.stats} />
-                    )}
+                    {renderRightPanelContent()}
                   </div>
                 </ResizablePanel>
               </>

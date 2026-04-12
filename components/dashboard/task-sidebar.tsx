@@ -1,312 +1,422 @@
 "use client"
 
-import { useState } from "react"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { useMemo, useState } from "react"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { ScrollArea } from "@/components/ui/scroll-area"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
-import {
-  Plus,
-  Check,
-  Trash2,
-  Calendar,
-  ChevronDown,
-  ChevronRight,
-} from "lucide-react"
-import {
-  useCalendarStore,
-  type CalendarTask,
-} from "@/lib/stores/calendar-store"
-import type { DashboardStats } from "@/types"
+import { Input } from "@/components/ui/input"
+import { Loader2, Pencil, Plus, Save, Trash2, X } from "lucide-react"
 
-interface TaskItemProps {
-  task: CalendarTask
-  calendarColor: string
-  onToggle: () => void
-  onDelete: () => void
-}
-
-function TaskItem({ task, calendarColor, onToggle, onDelete }: TaskItemProps) {
-  return (
-    <div className="group flex items-start gap-3 px-3 py-3 rounded-lg hover:bg-secondary/50 dark:hover:bg-[#1f1f1f] transition-colors">
-      <Checkbox
-        checked={task.completed}
-        onCheckedChange={onToggle}
-        className="mt-0.5 border-border dark:border-[#3a3a3a] data-[state=checked]:border-transparent rounded-full"
-        style={{
-          backgroundColor: task.completed ? calendarColor : "transparent",
-          borderColor: task.completed ? calendarColor : undefined,
-        }}
-      />
-      <div className="flex-1 min-w-0">
-        <p
-          className={`text-sm leading-relaxed ${
-            task.completed
-              ? "text-muted-foreground line-through"
-              : "text-foreground font-medium"
-          }`}
-        >
-          {task.title}
-        </p>
-        {task.completedAt && (
-          <p className="text-xs text-muted-foreground mt-0.5">
-            Completed {new Date(task.completedAt).toLocaleDateString()}
-          </p>
-        )}
-      </div>
-      <Button
-        variant="ghost"
-        size="sm"
-        onClick={onDelete}
-        className="opacity-0 group-hover:opacity-100 h-7 w-7 p-0 text-muted-foreground hover:text-destructive hover:bg-transparent"
-      >
-        <Trash2 className="w-4 h-4" />
-      </Button>
-    </div>
-  )
-}
-
-interface StatusItemProps {
-  label: string
-  value: string | number
-}
-
-function StatusItem({ label, value }: StatusItemProps) {
-  return (
-    <div className="space-y-1">
-      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{label}</p>
-      <p className="text-base font-bold text-foreground">{value}</p>
-    </div>
-  )
-}
-
-function formatCheckIns(value: DashboardStats["checkInMode"]) {
-  return value.charAt(0).toUpperCase() + value.slice(1)
-}
-
-// Default status data
-const mockStatusData = {
-  checkIns: "Quiet",
-  overdue: 0,
-  unscheduled: 0,
-  checkInsMessage: "No check-ins needed yet.",
-  overdueMessage: "No overdue tasks.",
-  estimatesMessage: "All tasks have an estimate or title duration hint.",
-}
+import { getTaskScheduleActionLabel } from "@/lib/task-schedule-state"
+import { TASKS_CALENDAR_ID, TASKS_CALENDAR_NAME } from "@/lib/tasks-calendar"
+import type { CreateTaskRequest, ScheduleEvent, Task, UpdateTaskRequest } from "@/types"
 
 interface TaskSidebarProps {
-  stats?: DashboardStats
+  tasks: Task[]
+  scheduleEvents: ScheduleEvent[]
+  errorMessage?: string | null
+  onClearError?: () => void
+  onCreateTask: (input: CreateTaskRequest) => Promise<void> | void
+  onUpdateTask: (taskId: string, input: UpdateTaskRequest) => Promise<void> | void
+  onDeleteTask: (taskId: string) => Promise<void> | void
+  onScheduleTask: (taskId: string) => Promise<void> | void
 }
 
-export function TaskSidebar({ stats }: TaskSidebarProps) {
-  const { calendars, activeCalendarId, tasks, addTask, toggleTaskCompletion, deleteTask, getTasksByCalendar } =
-    useCalendarStore()
+type CreateDraft = {
+  title: string
+  deadline: string
+}
 
-  const [newTaskTitle, setNewTaskTitle] = useState("")
-  const [showCompleted, setShowCompleted] = useState(true)
+type EditDraft = {
+  priority: Task["priority"]
+  isImmutable: boolean
+}
 
-  // Get active calendar
-  const activeCalendar = activeCalendarId
-    ? calendars.find((c) => c.id === activeCalendarId)
-    : null
+const EMPTY_CREATE_DRAFT: CreateDraft = {
+  title: "",
+  deadline: "",
+}
 
-  // Get tasks for the active calendar
-  const calendarTasks = activeCalendarId
-    ? getTasksByCalendar(activeCalendarId)
-    : { active: [], completed: [] }
+function toDateTimeInputValue(value: string | null) {
+  if (!value) {
+    return ""
+  }
 
-  const handleAddTask = () => {
-    if (newTaskTitle.trim() && activeCalendarId) {
-      addTask(activeCalendarId, newTaskTitle.trim())
-      setNewTaskTitle("")
+  const date = new Date(value)
+
+  if (Number.isNaN(date.getTime())) {
+    return ""
+  }
+
+  const offsetMilliseconds = date.getTimezoneOffset() * 60_000
+  return new Date(date.getTime() - offsetMilliseconds).toISOString().slice(0, 16)
+}
+
+function toIsoDateTime(value: string) {
+  return value ? new Date(value).toISOString() : null
+}
+
+function formatDeadline(value: string | null) {
+  if (!value) {
+    return "No deadline"
+  }
+
+  return new Date(value).toLocaleString([], {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  })
+}
+
+function formatStatus(task: Task) {
+  if (task.status === "completed") {
+    return "Completed"
+  }
+
+  if (task.status === "scheduled" && task.scheduledFor) {
+    return `Scheduled ${new Date(task.scheduledFor).toLocaleString([], {
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    })}`
+  }
+
+  if (task.status === "missed") {
+    return "Missed"
+  }
+
+  return "Unscheduled"
+}
+
+function getStatusBadgeVariant(task: Task) {
+  if (task.status === "completed") {
+    return "secondary" as const
+  }
+
+  if (task.status === "missed") {
+    return "destructive" as const
+  }
+
+  if (task.status === "scheduled") {
+    return "default" as const
+  }
+
+  return "outline" as const
+}
+
+export function TaskSidebar({
+  tasks,
+  scheduleEvents,
+  errorMessage,
+  onClearError,
+  onCreateTask,
+  onUpdateTask,
+  onDeleteTask,
+  onScheduleTask,
+}: TaskSidebarProps) {
+  const [isCreateOpen, setIsCreateOpen] = useState(false)
+  const [createDraft, setCreateDraft] = useState<CreateDraft>(EMPTY_CREATE_DRAFT)
+  const [editingTaskId, setEditingTaskId] = useState<string | null>(null)
+  const [editDraft, setEditDraft] = useState<EditDraft | null>(null)
+  const [mutatingTaskId, setMutatingTaskId] = useState<string | null>(null)
+
+  const tcTasks = useMemo(() => {
+    return [...tasks]
+      .filter((task) => task.calendarId === TASKS_CALENDAR_ID)
+      .sort((left, right) => {
+        const leftDeadline = left.deadline ? new Date(left.deadline).getTime() : Number.POSITIVE_INFINITY
+        const rightDeadline = right.deadline ? new Date(right.deadline).getTime() : Number.POSITIVE_INFINITY
+        return leftDeadline - rightDeadline
+      })
+  }, [tasks])
+
+  const handleCreateTask = async () => {
+    if (!createDraft.title.trim()) {
+      return
+    }
+
+    onClearError?.()
+    setMutatingTaskId("create")
+
+    try {
+      await onCreateTask({
+        title: createDraft.title.trim(),
+        deadline: toIsoDateTime(createDraft.deadline),
+        calendarId: TASKS_CALENDAR_ID,
+      })
+      setCreateDraft(EMPTY_CREATE_DRAFT)
+      setIsCreateOpen(false)
+    } finally {
+      setMutatingTaskId(null)
     }
   }
 
-  // Status calculation for right sidebar
-  const status = stats
-    ? {
-        checkIns: formatCheckIns(stats.checkInMode),
-        overdue: stats.overdue,
-        unscheduled: stats.unscheduled,
-        checkInsMessage: "Backend check-in state is connected to the dashboard mock endpoint.",
-        overdueMessage:
-          stats.overdue === 0 ? "No overdue tasks." : `${stats.overdue} tasks need attention.`,
-        estimatesMessage:
-          stats.unscheduled === 0
-            ? "All tasks are currently scheduled."
-            : `${stats.unscheduled} tasks are still waiting for a slot.`,
-      }
-    : mockStatusData
-
-  // If no calendar is selected, show the default status panel
-  if (!activeCalendar) {
-    return (
-      <div className="space-y-4">
-        {/* Status Grid */}
-        <Card className="bg-card dark:bg-[#141414] border-border dark:border-[#2a2a2a]">
-          <CardHeader className="p-4 pb-2">
-            <CardTitle className="text-base font-bold text-foreground">Status</CardTitle>
-          </CardHeader>
-          <CardContent className="p-4 pt-2">
-            <div className="grid grid-cols-2 gap-4">
-              <StatusItem label="Check-ins" value={status.checkIns} />
-              <StatusItem label="Overdue" value={status.overdue} />
-              <StatusItem label="Unscheduled" value={status.unscheduled} />
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Check-ins */}
-        <Card className="bg-card dark:bg-[#141414] border-border dark:border-[#2a2a2a]">
-          <CardHeader className="p-4 pb-2">
-            <CardTitle className="text-sm font-bold text-foreground">Check-ins</CardTitle>
-          </CardHeader>
-          <CardContent className="p-4 pt-2">
-            <p className="text-sm text-muted-foreground">{status.checkInsMessage}</p>
-          </CardContent>
-        </Card>
-
-        {/* Overdue */}
-        <Card className="bg-card dark:bg-[#141414] border-border dark:border-[#2a2a2a]">
-          <CardHeader className="p-4 pb-2">
-            <CardTitle className="text-sm font-bold text-foreground">Overdue</CardTitle>
-          </CardHeader>
-          <CardContent className="p-4 pt-2">
-            <p className="text-sm text-muted-foreground">{status.overdueMessage}</p>
-          </CardContent>
-        </Card>
-
-        {/* Missing explicit estimates */}
-        <Card className="bg-card dark:bg-[#141414] border-border dark:border-[#2a2a2a]">
-          <CardHeader className="p-4 pb-2">
-            <CardTitle className="text-sm font-bold text-foreground">Missing explicit estimates</CardTitle>
-          </CardHeader>
-          <CardContent className="p-4 pt-2">
-            <p className="text-sm text-muted-foreground">{status.estimatesMessage}</p>
-          </CardContent>
-        </Card>
-
-        {/* Hint to select a calendar */}
-        <Card className="bg-card/50 dark:bg-[#141414]/50 border-border dark:border-[#2a2a2a] border-dashed">
-          <CardContent className="p-5">
-            <div className="flex flex-col items-center justify-center text-center gap-3">
-              <Calendar className="w-10 h-10 text-muted-foreground/50" />
-              <p className="text-sm text-muted-foreground">
-                Select a calendar from the sidebar to manage its tasks
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    )
+  const handleStartEdit = (task: Task) => {
+    setEditingTaskId(task.id)
+    setEditDraft({
+      priority: task.priority,
+      isImmutable: task.isImmutable,
+    })
   }
 
-  // Show task manager for selected calendar
+  const handleSaveTask = async (taskId: string) => {
+    if (!editDraft) {
+      return
+    }
+
+    onClearError?.()
+    setMutatingTaskId(taskId)
+
+    try {
+      await onUpdateTask(taskId, {
+        priority: editDraft.priority,
+        isImmutable: editDraft.isImmutable,
+      })
+      setEditingTaskId(null)
+      setEditDraft(null)
+    } finally {
+      setMutatingTaskId(null)
+    }
+  }
+
+  const handleSchedule = async (taskId: string) => {
+    onClearError?.()
+    setMutatingTaskId(taskId)
+
+    try {
+      await onScheduleTask(taskId)
+    } finally {
+      setMutatingTaskId(null)
+    }
+  }
+
   return (
-    <div className="space-y-4 h-full flex flex-col">
-      {/* Calendar Header */}
-      <Card className="bg-card dark:bg-[#141414] border-border dark:border-[#2a2a2a]">
-        <CardHeader className="p-4 pb-3">
-          <div className="flex items-center gap-3">
-            <div
-              className="w-4 h-4 rounded-full shrink-0"
-              style={{ backgroundColor: activeCalendar.color }}
-            />
-            <CardTitle className="text-base font-bold text-foreground">
-              {activeCalendar.name}
-            </CardTitle>
-          </div>
-          <p className="text-sm font-semibold text-muted-foreground mt-1">
-            {calendarTasks.active.length} active tasks
-          </p>
-        </CardHeader>
-      </Card>
+    <div className="space-y-3">
+      {errorMessage ? (
+        <Card className="border-red-500/40 bg-red-500/10">
+          <CardContent className="p-3">
+            <p className="text-xs font-medium text-red-300">{errorMessage}</p>
+          </CardContent>
+        </Card>
+      ) : null}
 
-      {/* Task List */}
-      <Card className="bg-card dark:bg-[#141414] border-border dark:border-[#2a2a2a] flex-1 flex flex-col min-h-0">
-        <CardHeader className="p-4 pb-2 flex-shrink-0">
-          <CardTitle className="text-sm font-bold text-foreground flex items-center gap-2">
-            <Check className="w-4 h-4" />
-            Tasks
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="p-4 pt-0 flex-1 flex flex-col min-h-0">
-          <ScrollArea className="flex-1 -mx-4">
-            <div className="px-1 space-y-1">
-              {/* Active Tasks */}
-              {calendarTasks.active.length === 0 ? (
-                <div className="px-3 py-5 text-center">
-                  <p className="text-sm text-muted-foreground">
-                    No active tasks. Add one below!
-                  </p>
-                </div>
-              ) : (
-                calendarTasks.active.map((task) => (
-                  <TaskItem
-                    key={task.id}
-                    task={task}
-                    calendarColor={activeCalendar.color}
-                    onToggle={() => toggleTaskCompletion(task.id)}
-                    onDelete={() => deleteTask(task.id)}
-                  />
-                ))
-              )}
-
-              {/* Completed Section */}
-              {calendarTasks.completed.length > 0 && (
-                <div className="pt-3">
-                  <button
-                    onClick={() => setShowCompleted(!showCompleted)}
-                    className="flex items-center gap-2 px-3 py-2 text-sm font-semibold text-muted-foreground hover:text-foreground transition-colors w-full"
-                  >
-                    {showCompleted ? (
-                      <ChevronDown className="w-4 h-4" />
-                    ) : (
-                      <ChevronRight className="w-4 h-4" />
-                    )}
-                    Completed ({calendarTasks.completed.length})
-                  </button>
-                  {showCompleted && (
-                    <div className="space-y-1 mt-1">
-                      {calendarTasks.completed.map((task) => (
-                        <TaskItem
-                          key={task.id}
-                          task={task}
-                          calendarColor={activeCalendar.color}
-                          onToggle={() => toggleTaskCompletion(task.id)}
-                          onDelete={() => deleteTask(task.id)}
-                        />
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
+      <Card className="border-border bg-card">
+        <CardHeader className="p-3 pb-2">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <CardTitle className="text-sm font-bold text-foreground">Calendar Tasks</CardTitle>
+              <p className="mt-1 text-[11px] font-medium text-muted-foreground">
+                {TASKS_CALENDAR_NAME} keeps a narrow due-date strip until Claude places a work block.
+              </p>
             </div>
-          </ScrollArea>
-
-          {/* Add Task Input */}
-          <div className="pt-4 mt-auto border-t border-border dark:border-[#2a2a2a] flex-shrink-0">
-            <div className="flex gap-2">
-              <Input
-                value={newTaskTitle}
-                onChange={(e) => setNewTaskTitle(e.target.value)}
-                placeholder="Add a new task..."
-                className="flex-1 bg-background dark:bg-[#0a0a0a] border-border dark:border-[#2a2a2a] text-foreground placeholder:text-muted-foreground text-sm h-9"
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") handleAddTask()
-                }}
-              />
+            <Button
+              size="sm"
+              onClick={() => setIsCreateOpen((current) => !current)}
+              className="h-8 bg-[#f9a8d4] px-3 text-xs font-semibold text-slate-900 hover:bg-[#f472b6]"
+            >
+              <Plus className="mr-1 h-3.5 w-3.5" />
+              Add
+            </Button>
+          </div>
+        </CardHeader>
+        {isCreateOpen ? (
+          <CardContent className="space-y-2 p-3 pt-0">
+            <Input
+              placeholder="Task title"
+              value={createDraft.title}
+              onChange={(event) => setCreateDraft((current) => ({ ...current, title: event.target.value }))}
+              className="h-8 text-sm"
+            />
+            <Input
+              type="datetime-local"
+              value={createDraft.deadline}
+              onChange={(event) => setCreateDraft((current) => ({ ...current, deadline: event.target.value }))}
+              className="h-8 text-xs"
+            />
+            <div className="flex items-center justify-end gap-2">
               <Button
-                onClick={handleAddTask}
-                disabled={!newTaskTitle.trim()}
+                variant="ghost"
                 size="sm"
-                className="h-9 px-3 bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 font-semibold"
+                onClick={() => {
+                  setIsCreateOpen(false)
+                  setCreateDraft(EMPTY_CREATE_DRAFT)
+                }}
+                className="h-8 text-xs font-semibold"
               >
-                <Plus className="w-4 h-4" />
+                Cancel
+              </Button>
+              <Button
+                size="sm"
+                onClick={() => void handleCreateTask()}
+                disabled={!createDraft.title.trim() || mutatingTaskId === "create"}
+                className="h-8 bg-[#93c5fd] px-3 text-xs font-semibold text-slate-900 hover:bg-[#60a5fa]"
+              >
+                {mutatingTaskId === "create" ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : null}
+                Save Task
               </Button>
             </div>
-          </div>
+          </CardContent>
+        ) : null}
+      </Card>
+
+      <Card className="border-border bg-card">
+        <CardHeader className="p-3 pb-1">
+          <CardTitle className="text-sm font-bold text-foreground">Task Calendar Queue ({tcTasks.length})</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2 p-3 pt-2">
+          {tcTasks.length === 0 ? (
+            <p className="py-6 text-center text-xs font-medium text-muted-foreground">
+              No Task Calendar items yet.
+            </p>
+          ) : (
+            tcTasks.map((task) => {
+              const isEditing = editingTaskId === task.id
+              const scheduleLabel = getTaskScheduleActionLabel(task, scheduleEvents)
+              const isBusy = mutatingTaskId === task.id
+
+              return (
+                <div
+                  key={task.id}
+                  onClick={() => {
+                    if (!isEditing) {
+                      handleStartEdit(task)
+                    }
+                  }}
+                  className="w-full rounded-2xl border border-[#fbcfe8]/60 bg-gradient-to-r from-[#fdf2f8] to-[#eff6ff] p-3 text-left shadow-sm transition-transform hover:-translate-y-0.5 dark:border-[#3f3141] dark:from-[#2c1626] dark:to-[#1d2436]"
+                >
+                  <div className="grid gap-3 md:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)_auto]">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-foreground">{task.title}</p>
+                      <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                        <Badge variant={getStatusBadgeVariant(task)}>{task.status}</Badge>
+                        <Badge variant="outline">{task.priority}</Badge>
+                        {task.isImmutable ? <Badge variant="outline">Immutable</Badge> : null}
+                      </div>
+                    </div>
+
+                    <div className="space-y-1 text-xs font-medium text-muted-foreground">
+                      <p>Deadline</p>
+                      <p className="text-foreground">{formatDeadline(task.deadline)}</p>
+                      <p>Status</p>
+                      <p className="text-foreground">{formatStatus(task)}</p>
+                    </div>
+
+                    <div className="flex items-start justify-end gap-2">
+                      <Button
+                        size="sm"
+                        onClick={(event) => {
+                          event.stopPropagation()
+                          void handleSchedule(task.id)
+                        }}
+                        disabled={isBusy}
+                        className="h-8 bg-[#a7f3d0] px-3 text-xs font-semibold text-slate-900 hover:bg-[#6ee7b7]"
+                      >
+                        {isBusy ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : null}
+                        {scheduleLabel}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={(event) => {
+                          event.stopPropagation()
+                          handleStartEdit(task)
+                        }}
+                        className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={(event) => {
+                          event.stopPropagation()
+                          void onDeleteTask(task.id)
+                        }}
+                        className="h-8 w-8 p-0 text-muted-foreground hover:text-red-500"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  </div>
+
+                  {isEditing && editDraft ? (
+                    <div
+                      className="mt-3 rounded-xl border border-border/60 bg-background/80 p-3"
+                      onClick={(event) => event.stopPropagation()}
+                    >
+                      <div className="grid gap-3 md:grid-cols-2">
+                        <label className="space-y-1 text-xs font-semibold text-muted-foreground">
+                          <span>Priority</span>
+                          <select
+                            value={editDraft.priority}
+                            onChange={(event) =>
+                              setEditDraft((current) =>
+                                current
+                                  ? {
+                                      ...current,
+                                      priority: event.target.value as Task["priority"],
+                                    }
+                                  : current,
+                              )
+                            }
+                            className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm text-foreground"
+                          >
+                            <option value="low">Low</option>
+                            <option value="medium">Medium</option>
+                            <option value="high">High</option>
+                          </select>
+                        </label>
+
+                        <label className="flex items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-xs font-semibold text-foreground">
+                          <span>Immutable</span>
+                          <Checkbox
+                            checked={editDraft.isImmutable}
+                            onCheckedChange={(checked) =>
+                              setEditDraft((current) =>
+                                current
+                                  ? {
+                                      ...current,
+                                      isImmutable: checked === true,
+                                    }
+                                  : current,
+                              )
+                            }
+                          />
+                        </label>
+                      </div>
+
+                      <div className="mt-3 flex items-center justify-end gap-2">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setEditingTaskId(null)
+                            setEditDraft(null)
+                          }}
+                          className="h-8 text-xs font-semibold"
+                        >
+                          <X className="mr-1 h-3.5 w-3.5" />
+                          Cancel
+                        </Button>
+                        <Button
+                          size="sm"
+                          onClick={() => void handleSaveTask(task.id)}
+                          disabled={isBusy}
+                          className="h-8 bg-[#93c5fd] px-3 text-xs font-semibold text-slate-900 hover:bg-[#60a5fa]"
+                        >
+                          {isBusy ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Save className="mr-1 h-3.5 w-3.5" />}
+                          Save
+                        </Button>
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+              )
+            })
+          )}
         </CardContent>
       </Card>
     </div>

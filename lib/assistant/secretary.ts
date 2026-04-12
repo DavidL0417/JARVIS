@@ -490,10 +490,14 @@ async function persistSchedulePlan(
         starts_at: event.start,
         ends_at: event.end,
         source: event.source,
+        priority: event.priority ?? "medium",
         status: event.status,
         location: event.location,
         external_event_id: event.externalEventId,
+        gcal_event_id: event.gcalEventId,
+        last_synced_from: event.lastSyncedFrom ?? "local",
         is_immutable: event.isImmutable,
+        is_checked_in: event.isCheckedIn ?? false,
         all_day: event.allDay,
         calendar_id: tasksCalendarId,
       })),
@@ -581,30 +585,63 @@ const toolDefinitions: ToolDefinition[] = [
         getEffectiveTimeZone(context),
         getReferenceNow(context),
       )
-      const insertResult = await context.supabase.from("tasks").insert({
+      const durationMinutes =
+        parsed.durationMinutes ?? context.runtime.preferences.defaultTaskDurationMinutes
+      const scheduledFor = dueAt ? addMinutes(dueAt, -durationMinutes) : null
+      const insertResult = await context.supabase
+        .from("tasks")
+        .insert({
         user_id: context.userId,
         title: parsed.title.trim(),
         description: normalizeNullableText(parsed.description),
         deadline: dueAt,
-        duration_minutes: parsed.durationMinutes ?? null,
+        duration_minutes: durationMinutes,
         priority: parsed.priority ?? "medium",
-        status: "todo",
-        scheduled_for: null,
+        status: scheduledFor ? "scheduled" : "todo",
+        scheduled_for: scheduledFor,
         is_immutable: parsed.isImmutable,
         all_day: parsed.allDay,
         calendar_id: tasksCalendarId,
         tags: normalizeTags(parsed.tags),
       })
+      .select("id")
+      .single<{ id: string }>()
 
-      if (insertResult.error) {
-        throw new Error(insertResult.error.message)
+      if (insertResult.error || !insertResult.data) {
+        throw new Error(insertResult.error?.message ?? "Failed to create task.")
+      }
+
+      if (scheduledFor) {
+        const end = addMinutes(scheduledFor, durationMinutes)
+        const eventInsertResult = await context.supabase.from("schedule_events").insert({
+          user_id: context.userId,
+          task_id: insertResult.data.id,
+          title: parsed.title.trim(),
+          starts_at: scheduledFor,
+          ends_at: end,
+          source: "task",
+          priority: parsed.priority ?? "medium",
+          status: "scheduled",
+          location: null,
+          external_event_id: null,
+          gcal_event_id: null,
+          last_synced_from: "local",
+          is_immutable: parsed.isImmutable,
+          is_checked_in: false,
+          all_day: false,
+          calendar_id: tasksCalendarId,
+        })
+
+        if (eventInsertResult.error) {
+          throw new Error(eventInsertResult.error.message)
+        }
       }
 
       return {
         receipt: makeReceipt("create_task", "completed", `Created task "${parsed.title.trim()}".`),
         mutated: true,
         clarification: null,
-        payload: { title: parsed.title.trim(), dueAt },
+        payload: { title: parsed.title.trim(), dueAt, scheduledFor },
       }
     },
   },
@@ -700,10 +737,14 @@ const toolDefinitions: ToolDefinition[] = [
             starts_at: scheduledFor,
             ends_at: end,
             source: "task",
+            priority: task.priority,
             status: "scheduled",
             location: null,
             external_event_id: null,
+            gcal_event_id: null,
+            last_synced_from: "local",
             is_immutable: parsed.isImmutable ?? task.isImmutable,
+            is_checked_in: false,
             all_day: allDay,
             calendar_id: tasksCalendarId,
           })
@@ -851,10 +892,14 @@ const toolDefinitions: ToolDefinition[] = [
         starts_at: range.start,
         ends_at: range.end,
         source: parsed.isImmutable ? "calendar" : "focus",
+        priority: "medium",
         status: null,
         location: normalizeNullableText(parsed.location),
         external_event_id: null,
+        gcal_event_id: null,
+        last_synced_from: "local",
         is_immutable: parsed.isImmutable,
+        is_checked_in: false,
         all_day: parsed.allDay,
         calendar_id: tasksCalendarId,
       })
@@ -957,13 +1002,17 @@ const toolDefinitions: ToolDefinition[] = [
           title: parsed.title ?? event.title,
           starts_at: range.start,
           ends_at: range.end,
+          priority: event.priority,
           is_immutable: parsed.isImmutable ?? event.isImmutable,
+          is_checked_in: event.isCheckedIn,
           all_day: nextAllDay,
           calendar_id:
             parsed.calendarId !== undefined
               ? tasksCalendarId
               : getAssistantManagedCalendarId(event.calendarId),
           location: parsed.location !== undefined ? normalizeNullableText(parsed.location) : event.location,
+          gcal_event_id: event.gcalEventId,
+          last_synced_from: "local",
           source: parsed.isImmutable === false ? "focus" : parsed.isImmutable === true ? "calendar" : event.source,
         })
         .eq("id", event.id)

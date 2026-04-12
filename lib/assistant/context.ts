@@ -152,7 +152,7 @@ export async function loadAssistantRuntimeContext(
     supabase
       .from("schedule_events")
       .select(
-        "id, user_id, task_id, title, starts_at, ends_at, source, status, location, external_event_id, created_at, updated_at, is_immutable, all_day, calendar_id",
+        "id, user_id, task_id, title, starts_at, ends_at, source, priority, status, location, external_event_id, gcal_event_id, last_synced_from, created_at, updated_at, is_immutable, is_checked_in, all_day, calendar_id",
       )
       .eq("user_id", userId)
       .order("starts_at", { ascending: true }),

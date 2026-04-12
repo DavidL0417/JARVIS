@@ -3,7 +3,12 @@
 
 import { z } from "zod"
 
-import { checkInEnergySchema, checkInMoodSchema } from "@/schemas/common"
+import {
+  checkInEnergySchema,
+  checkInMoodSchema,
+  prioritySchema,
+  scheduleEventSchema,
+} from "@/schemas/common"
 
 export const checkInRequestSchema = z.object({
   mood: checkInMoodSchema.optional(),
@@ -15,5 +20,25 @@ export const checkInRequestSchema = z.object({
 })
 
 export type CheckInRequest = z.infer<typeof checkInRequestSchema>
+
+export const saveCheckInApprovalRequestSchema = z.object({
+  eventId: z.string().uuid(),
+  priority: prioritySchema,
+  isImmutable: z.boolean(),
+})
+
+export const checkInApprovalItemSchema = z.object({
+  event: scheduleEventSchema,
+})
+
+export const checkInApprovalListResponseSchema = z.object({
+  success: z.literal(true),
+  items: z.array(checkInApprovalItemSchema),
+})
+
+export const saveCheckInApprovalResponseSchema = z.object({
+  success: z.literal(true),
+  event: scheduleEventSchema,
+})
 
 // ##### END BACKEND #####

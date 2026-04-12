@@ -3,7 +3,10 @@
 
 import { NextResponse } from "next/server"
 
+import { getGoogleTokensFromSession, upsertGoogleCalendarIntegration } from "@/lib/supabase/google-calendar-integration"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
+import { getOrCreateUserProfile } from "@/lib/supabase/auth"
+import { ensureTaskCalendarForUser } from "@/lib/tasks-calendar"
 
 function getSafeRedirectPath(candidate: string | null) {
   if (!candidate || !candidate.startsWith("/")) {
@@ -23,6 +26,21 @@ export async function GET(request: Request) {
     const { error } = await supabase.auth.exchangeCodeForSession(code)
 
     if (!error) {
+      const [{ data: userData }, { data: sessionData }] = await Promise.all([
+        supabase.auth.getUser(),
+        supabase.auth.getSession(),
+      ])
+
+      if (userData.user) {
+        const profile = await getOrCreateUserProfile(userData.user)
+        await upsertGoogleCalendarIntegration({
+          userId: profile.id,
+          authUser: userData.user,
+          ...getGoogleTokensFromSession(sessionData.session),
+        })
+        await ensureTaskCalendarForUser(profile.id)
+      }
+
       return NextResponse.redirect(new URL(next, requestUrl.origin))
     }
   }

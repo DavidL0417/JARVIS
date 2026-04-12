@@ -5,6 +5,7 @@ import type { User as SupabaseAuthUser } from "@supabase/supabase-js"
 
 import { mapUserRowToUserProfile } from "@/lib/data/mappers"
 import { createSupabaseAdminClient, createSupabaseServerClient } from "@/lib/supabase/server"
+import { ensureTaskCalendarForUser } from "@/lib/tasks-calendar"
 import type { UserProfile, UserRow } from "@/types"
 
 const FALLBACK_PROFILE_NAME = "JARVIS User"
@@ -89,7 +90,10 @@ export async function getOrCreateUserProfile(
     throw new Error(error?.message ?? "Failed to create or fetch the authenticated user profile.")
   }
 
-  return mapUserRowToUserProfile(data)
+  const profile = mapUserRowToUserProfile(data)
+  await ensureTaskCalendarForUser(profile.id)
+
+  return profile
 }
 
 export async function requireAuthenticatedUser(options: {

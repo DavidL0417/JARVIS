@@ -3,17 +3,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import type { DashboardStats } from "@/types"
 
-// API Hook: Replace mockStatusData with fetch call here
-// Example: const { data: status } = useSWR('/api/status', fetcher)
-const mockStatusData = {
-  checkIns: "Quiet",
-  overdue: 0,
-  unscheduled: 0,
-  checkInsMessage: "No check-ins needed yet.",
-  overdueMessage: "No overdue tasks.",
-  estimatesMessage: "All tasks have an estimate or title duration hint.",
-}
-
 interface StatusItemProps {
   label: string
   value: string | number
@@ -26,7 +15,9 @@ interface StatusPanelProps {
 function StatusItem({ label, value }: StatusItemProps) {
   return (
     <div className="space-y-0.5">
-      <p className="text-[11px] text-muted-foreground uppercase tracking-wide font-semibold">{label}</p>
+      <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+        {label}
+      </p>
       <p className="text-sm font-bold text-foreground">{value}</p>
     </div>
   )
@@ -42,59 +33,62 @@ export function StatusPanel({ stats }: StatusPanelProps) {
         checkIns: formatCheckIns(stats.checkInMode),
         overdue: stats.overdue,
         unscheduled: stats.unscheduled,
-        checkInsMessage: "Backend check-in state is connected to the dashboard mock endpoint.",
+        checkInsMessage:
+          stats.checkInMode === "quiet"
+            ? "Fresh imports now surface in the Check-ins column when review is needed."
+            : "Newly synced items are waiting for approval in the Check-ins queue.",
         overdueMessage:
           stats.overdue === 0 ? "No overdue tasks." : `${stats.overdue} tasks need attention.`,
-        estimatesMessage:
+        unscheduledMessage:
           stats.unscheduled === 0
-            ? "All tasks are currently scheduled."
-            : `${stats.unscheduled} tasks are still waiting for a slot.`,
+            ? "All tasks are holding a place on the calendar."
+            : `${stats.unscheduled} tasks still need time carved out.`,
       }
-    : mockStatusData
+    : null
 
   return (
     <div className="space-y-3">
-      {/* Status Grid */}
-      <Card className="bg-card border-border">
+      <Card className="border-rose-200/70 bg-rose-100/40 shadow-sm dark:border-rose-900/60 dark:bg-rose-950/30">
         <CardHeader className="p-3 pb-1">
           <CardTitle className="text-sm font-bold text-foreground">Status</CardTitle>
         </CardHeader>
-        <CardContent className="p-3 pt-2">
-          <div className="grid grid-cols-2 gap-3">
-            <StatusItem label="Check-ins" value={status.checkIns} />
-            <StatusItem label="Overdue" value={status.overdue} />
-            <StatusItem label="Unscheduled" value={status.unscheduled} />
-          </div>
+        <CardContent className="space-y-3 p-3 pt-2">
+          {status ? (
+            <>
+              <div className="grid grid-cols-2 gap-3">
+                <StatusItem label="Check-ins" value={status.checkIns} />
+                <StatusItem label="Overdue" value={status.overdue} />
+                <StatusItem label="Unscheduled" value={status.unscheduled} />
+              </div>
+              <p className="text-xs font-medium text-muted-foreground">{status.checkInsMessage}</p>
+            </>
+          ) : (
+            <p className="text-xs font-medium text-muted-foreground">
+              Live dashboard status will appear here once your workspace data finishes loading.
+            </p>
+          )}
         </CardContent>
       </Card>
 
-      {/* Check-ins */}
-      <Card className="bg-card border-border">
-        <CardHeader className="p-3 pb-1">
-          <CardTitle className="text-sm font-bold text-foreground">Check-ins</CardTitle>
-        </CardHeader>
-        <CardContent className="p-3 pt-2">
-          <p className="text-xs text-muted-foreground font-medium">{status.checkInsMessage}</p>
-        </CardContent>
-      </Card>
-
-      {/* Overdue */}
-      <Card className="bg-card border-border">
+      <Card className="border-amber-200/70 bg-amber-100/40 shadow-sm dark:border-amber-900/60 dark:bg-amber-950/30">
         <CardHeader className="p-3 pb-1">
           <CardTitle className="text-sm font-bold text-foreground">Overdue</CardTitle>
         </CardHeader>
         <CardContent className="p-3 pt-2">
-          <p className="text-xs text-muted-foreground font-medium">{status.overdueMessage}</p>
+          <p className="text-xs font-medium text-muted-foreground">
+            {status?.overdueMessage ?? "No overdue tasks."}
+          </p>
         </CardContent>
       </Card>
 
-      {/* Missing explicit estimates */}
-      <Card className="bg-card border-border">
+      <Card className="border-sky-200/70 bg-sky-100/40 shadow-sm dark:border-sky-900/60 dark:bg-sky-950/30">
         <CardHeader className="p-3 pb-1">
-          <CardTitle className="text-sm font-bold text-foreground">Missing explicit estimates</CardTitle>
+          <CardTitle className="text-sm font-bold text-foreground">Scheduling</CardTitle>
         </CardHeader>
         <CardContent className="p-3 pt-2">
-          <p className="text-xs text-muted-foreground font-medium">{status.estimatesMessage}</p>
+          <p className="text-xs font-medium text-muted-foreground">
+            {status?.unscheduledMessage ?? "Scheduling insights will appear here once tasks load."}
+          </p>
         </CardContent>
       </Card>
     </div>

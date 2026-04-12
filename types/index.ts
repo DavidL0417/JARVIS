@@ -11,6 +11,9 @@ export type CheckInOutcome = "completed" | "missed" | "partial"
 export type CheckInEnergy = "low" | "medium" | "high"
 export type IntegrationProvider = "google"
 export type UserIntegrationStatus = "connected" | "needs_reauth" | "disconnected" | "error"
+export type SyncOrigin = "local" | "gcal"
+export type CalendarSource = "local" | "google" | "imported" | "task"
+export type CalendarSyncPreference = "active" | "pending" | "ignored"
 
 // Raw database row shapes. These match Supabase column names and nullability exactly.
 export interface UserRow {
@@ -35,6 +38,23 @@ export interface UserIntegrationRow {
   status: UserIntegrationStatus
   selected_calendar_id: string | null
   last_synced_at: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface UserCalendarRow {
+  id: string
+  user_id: string
+  calendar_key: string
+  name: string
+  color: string
+  source: CalendarSource
+  google_calendar_id: string | null
+  remote_name: string | null
+  is_visible: boolean
+  is_immutable: boolean
+  sync_preference: CalendarSyncPreference
+  is_task_calendar: boolean
   created_at: string
   updated_at: string
 }
@@ -83,12 +103,16 @@ export interface ScheduleEventRow {
   starts_at: string
   ends_at: string
   source: ScheduleEventSource
+  priority: Priority
   status: TaskStatus | null
   location: string | null
   external_event_id: string | null
+  gcal_event_id: string | null
+  last_synced_from: SyncOrigin
   created_at: string
   updated_at: string
   is_immutable: boolean
+  is_checked_in: boolean
   all_day: boolean
   calendar_id: string | null
 }
@@ -122,6 +146,7 @@ export type TaskUpdateRow = Partial<Omit<TaskInsertRow, "user_id">>
 export type ScheduleEventInsertRow = Omit<ScheduleEventRow, "id" | "created_at" | "updated_at">
 export type CheckInInsertRow = Omit<CheckInRow, "id" | "created_at">
 export type UserIntegrationUpsertRow = Omit<UserIntegrationRow, "id" | "created_at" | "updated_at">
+export type UserCalendarUpsertRow = Omit<UserCalendarRow, "id" | "created_at" | "updated_at">
 
 export interface UserProfile {
   id: string
@@ -145,6 +170,23 @@ export interface UserIntegration {
   status: UserIntegrationStatus
   selectedCalendarId: string | null
   lastSyncedAt: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface UserCalendar {
+  id: string
+  userId: string
+  calendarKey: string
+  name: string
+  color: string
+  source: CalendarSource
+  googleCalendarId: string | null
+  remoteName: string | null
+  isVisible: boolean
+  isImmutable: boolean
+  syncPreference: CalendarSyncPreference
+  isTaskCalendar: boolean
   createdAt: string
   updatedAt: string
 }
@@ -191,12 +233,25 @@ export interface ScheduleEvent {
   start: string
   end: string
   source: ScheduleEventSource
+  priority: Priority
   status: TaskStatus | null
   location: string | null
   externalEventId: string | null
+  gcalEventId: string | null
+  lastSyncedFrom: SyncOrigin
   isImmutable: boolean
+  isCheckedIn: boolean
   allDay: boolean
   calendarId: string | null
+}
+
+export interface GoogleCalendarExtendedProperties {
+  priority: Priority
+  isImmutable: boolean
+  isCheckedIn: boolean
+  lastSyncedFrom: SyncOrigin
+  taskId: string | null
+  localEventId: string | null
 }
 
 export interface CheckIn {
@@ -299,6 +354,26 @@ export interface CheckInRequest {
   // App-level convenience fields. These are not direct columns on `public.checkins`.
   completedTaskIds?: string[]
   activeTaskId?: string
+}
+
+export interface CheckInApprovalItem {
+  event: ScheduleEvent
+}
+
+export interface CheckInApprovalListResponse {
+  success: true
+  items: CheckInApprovalItem[]
+}
+
+export interface SaveCheckInApprovalRequest {
+  eventId: string
+  priority: Priority
+  isImmutable: boolean
+}
+
+export interface SaveCheckInApprovalResponse {
+  success: true
+  event: ScheduleEvent
 }
 
 export interface DashboardStats {
@@ -421,17 +496,46 @@ export interface PreferencesResponse {
   preferences: UserPreferences
 }
 
+export interface CreateCalendarRequest {
+  name: string
+  color?: string | null
+  source?: CalendarSource
+  isImmutable: boolean
+}
+
+export interface UpdateCalendarRequest {
+  name?: string
+  color?: string
+  isVisible?: boolean
+  isImmutable?: boolean
+  syncPreference?: CalendarSyncPreference
+}
+
+export interface CalendarMutationResponse {
+  success: true
+  calendar: UserCalendar
+}
+
+export interface CalendarListResponse {
+  success: true
+  calendars: UserCalendar[]
+}
+
 export interface ScheduleEventInput {
   id: string
   title: string
   start: string
   end: string
   source: ScheduleEventSource
+  priority?: Priority
   taskId?: string | null
   status?: TaskStatus | null
   location?: string | null
   externalEventId?: string | null
+  gcalEventId?: string | null
+  lastSyncedFrom?: SyncOrigin
   isImmutable?: boolean
+  isCheckedIn?: boolean
   allDay?: boolean
   calendarId?: string | null
 }

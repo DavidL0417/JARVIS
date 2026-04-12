@@ -1,4 +1,10 @@
-export type AppCalendarSource = "local" | "google" | "imported"
+import {
+  TASKS_CALENDAR_COLOR,
+  TASKS_CALENDAR_ID,
+  TASKS_CALENDAR_NAME,
+} from "@/lib/tasks-calendar"
+
+export type AppCalendarSource = "local" | "google" | "imported" | "task"
 
 export type AppCalendarPreset = {
   id: string
@@ -8,10 +14,16 @@ export type AppCalendarPreset = {
   isVisibleByDefault: boolean
 }
 
-export const DEFAULT_TASKS_CALENDAR_ID = "cal-tasks"
+export const DEFAULT_TASKS_CALENDAR_ID = TASKS_CALENDAR_ID
 
 export const APP_CALENDAR_PRESETS: AppCalendarPreset[] = [
-  { id: DEFAULT_TASKS_CALENDAR_ID, name: "Tasks", color: "#ef4444", source: "local", isVisibleByDefault: true },
+  {
+    id: DEFAULT_TASKS_CALENDAR_ID,
+    name: TASKS_CALENDAR_NAME,
+    color: TASKS_CALENDAR_COLOR,
+    source: "task",
+    isVisibleByDefault: true,
+  },
   { id: "cal-1", name: "Personal", color: "#3b82f6", source: "local", isVisibleByDefault: true },
   { id: "cal-2", name: "Work", color: "#4ade80", source: "google", isVisibleByDefault: true },
   { id: "cal-3", name: "Northwestern Classes", color: "#fde047", source: "google", isVisibleByDefault: true },
@@ -43,7 +55,7 @@ function normalizeCalendarName(name: string) {
 export function findTasksCalendarPreset(calendars: AppCalendarPreset[] = APP_CALENDAR_PRESETS) {
   return calendars.find((calendar) => {
     const normalized = normalizeCalendarName(calendar.name)
-    return normalized === "tasks" || normalized === "task"
+    return normalized === "tasks" || normalized === "task" || normalized === "task calendar"
   }) ?? null
 }
 

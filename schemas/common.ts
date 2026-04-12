@@ -10,6 +10,9 @@ export const scheduleEventSourceSchema = z.enum(["task", "calendar", "focus"])
 export const checkInMoodSchema = z.enum(["good", "okay", "stuck"])
 export const checkInOutcomeSchema = z.enum(["completed", "missed", "partial"])
 export const checkInEnergySchema = z.enum(["low", "medium", "high"])
+export const syncOriginSchema = z.enum(["local", "gcal"])
+export const calendarSourceSchema = z.enum(["local", "google", "imported", "task"])
+export const calendarSyncPreferenceSchema = z.enum(["active", "pending", "ignored"])
 
 const hhmmPattern = /^([01]\d|2[0-3]):([0-5]\d)$/
 const tagSchema = z.string().trim().min(1)
@@ -46,6 +49,23 @@ export const taskSchema = z.object({
   tags: z.array(tagSchema),
 })
 
+export const userCalendarSchema = z.object({
+  id: z.string().uuid(),
+  userId: z.string().uuid(),
+  calendarKey: z.string().min(1),
+  name: z.string().min(1),
+  color: z.string().min(4),
+  source: calendarSourceSchema,
+  googleCalendarId: z.string().min(1).nullable(),
+  remoteName: z.string().min(1).nullable(),
+  isVisible: z.boolean(),
+  isImmutable: z.boolean(),
+  syncPreference: calendarSyncPreferenceSchema,
+  isTaskCalendar: z.boolean(),
+  createdAt: z.string().datetime({ offset: true }),
+  updatedAt: z.string().datetime({ offset: true }),
+})
+
 export const scheduleEventSchema = z.object({
   id: z.string().uuid(),
   userId: z.string().uuid(),
@@ -54,17 +74,25 @@ export const scheduleEventSchema = z.object({
   start: z.string().datetime({ offset: true }),
   end: z.string().datetime({ offset: true }),
   source: scheduleEventSourceSchema,
+  priority: prioritySchema,
   status: taskStatusSchema.nullable(),
   location: z.string().min(1).nullable(),
   externalEventId: z.string().min(1).nullable(),
+  gcalEventId: z.string().min(1).nullable(),
+  lastSyncedFrom: syncOriginSchema,
   isImmutable: z.boolean(),
+  isCheckedIn: z.boolean(),
   allDay: z.boolean(),
   calendarId: z.string().min(1).nullable(),
 })
 
 export const scheduleEventInputSchema = scheduleEventSchema.omit({ userId: true }).extend({
   userId: z.string().uuid().optional(),
+  priority: prioritySchema.optional().default("medium"),
+  gcalEventId: z.string().min(1).nullable().optional().default(null),
+  lastSyncedFrom: syncOriginSchema.optional().default("local"),
   allDay: z.boolean().optional().default(false),
+  isCheckedIn: z.boolean().optional().default(false),
 })
 
 // ##### END BACKEND #####

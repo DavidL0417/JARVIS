@@ -2,6 +2,8 @@
 // DO NOT MODIFY UNLESS BACKEND OWNER
 
 import type {
+  CalendarSource,
+  CalendarSyncPreference,
   CheckInInsertRow,
   CheckInRequest,
   OnboardingTaskInput,
@@ -11,6 +13,7 @@ import type {
   ScheduleEventInput,
   ScheduleEventRow,
   ScheduleEventSource,
+  SyncOrigin,
   Task,
   TaskInsertRow,
   TaskRow,
@@ -18,6 +21,8 @@ import type {
   TaskUpdateRow,
   UserIntegration,
   UserIntegrationRow,
+  UserCalendar,
+  UserCalendarRow,
   UserProfile,
   UserPreferences,
   UserPreferencesRow,
@@ -83,6 +88,32 @@ function normalizeEventSource(value: ScheduleEventSource | string | null | undef
   return "task"
 }
 
+function normalizeSyncOrigin(value: SyncOrigin | string | null | undefined): SyncOrigin {
+  if (value === "gcal") {
+    return value
+  }
+
+  return "local"
+}
+
+function normalizeCalendarSource(value: CalendarSource | string | null | undefined): CalendarSource {
+  if (value === "google" || value === "imported" || value === "task") {
+    return value
+  }
+
+  return "local"
+}
+
+function normalizeCalendarSyncPreference(
+  value: CalendarSyncPreference | string | null | undefined,
+): CalendarSyncPreference {
+  if (value === "pending" || value === "ignored") {
+    return value
+  }
+
+  return "active"
+}
+
 function normalizeTimeValue(value: string | null | undefined, fallback: string) {
   return value?.slice(0, 5) || fallback
 }
@@ -131,6 +162,25 @@ export function mapUserIntegrationRowToUserIntegration(row: UserIntegrationRow):
     status: row.status,
     selectedCalendarId: normalizeNullableText(row.selected_calendar_id),
     lastSyncedAt: normalizeNullableText(row.last_synced_at),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  }
+}
+
+export function mapUserCalendarRowToUserCalendar(row: UserCalendarRow): UserCalendar {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    calendarKey: row.calendar_key,
+    name: row.name,
+    color: row.color,
+    source: normalizeCalendarSource(row.source),
+    googleCalendarId: normalizeNullableText(row.google_calendar_id),
+    remoteName: normalizeNullableText(row.remote_name),
+    isVisible: row.is_visible,
+    isImmutable: row.is_immutable,
+    syncPreference: normalizeCalendarSyncPreference(row.sync_preference),
+    isTaskCalendar: row.is_task_calendar,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }
@@ -271,10 +321,14 @@ export function mapScheduleEventRowToScheduleEvent(row: ScheduleEventRow): Sched
     start: normalizeDateTime(row.starts_at) ?? row.starts_at,
     end: normalizeDateTime(row.ends_at) ?? row.ends_at,
     source: normalizeEventSource(row.source),
+    priority: normalizePriority(row.priority),
     status: row.status ? normalizeTaskStatus(row.status) : null,
     location: normalizeNullableText(row.location),
     externalEventId: normalizeNullableText(row.external_event_id),
+    gcalEventId: normalizeNullableText(row.gcal_event_id),
+    lastSyncedFrom: normalizeSyncOrigin(row.last_synced_from),
     isImmutable: row.is_immutable,
+    isCheckedIn: row.is_checked_in,
     allDay: row.all_day,
     calendarId: normalizeNullableText(row.calendar_id),
   }
@@ -292,10 +346,14 @@ export function mapScheduleEventInputToScheduleEvent(
     start: normalizeDateTime(event.start) ?? event.start,
     end: normalizeDateTime(event.end) ?? event.end,
     source: normalizeEventSource(event.source),
+    priority: normalizePriority(event.priority),
     status: event.status ?? null,
     location: normalizeNullableText(event.location),
     externalEventId: normalizeNullableText(event.externalEventId),
+    gcalEventId: normalizeNullableText(event.gcalEventId),
+    lastSyncedFrom: normalizeSyncOrigin(event.lastSyncedFrom),
     isImmutable: event.isImmutable ?? false,
+    isCheckedIn: event.isCheckedIn ?? false,
     allDay: event.allDay ?? false,
     calendarId: normalizeNullableText(event.calendarId),
   }

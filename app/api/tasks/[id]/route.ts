@@ -49,6 +49,16 @@ export async function PATCH(
   try {
     const { adminClient, user } = await requireAuthenticatedUser()
 
+    const { error: deleteScheduleEventsError } = await adminClient
+      .from("schedule_events")
+      .delete()
+      .eq("user_id", user.id)
+      .eq("task_id", parsedTaskId.data)
+
+    if (deleteScheduleEventsError) {
+      throw new Error(deleteScheduleEventsError.message)
+    }
+
     const { data, error } = await adminClient
       .from("tasks")
       .update({
@@ -116,6 +126,16 @@ export async function DELETE(
 
   try {
     const { adminClient, user } = await requireAuthenticatedUser()
+
+    const { error: deleteScheduleEventsError } = await adminClient
+      .from("schedule_events")
+      .delete()
+      .eq("user_id", user.id)
+      .eq("task_id", parsedTaskId.data)
+
+    if (deleteScheduleEventsError) {
+      throw new Error(deleteScheduleEventsError.message)
+    }
 
     const { data, error } = await adminClient
       .from("tasks")

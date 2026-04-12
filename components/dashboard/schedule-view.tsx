@@ -1,17 +1,27 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { MapPin, ChevronLeft, ChevronRight, RefreshCw, Loader2 } from "lucide-react"
 import {
-  PLACEHOLDER_MONTH_START_LOCAL,
-  PLACEHOLDER_SELECTED_DATE_LOCAL,
-} from "@/lib/mock-calendar-events"
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { MapPin, ChevronLeft, ChevronRight, RefreshCw, Loader2, X } from "lucide-react"
+import { fetchGoogleEvents } from "@/lib/supabase/auth-actions"
+import {
+  buildTaskReminderDescription,
+  getTaskDueTimeLabel,
+  TASKS_CALENDAR_ID,
+} from "@/lib/tasks-calendar"
 import type { ScheduleEvent, Task } from "@/types"
 import type { Calendar } from "./calendars-sidebar"
 
 type ViewMode = "1day" | "3days" | "7days" | "1month"
+type SyncStatus = "idle" | "syncing" | "success" | "error"
 
 // Enhanced Event interface for Google Calendar integration
 export interface CalendarEvent {
@@ -29,12 +39,9 @@ export interface CalendarEvent {
   day: number
   startHour: number
   duration: number
-}
-
-// API Hook: Replace mockSyncStatus with fetch call here
-const mockSyncStatus = {
-  lastSynced: "Just now",
-  isSyncing: false,
+  renderVariant?: "default" | "task-due"
+  detail?: string
+  dueTimeLabel?: string
 }
 
 const colorClasses: Record<CalendarEvent["color"], string> = {
@@ -107,6 +114,45 @@ function mapScheduleEventsToCalendarEvents(
   })
 }
 
+function mapTaskReminderEvents(
+  tasks: Task[],
+  displayDates: Date[],
+): CalendarEvent[] {
+  return tasks.flatMap((task) => {
+    if (!task.deadline) {
+      return []
+    }
+
+    const deadline = new Date(task.deadline)
+    const day = displayDates.findIndex((date) => isSameCalendarDay(date, deadline))
+
+    if (day === -1) {
+      return []
+    }
+
+    return [
+      {
+        id: `task-reminder-${task.id}`,
+        title: task.title,
+        start: deadline.toISOString(),
+        end: deadline.toISOString(),
+        source: "task" as const,
+        isReadOnly: task.isImmutable,
+        calendarId: task.calendarId || TASKS_CALENDAR_ID,
+        allDay: true,
+        location: undefined,
+        color: "purple",
+        day,
+        startHour: 0,
+        duration: 0.25,
+        renderVariant: "task-due",
+        detail: buildTaskReminderDescription(task),
+        dueTimeLabel: getTaskDueTimeLabel(task),
+      },
+    ]
+  })
+}
+
 function mapTasksToCalendarEvents(
   tasks: Task[],
   scheduleEvents: ScheduleEvent[],
@@ -119,22 +165,17 @@ function mapTasksToCalendarEvents(
   )
 
   return tasks.flatMap((task) => {
-    if (scheduledTaskIds.has(task.id) || task.status === "completed" || task.status === "missed") {
-      return []
-    }
-
-    const anchor = task.scheduledFor || task.deadline
-
-    if (!anchor) {
+    if (
+      scheduledTaskIds.has(task.id) ||
+      !task.scheduledFor ||
+      task.status === "completed" ||
+      task.status === "missed"
+    ) {
       return []
     }
 
     const durationHours = Math.max((task.durationMinutes ?? 60) / 60, 0.25)
-    const isScheduledTask = Boolean(task.scheduledFor)
-    const anchorEnd = new Date(anchor)
-    const anchorStart = isScheduledTask
-      ? anchorEnd
-      : new Date(anchorEnd.getTime() - durationHours * 3_600_000)
+    const anchorStart = new Date(task.scheduledFor)
     const day = displayDates.findIndex((date) => isSameCalendarDay(date, anchorStart))
 
     if (day === -1) {
@@ -142,9 +183,7 @@ function mapTasksToCalendarEvents(
     }
 
     const startHour = anchorStart.getHours() + anchorStart.getMinutes() / 60
-    const end = isScheduledTask
-      ? new Date(anchorStart.getTime() + durationHours * 3_600_000).toISOString()
-      : anchorEnd.toISOString()
+    const end = new Date(anchorStart.getTime() + durationHours * 3_600_000).toISOString()
 
     return [
       {
@@ -167,7 +206,6 @@ function mapTasksToCalendarEvents(
 }
 
 interface ScheduleViewProps {
-  onSyncWithGoogle?: () => void
   visibleCalendarIds?: string[]
   calendars?: Calendar[]
   events?: ScheduleEvent[]
@@ -179,7 +217,6 @@ interface ScheduleViewProps {
 }
 
 export function ScheduleView({
-  onSyncWithGoogle,
   visibleCalendarIds,
   calendars,
   events: scheduleEvents = [],
@@ -190,18 +227,97 @@ export function ScheduleView({
   isScheduling = false,
 }: ScheduleViewProps) {
   const [viewMode, setViewMode] = useState<ViewMode>("7days")
-  const [selectedDate, setSelectedDate] = useState<Date>(() => new Date(PLACEHOLDER_SELECTED_DATE_LOCAL))
-  const [monthViewDate, setMonthViewDate] = useState<Date>(() => new Date(PLACEHOLDER_MONTH_START_LOCAL))
-  const [isSyncing, setIsSyncing] = useState(false)
+  const [selectedDate, setSelectedDate] = useState<Date>(() => new Date())
+  const [monthViewDate, setMonthViewDate] = useState<Date>(() => {
+    const today = new Date()
+    return new Date(today.getFullYear(), today.getMonth(), 1)
+  })
+  const [googleEvents, setGoogleEvents] = useState<ScheduleEvent[]>([])
+  const [isGoogleEventsLoading, setIsGoogleEventsLoading] = useState(true)
+  const [syncStatus, setSyncStatus] = useState<SyncStatus>("idle")
+  const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null)
+  const [hasFetchedGoogleEvents, setHasFetchedGoogleEvents] = useState(false)
+  const [selectedTaskReminder, setSelectedTaskReminder] = useState<CalendarEvent | null>(null)
+  const successResetTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  const syncStatus = mockSyncStatus
+  useEffect(() => {
+    return () => {
+      if (successResetTimeoutRef.current) {
+        clearTimeout(successResetTimeoutRef.current)
+      }
+    }
+  }, [])
+
+  const loadGoogleEvents = useCallback(async (showFeedback: boolean) => {
+    if (successResetTimeoutRef.current) {
+      clearTimeout(successResetTimeoutRef.current)
+      successResetTimeoutRef.current = null
+    }
+
+    if (showFeedback) {
+      setSyncStatus("syncing")
+    }
+
+    setIsGoogleEventsLoading(true)
+
+    let didTimeout = false
+    const timeoutId = window.setTimeout(() => {
+      didTimeout = true
+      setSyncStatus("error")
+    }, 60_000)
+
+    try {
+      const fetchedEvents = await fetchGoogleEvents()
+
+      if (didTimeout) {
+        return
+      }
+
+      setGoogleEvents(fetchedEvents)
+      setHasFetchedGoogleEvents(true)
+      setLastSyncedAt(new Date().toISOString())
+
+      if (showFeedback) {
+        setSyncStatus("success")
+        successResetTimeoutRef.current = setTimeout(() => {
+          setSyncStatus("idle")
+        }, 3_000)
+      }
+    } catch (error) {
+      if (!didTimeout) {
+        console.error("Failed to fetch Google Events", error)
+
+        if (showFeedback) {
+          setSyncStatus("error")
+        }
+      }
+    } finally {
+      clearTimeout(timeoutId)
+      setIsGoogleEventsLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    void loadGoogleEvents(false)
+  }, [loadGoogleEvents])
 
   const handleSyncWithGoogle = async () => {
-    setIsSyncing(true)
-    // API Hook: Call actual sync function here
-    // Example: await syncGoogleCalendar()
-    if (onSyncWithGoogle) onSyncWithGoogle()
-    setTimeout(() => setIsSyncing(false), 1500) // Simulated sync
+    if (syncStatus === "syncing" || isGoogleEventsLoading) {
+      return
+    }
+
+    await loadGoogleEvents(true)
+  }
+
+  const formatLastSynced = () => {
+    if (!lastSyncedAt) {
+      return isGoogleEventsLoading ? "Syncing..." : "Not yet"
+    }
+
+    return new Date(lastSyncedAt).toLocaleTimeString([], {
+      hour: "numeric",
+      minute: "2-digit",
+    })
   }
 
   const handleGoToToday = () => {
@@ -315,21 +431,32 @@ export function ScheduleView({
   const events = useMemo(() => {
     const mappedEvents = [
       ...mapScheduleEventsToCalendarEvents(scheduleEvents, displayDates),
+      ...mapScheduleEventsToCalendarEvents(googleEvents, displayDates),
+      ...mapTaskReminderEvents(tasks, displayDates),
       ...mapTasksToCalendarEvents(tasks, scheduleEvents, displayDates),
     ]
 
     return visibleCalendarIds
       ? mappedEvents.filter((event) => visibleCalendarIds.includes(event.calendarId))
       : mappedEvents
-  }, [displayDates, scheduleEvents, tasks, visibleCalendarIds])
+  }, [displayDates, googleEvents, scheduleEvents, tasks, visibleCalendarIds])
   const allDayEvents = useMemo(
     () => events.filter((event) => event.allDay),
     [events],
+  )
+  const taskReminderEvents = useMemo(
+    () => allDayEvents.filter((event) => event.renderVariant === "task-due"),
+    [allDayEvents],
+  )
+  const regularAllDayEvents = useMemo(
+    () => allDayEvents.filter((event) => event.renderVariant !== "task-due"),
+    [allDayEvents],
   )
   const timedEvents = useMemo(
     () => events.filter((event) => !event.allDay),
     [events],
   )
+  const hasVisibleEvents = events.length > 0
 
   // Get day names for the current view
   const getDayHeaders = () => {
@@ -410,6 +537,44 @@ export function ScheduleView({
 
   return (
     <Card className="bg-card border-border h-full flex flex-col">
+      <Dialog open={selectedTaskReminder !== null} onOpenChange={(open) => !open && setSelectedTaskReminder(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{selectedTaskReminder?.title ?? "Task Reminder"}</DialogTitle>
+            <DialogDescription>
+              Due time: {selectedTaskReminder?.dueTimeLabel ?? "No due time set"}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 text-sm">
+            <div className="rounded-xl border border-border bg-secondary/30 p-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Reminder Details
+              </p>
+              <p className="mt-2 font-medium text-foreground">
+                {selectedTaskReminder?.detail ?? "No additional detail available."}
+              </p>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+      {syncStatus === "success" ? (
+        <div className="fixed left-1/2 top-4 z-[200] -translate-x-1/2 rounded-full bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-lg">
+          Successfully synced
+        </div>
+      ) : null}
+      {syncStatus === "error" ? (
+        <div className="fixed left-1/2 bottom-4 z-[200] flex -translate-x-1/2 items-center gap-3 rounded-xl bg-red-600 px-4 py-3 text-sm font-semibold text-white shadow-xl">
+          <span>Sync failed: Please check your GCal Cloud connection</span>
+          <button
+            type="button"
+            onClick={() => setSyncStatus("idle")}
+            className="rounded-full p-1 transition-colors hover:bg-white/15"
+            aria-label="Dismiss sync error"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      ) : null}
       <CardHeader className="p-3 pb-2 flex-shrink-0">
         <div className="flex items-center justify-between">
           <div>
@@ -424,16 +589,16 @@ export function ScheduleView({
             {/* Sync Status */}
             <div className="flex items-center gap-2">
               <span className="text-xs text-muted-foreground font-semibold">
-                Last synced: {syncStatus.lastSynced}
+                Last synced: {formatLastSynced()}
               </span>
               <Button
                 variant="outline"
                 size="sm"
                 onClick={handleSyncWithGoogle}
-                disabled={isSyncing}
+                disabled={syncStatus === "syncing" || isGoogleEventsLoading}
                 className="text-xs h-7 px-2 font-semibold"
               >
-                {isSyncing ? (
+                {syncStatus === "syncing" || isGoogleEventsLoading ? (
                   <Loader2 className="w-3 h-3 mr-1 animate-spin" />
                 ) : (
                   <RefreshCw className="w-3 h-3 mr-1" />
@@ -447,6 +612,15 @@ export function ScheduleView({
         <p className="text-[11px] text-muted-foreground leading-tight font-medium">
           Schedule runs only when you click Schedule/Replan. Dragging a block pins it by default.
         </p>
+        {!isGoogleEventsLoading &&
+        hasFetchedGoogleEvents &&
+        googleEvents.length === 0 &&
+        scheduleEvents.length === 0 &&
+        tasks.length === 0 ? (
+          <p className="text-[11px] leading-tight font-medium mt-1 text-muted-foreground">
+            No events found.
+          </p>
+        ) : null}
         {plannerSummary ? (
           <p className={`text-[11px] leading-tight font-medium mt-1 ${
             plannerStatus === "Error" ? "text-red-400" : "text-muted-foreground"
@@ -611,6 +785,14 @@ export function ScheduleView({
         ) : (
           /* Calendar Grid - Day Views (1, 3, 7 days) */
           <div className="flex-1 overflow-auto relative">
+            {isGoogleEventsLoading && !hasVisibleEvents ? (
+              <div className="absolute inset-0 z-20 flex items-center justify-center bg-card/80 backdrop-blur-sm">
+                <div className="flex items-center gap-3 rounded-full border border-border bg-card px-4 py-2 text-sm font-semibold text-foreground shadow-sm">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Loading calendar events...
+                </div>
+              </div>
+            ) : null}
             {/* Day Headers */}
             <div 
               className={`grid gap-px sticky top-0 z-10 bg-card dark:bg-[#141414] ${
@@ -655,17 +837,32 @@ export function ScheduleView({
                 All day
               </div>
               {displayDates.map((_, dayIndex) => {
-                const dayAllDayEvents = allDayEvents.filter((event) => event.day === dayIndex)
+                const dayReminderEvents = taskReminderEvents.filter((event) => event.day === dayIndex)
+                const dayAllDayEvents = regularAllDayEvents.filter((event) => event.day === dayIndex)
+                const hasAnyAllDayContent = dayReminderEvents.length > 0 || dayAllDayEvents.length > 0
 
                 return (
                   <div
                     key={`all-day-${dayIndex}`}
                     className="min-h-9 border-l border-border dark:border-[#2a2a2a] bg-card dark:bg-[#181818] px-1 py-1"
                   >
-                    {dayAllDayEvents.length === 0 ? (
+                    {!hasAnyAllDayContent ? (
                       <div className="h-6 rounded border border-dashed border-border/50" />
                     ) : (
                       <div className="space-y-1">
+                        {dayReminderEvents.map((event) => (
+                          <button
+                            type="button"
+                            key={event.id}
+                            onClick={() => setSelectedTaskReminder(event)}
+                            className="flex w-full items-center justify-between rounded-full border border-[#f9a8d4]/70 bg-[#fce7f3] px-2 py-1 text-left text-[10px] font-semibold text-slate-800 shadow-sm transition-transform hover:-translate-y-0.5 dark:border-[#51324b] dark:bg-[#3d2234] dark:text-[#fce7f3]"
+                          >
+                            <span className="truncate">{event.title}</span>
+                            <span className="ml-2 shrink-0 text-[9px] uppercase tracking-wide opacity-70">
+                              Due
+                            </span>
+                          </button>
+                        ))}
                         {dayAllDayEvents.map((event) => (
                           <div
                             key={event.id}
@@ -756,6 +953,11 @@ export function ScheduleView({
                 </div>
               ))}
             </div>
+            {!isGoogleEventsLoading && !hasVisibleEvents ? (
+              <div className="flex h-full min-h-[320px] items-center justify-center px-4 text-center">
+                <p className="text-sm font-medium text-muted-foreground">No events found</p>
+              </div>
+            ) : null}
           </div>
         )}
       </CardContent>

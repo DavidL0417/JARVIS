@@ -37,7 +37,7 @@ export function PanelTabs({ activeTab, onTabChange }: PanelTabsProps) {
               onClick={() => onTabChange(tab.id)}
               className={
                 activeTab === tab.id
-                  ? "bg-[#3b82f6] hover:bg-[#2563eb] text-white text-xs h-7 px-2.5 font-semibold"
+                  ? "h-7 bg-rose-300 px-2.5 text-xs font-semibold text-rose-950 shadow-sm hover:bg-rose-300"
                   : "text-muted-foreground hover:text-foreground hover:bg-secondary text-xs h-7 px-2.5 font-semibold"
               }
             >

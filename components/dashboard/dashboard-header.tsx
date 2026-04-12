@@ -58,11 +58,11 @@ export function DashboardHeader({
       </div>
       <div className="flex items-center gap-3">
         {authControls}
-        <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded border border-border">
-          <Shield className="w-4 h-4 text-muted-foreground" />
-          <span className="text-xs text-muted-foreground font-semibold">Safety</span>
-          <Check className="w-4 h-4 text-[#4ade80]" />
-          <span className="text-xs text-[#4ade80] font-semibold">Ready</span>
+        <div className="hidden items-center gap-2 rounded-full border border-emerald-200/70 bg-emerald-100/50 px-3 py-1.5 shadow-sm sm:flex dark:border-emerald-900/60 dark:bg-emerald-950/30">
+          <Shield className="h-4 w-4 text-emerald-700 dark:text-emerald-300" />
+          <span className="text-xs font-semibold text-emerald-800 dark:text-emerald-100">Safety</span>
+          <Check className="h-4 w-4 text-emerald-600 dark:text-emerald-300" />
+          <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-200">Ready</span>
         </div>
         <Button
           variant="ghost"

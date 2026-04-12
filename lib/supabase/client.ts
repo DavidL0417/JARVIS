@@ -17,11 +17,23 @@ function getRequiredPublicEnv(name: "NEXT_PUBLIC_SUPABASE_URL" | "NEXT_PUBLIC_SU
   return value
 }
 
+export function hasSupabasePublicEnv() {
+  return Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)
+}
+
 export function createSupabaseBrowserClient() {
   return createBrowserClient(
     getRequiredPublicEnv("NEXT_PUBLIC_SUPABASE_URL"),
     getRequiredPublicEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY"),
   )
+}
+
+export function tryCreateSupabaseBrowserClient() {
+  if (!hasSupabasePublicEnv()) {
+    return null
+  }
+
+  return createSupabaseBrowserClient()
 }
 
 // ##### END BACKEND #####
