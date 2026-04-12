@@ -164,6 +164,85 @@ export interface CheckIn {
   createdAt: string
 }
 
+export type AssistantToolStatus = "completed" | "clarification" | "error"
+
+export interface AssistantToolCallResult {
+  id: string
+  tool: string
+  status: AssistantToolStatus
+  summary: string
+}
+
+export interface AssistantConversationEntry {
+  role: "user" | "assistant"
+  text: string
+}
+
+export interface MemoryEntrySummary {
+  id: string
+  category: string
+  insight: string
+  source: string
+  confidence: number | null
+  createdAt: string
+}
+
+export interface AvailabilityContext {
+  timezone: string
+  workdayStart: string
+  workdayEnd: string
+  peakEnergyWindow: string | null
+  sleepPattern: string | null
+  procrastinationPattern: string | null
+  preferredCheckInMode: PreferredCheckInMode
+  defaultTaskDurationMinutes: number
+  breakDurationMinutes: number
+  preferredFocusBlockMinutes: number | null
+  availabilitySummary: string
+}
+
+export interface AvailabilityWindow {
+  start: string
+  end: string
+  localDay: string
+  durationMinutes: number
+}
+
+export interface AssistantContextData {
+  availability: AvailabilityContext
+  availabilityWindows: AvailabilityWindow[]
+  memoryEntries: MemoryEntrySummary[]
+  memorySummary: string
+}
+
+export interface AssistantMessageResponse {
+  ok: boolean
+  reply: string
+  toolCalls: AssistantToolCallResult[]
+  needsRefresh: boolean
+  clarification: string | null
+  context: AssistantContextData
+  error?: string
+  debug?: {
+    steps?: string[]
+    lastToolName?: string
+    model?: string
+  }
+}
+
+export interface AssistantMessageRequest {
+  message: string
+  now?: string | null
+  timezone?: string | null
+  history?: AssistantConversationEntry[]
+}
+
+export interface AssistantContextResponse {
+  ok: boolean
+  context: AssistantContextData
+  error?: string
+}
+
 // Request/response payloads intentionally separate API contracts from DB rows.
 export interface CheckInRequest {
   mood?: CheckInMood

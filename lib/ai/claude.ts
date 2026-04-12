@@ -1,14 +1,11 @@
 // ##### BACKEND API #####
 // DO NOT MODIFY UNLESS BACKEND OWNER
 
-import { readFile } from "node:fs/promises"
-import path from "node:path"
-
 import Anthropic from "@anthropic-ai/sdk"
 import { z } from "zod"
 
 import { schedulePlanResultSchema } from "@/schemas/schedule"
-import type { ReplanRequest, SchedulePlanResult, SchedulePreparationContext } from "@/types"
+import type { AvailabilityWindow, ReplanRequest, SchedulePlanResult, SchedulePreparationContext } from "@/types"
 
 const DEFAULT_TIMEZONE = "America/Chicago"
 const DEFAULT_WORKDAY_START = "09:00"
@@ -18,17 +15,22 @@ const DEFAULT_BREAK_MINUTES = 10
 const MIN_SLOT_MINUTES = 15
 const FIVE_DAY_HORIZON_DAYS = 5
 const PLANNER_TOOL_NAME = "return_schedule_plan"
-const DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-4-20250514"
+const DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-4-6"
 const DEFAULT_TASKS_CALENDAR_ID = "cal-tasks"
-const MEMORY_DIRECTORY = path.join(process.cwd(), "data", "user-memory")
+const IS_DEV = process.env.NODE_ENV !== "production"
+const SHOULD_LOG_SCHEDULER_DEBUG =
+  IS_DEV && process.env.JARVIS_SCHEDULER_DEBUG !== "0"
 const MASTER_SCHEDULING_PROMPT = [
   "You are scheduling tasks onto a calendar for a student productivity assistant.",
-  "Think carefully about each task before placing it. Estimate how long the task should take using the task content, the user's preferences, and the memory markdown.",
+  "Think carefully about each task before placing it. Estimate how long the task should take using the task content, the user's preferences, and the rendered memory summary.",
   "Return exactly one tool call with the final schedule plan.",
   "Schedule only the provided schedulable tasks. Fixed tasks are already preserved and must not be moved.",
   "Respect the planning horizon exactly: only place tasks between planningWindow.start and planningWindow.end.",
-  "Use the provided availability windows. Do not place tasks outside those windows, past a task deadline, or overlapping another event.",
-  "Use the memory markdown to account for user-specific preferences, habits, and friction points.",
+  "Use the provided availability windows as soft guidance, not as a hard boundary.",
+  "Do not place tasks past a deadline or overlapping another event.",
+  "Use the rendered memory summary to account for user-specific preferences, habits, and friction points.",
+  `All planner-created task events must use calendarId "${DEFAULT_TASKS_CALENDAR_ID}".`,
+  "Scheduling outside the preferred availability windows is allowed when needed. If you do that, mention the tradeoff in the summary.",
   "Prefer earlier placement for urgent tasks, align heavier work with stronger energy windows when possible, and leave tasks unscheduled if there is no valid slot.",
   "Each task may appear at most once in placements.",
   "Use ISO timestamps exactly.",
@@ -78,13 +80,6 @@ type Interval = {
   label: string
 }
 
-type AvailabilityWindow = {
-  start: string
-  end: string
-  localDay: string
-  durationMinutes: number
-}
-
 type PlanningContext = {
   userId: string
   nowIso: string
@@ -124,7 +119,10 @@ export async function generateSchedule(input: SchedulePreparationContext): Promi
   }
 
   const planningContext = buildPlanningContext(input)
-  planningContext.memoryMarkdown = await loadMemoryMarkdown(input.userId)
+  planningContext.memoryMarkdown = buildMemorySummaryMarkdown({
+    preferences: planningContext.preferences,
+    memoryEntries: [],
+  })
 
   if (planningContext.planningTaskIds.length === 0) {
     return schedulePlanResultSchema.parse({
@@ -144,15 +142,6 @@ export async function generateSchedule(input: SchedulePreparationContext): Promi
     })
   }
 
-  if (planningContext.availabilityWindows.length === 0) {
-    return schedulePlanResultSchema.parse({
-      plannerStatus: "ready",
-      proposedEvents: sortEventsByStart(planningContext.fixedTaskEvents),
-      unscheduledTaskIds: planningContext.schedulableTasks.map((task) => task.id),
-      summary: "No free scheduling windows were available inside the current workday and hard-event constraints.",
-    })
-  }
-
   const plan = await requestClaudeSchedule(client, planningContext)
   const plannedEvents = materializeTaskPlacements(plan, planningContext)
   const proposedEvents = sortEventsByStart([...planningContext.fixedTaskEvents, ...plannedEvents])
@@ -166,6 +155,10 @@ export async function generateSchedule(input: SchedulePreparationContext): Promi
     unscheduledTaskIds,
     summary: plan.summary,
   })
+}
+
+export function deriveAvailabilityWindowsFromScheduleContext(input: SchedulePreparationContext): AvailabilityWindow[] {
+  return buildPlanningContext(input).availabilityWindows
 }
 
 export async function replanSchedule(input: ReplanRequest) {
@@ -283,15 +276,42 @@ function buildPlanningContext(input: SchedulePreparationContext): PlanningContex
 }
 
 async function requestClaudeSchedule(client: Anthropic, context: PlanningContext): Promise<PlannerToolInput> {
+  const model = process.env.ANTHROPIC_MODEL || DEFAULT_ANTHROPIC_MODEL
+  const promptPayload = buildPromptPayload(context)
+
+  logSchedulerDebug({
+    model,
+    systemPrompt: MASTER_SCHEDULING_PROMPT,
+    memoryMarkdown: context.memoryMarkdown,
+    availabilityWindows: context.availabilityWindows,
+    fixedTaskEvents: context.fixedTaskEvents.map((event) => ({
+      taskId: event.taskId,
+      title: event.title,
+      start: event.start,
+      end: event.end,
+      calendarId: event.calendarId,
+    })),
+    schedulableTasks: context.schedulableTasks.map((task) => ({
+      id: task.id,
+      title: task.title,
+      deadline: task.deadline,
+      priority: task.priority,
+      estimatedDurationMinutes: task.estimatedDurationMinutes,
+      allDay: task.allDay,
+      calendarId: task.calendarId,
+    })),
+    promptPayload,
+  })
+
   const message = await client.messages.create({
-    model: process.env.ANTHROPIC_MODEL || DEFAULT_ANTHROPIC_MODEL,
+    model,
     max_tokens: 1600,
     temperature: 0,
     system: MASTER_SCHEDULING_PROMPT,
     messages: [
       {
         role: "user",
-        content: JSON.stringify(buildPromptPayload(context), null, 2),
+        content: JSON.stringify(promptPayload, null, 2),
       },
     ],
     tools: [
@@ -408,6 +428,7 @@ function buildPromptPayload(context: PlanningContext) {
       procrastinationPattern: context.preferences.procrastinationPattern,
       sleepPattern: context.preferences.sleepPattern,
       preferredCheckInMode: context.preferences.preferredCheckInMode,
+      preferredCalendarId: context.preferences.calendarId,
       defaultCalendarId: DEFAULT_TASKS_CALENDAR_ID,
     },
     fixedTaskEvents: context.fixedTaskEvents.map((event) => ({
@@ -429,7 +450,7 @@ function buildPromptPayload(context: PlanningContext) {
       estimatedDurationMinutes: task.estimatedDurationMinutes,
       scheduledForHint: task.scheduledFor,
       isImmutable: task.isImmutable,
-      calendarId: task.calendarId,
+      calendarId: DEFAULT_TASKS_CALENDAR_ID,
     })),
   }
 }
@@ -470,7 +491,7 @@ function materializeTaskPlacements(
       externalEventId: null,
       isImmutable: task.isImmutable,
       allDay: task.allDay,
-      calendarId: task.calendarId ?? DEFAULT_TASKS_CALENDAR_ID,
+      calendarId: DEFAULT_TASKS_CALENDAR_ID,
     }
   })
 }
@@ -501,10 +522,6 @@ function validateGeneratedEvents(
   context: PlanningContext,
 ) {
   const occupiedIntervals = [...context.occupiedIntervals]
-  const windows = context.availabilityWindows.map((window) => ({
-    startMs: new Date(window.start).getTime(),
-    endMs: new Date(window.end).getTime(),
-  }))
 
   for (const event of plannedEvents) {
     const startMs = new Date(event.start).getTime()
@@ -530,12 +547,6 @@ function validateGeneratedEvents(
 
     if (task.deadline && endMs > new Date(task.deadline).getTime()) {
       throw new Error(`Claude scheduled task ${task.id} past its deadline.`)
-    }
-
-    const fitsWindow = windows.some((window) => startMs >= window.startMs && endMs <= window.endMs)
-
-    if (!fitsWindow) {
-      throw new Error(`Claude scheduled task ${task.id} outside the allowed availability windows.`)
     }
 
     const overlap = occupiedIntervals.find(
@@ -626,8 +637,135 @@ function taskToFixedEvent(
     externalEventId: null,
     isImmutable: true,
     allDay: task.allDay,
-    calendarId: task.calendarId ?? DEFAULT_TASKS_CALENDAR_ID,
+    calendarId: DEFAULT_TASKS_CALENDAR_ID,
   }
+}
+
+type MemorySummaryInput = {
+  preferences: PlanningPreferences
+  memoryEntries: Array<{
+    category?: string | null
+    insight: string
+    confidence?: number | null
+    source?: string | null
+  }>
+}
+
+export function buildMemorySummaryMarkdown(input: MemorySummaryInput) {
+  const { preferences, memoryEntries } = input
+  const sections: string[] = [
+    "# User Scheduling Memory",
+    "",
+    "## Structured Preferences",
+    `- Timezone: ${preferences.timezone}`,
+    `- Scheduling hours: ${preferences.workdayStart} to ${preferences.workdayEnd}`,
+    `- Default work block length: ${preferences.defaultTaskDurationMinutes} minutes`,
+    `- Preferred break length: ${preferences.breakDurationMinutes} minutes`,
+    `- Preferred check-in mode: ${preferences.preferredCheckInMode}`,
+  ]
+
+  if (preferences.preferredFocusBlockMinutes) {
+    sections.push(`- Preferred focus block length: ${preferences.preferredFocusBlockMinutes} minutes`)
+  }
+
+  if (preferences.calendarId) {
+    sections.push(`- Preferred calendar reference: ${preferences.calendarId}`)
+  }
+
+  const narrativeNotes: string[] = []
+
+  if (preferences.sleepPattern) {
+    narrativeNotes.push(`Sleep / no-disturb note: ${preferences.sleepPattern}`)
+  }
+
+  if (preferences.peakEnergyWindow) {
+    narrativeNotes.push(`Peak energy window: ${preferences.peakEnergyWindow}`)
+  }
+
+  if (preferences.procrastinationPattern) {
+    narrativeNotes.push(`Procrastination pattern: ${preferences.procrastinationPattern}`)
+  }
+
+  if (narrativeNotes.length > 0) {
+    sections.push("", "## Persistent Scheduling Notes")
+
+    for (const note of narrativeNotes) {
+      sections.push(`- ${note}`)
+    }
+  }
+
+  const normalizedMemoryEntries = memoryEntries
+    .filter((entry) => entry.insight.trim().length > 0)
+    .sort((left, right) => (right.confidence ?? 0) - (left.confidence ?? 0))
+
+  if (normalizedMemoryEntries.length > 0) {
+    sections.push("", "## Additional Memory")
+
+    for (const entry of normalizedMemoryEntries) {
+      const meta: string[] = []
+
+      if (entry.category) {
+        meta.push(entry.category)
+      }
+
+      if (typeof entry.confidence === "number") {
+        meta.push(`confidence ${entry.confidence.toFixed(2)}`)
+      }
+
+      if (entry.source) {
+        meta.push(entry.source)
+      }
+
+      sections.push(
+        meta.length > 0
+          ? `- ${entry.insight} (${meta.join(", ")})`
+          : `- ${entry.insight}`,
+      )
+    }
+  }
+
+  sections.push(
+    "",
+    `## Planner Rules`,
+    `- All newly scheduled task events must use calendarId "${DEFAULT_TASKS_CALENDAR_ID}".`,
+    "- Treat structured preferences as durable user guidance.",
+    "- Treat narrative notes as soft memory unless they conflict with hard availability windows already provided.",
+  )
+
+  return sections.join("\n").trim()
+}
+
+function logSchedulerDebug(payload: {
+  model: string
+  systemPrompt: string
+  memoryMarkdown: string
+  availabilityWindows: AvailabilityWindow[]
+  fixedTaskEvents: Array<{
+    taskId: string | null
+    title: string
+    start: string
+    end: string
+    calendarId: string | null
+  }>
+  schedulableTasks: Array<{
+    id: string
+    title: string
+    deadline: string | null
+    priority: SchedulePreparationContext["tasks"][number]["priority"]
+    estimatedDurationMinutes: number
+    allDay: boolean
+    calendarId: string | null
+  }>
+  promptPayload: ReturnType<typeof buildPromptPayload>
+}) {
+  if (!SHOULD_LOG_SCHEDULER_DEBUG) {
+    return
+  }
+
+  console.log(
+    "[scheduler-debug]",
+    JSON.stringify(payload, null, 2),
+  )
 }
 
 function buildAvailabilityWindows(args: {
@@ -912,17 +1050,6 @@ function isEventInsidePlanningWindow(
     endMs > windowStartMs &&
     startMs < windowEndMs
   )
-}
-
-async function loadMemoryMarkdown(userId: string) {
-  const filePath = path.join(MEMORY_DIRECTORY, `${userId}.md`)
-
-  try {
-    const markdown = await readFile(filePath, "utf8")
-    return markdown.trim()
-  } catch {
-    return ""
-  }
 }
 
 // ##### END BACKEND #####

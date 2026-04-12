@@ -20,6 +20,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Plus, MoreVertical, Download, Pencil, Trash2, Palette, X } from "lucide-react"
+import { INITIAL_SIDEBAR_CALENDAR_PRESETS } from "@/lib/calendar-config"
 
 // Calendar interface for multi-calendar management
 export interface Calendar {
@@ -32,14 +33,13 @@ export interface Calendar {
 
 // API Hook: Replace mockCalendars with useCalendars() hook
 // Example: const { data: calendars, mutate } = useSWR('/api/calendars', fetcher)
-const initialCalendars: Calendar[] = [
-  { id: "cal-tasks", name: "Tasks", color: "#ef4444", isVisible: true, source: "local" },
-  { id: "cal-1", name: "Personal", color: "#3b82f6", isVisible: true, source: "local" },
-  { id: "cal-2", name: "Work", color: "#4ade80", isVisible: true, source: "google" },
-  { id: "cal-3", name: "Northwestern Classes", color: "#fde047", isVisible: true, source: "google" },
-  { id: "cal-4", name: "Project Vela", color: "#fb923c", isVisible: true, source: "local" },
-  { id: "cal-5", name: "Social", color: "#22d3ee", isVisible: false, source: "local" },
-]
+const initialCalendars: Calendar[] = INITIAL_SIDEBAR_CALENDAR_PRESETS.map((calendar) => ({
+  id: calendar.id,
+  name: calendar.name,
+  color: calendar.color,
+  isVisible: calendar.isVisibleByDefault,
+  source: calendar.source,
+}))
 
 const colorOptions = [
   "#3b82f6", "#4ade80", "#fde047", "#fb923c", "#c084fc", 

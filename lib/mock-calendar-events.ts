@@ -1,6 +1,6 @@
 import type { ScheduleEvent } from "@/types"
 
-export const PLACEHOLDER_SELECTED_DATE_LOCAL = "2026-04-06T12:00:00"
+export const PLACEHOLDER_SELECTED_DATE_LOCAL = "2026-04-12T12:00:00"
 export const PLACEHOLDER_MONTH_START_LOCAL = "2026-04-01T12:00:00"
 
 type PlaceholderCalendarTemplate = {
@@ -39,6 +39,28 @@ const PLACEHOLDER_CALENDAR_TEMPLATES: PlaceholderCalendarTemplate[] = [
   { calendarId: "cal-5", title: "Feiyi Recital", location: "Galvin Recital", startLocal: "2026-04-08T18:00:00", endLocal: "2026-04-08T19:00:00" },
 ]
 
+function shiftLocalDateTime(localDateTime: string, days: number) {
+  const shifted = new Date(localDateTime)
+  shifted.setDate(shifted.getDate() + days)
+  const year = shifted.getFullYear()
+  const month = String(shifted.getMonth() + 1).padStart(2, "0")
+  const day = String(shifted.getDate()).padStart(2, "0")
+  const hours = String(shifted.getHours()).padStart(2, "0")
+  const minutes = String(shifted.getMinutes()).padStart(2, "0")
+  const seconds = String(shifted.getSeconds()).padStart(2, "0")
+
+  return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}`
+}
+
+const EXTENDED_PLACEHOLDER_CALENDAR_TEMPLATES = [
+  ...PLACEHOLDER_CALENDAR_TEMPLATES,
+  ...PLACEHOLDER_CALENDAR_TEMPLATES.map((template) => ({
+    ...template,
+    startLocal: shiftLocalDateTime(template.startLocal, 7),
+    endLocal: shiftLocalDateTime(template.endLocal, 7),
+  })),
+]
+
 function toStablePlaceholderId(index: number) {
   return `00000000-0000-4000-8000-${String(index).padStart(12, "0")}`
 }
@@ -48,7 +70,7 @@ function toIsoString(localDateTime: string) {
 }
 
 export function createPlaceholderCalendarEvents(userId: string): ScheduleEvent[] {
-  return PLACEHOLDER_CALENDAR_TEMPLATES.map((template, index) => ({
+  return EXTENDED_PLACEHOLDER_CALENDAR_TEMPLATES.map((template, index) => ({
     id: toStablePlaceholderId(index + 1),
     userId,
     taskId: null,
