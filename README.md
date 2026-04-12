@@ -269,7 +269,21 @@ GOOGLE_CLIENT_SECRET=
 GOOGLE_REDIRECT_URI=
 ```
 
-### 3. Apply the Supabase schema
+For auth, the app only requires the Supabase env vars above. Google sign-in itself is configured in the Supabase dashboard. The `GOOGLE_*` env vars remain reserved for future direct Google Calendar integration work.
+
+### 3. Enable Supabase Auth with Google
+
+1. In Supabase, go to `Authentication -> Providers -> Google` and enable the provider.
+2. In Google Cloud Console, add your Supabase callback URL as an authorized redirect URI:
+   - `https://<your-project-ref>.supabase.co/auth/v1/callback`
+3. Paste the Google OAuth client ID and secret into the Supabase Google provider settings.
+4. In `Authentication -> URL Configuration`, add your app callback URLs:
+   - `http://localhost:3000/auth/callback`
+   - your deployed production callback URL, for example `https://your-app.vercel.app/auth/callback`
+
+Supabase’s redirect URL configuration is what allows the `redirectTo` parameter used by the app auth button. See [Supabase redirect URL docs](https://supabase.com/docs/guides/auth/redirect-urls).
+
+### 4. Apply the Supabase schema
 
 Apply [sql/schema.sql](/Users/ericzhou/Desktop/Productivity/mydearestjarvis/sql/schema.sql) in your Supabase SQL editor before testing the DB-backed routes.
 
@@ -278,10 +292,31 @@ Current backend routes that depend on this schema:
 - `/api/dashboard`
 - `/api/onboarding`
 - `/api/schedule` for context reads
+- `/api/tasks`
+- `/api/assistant/message`
 
-The current backend foundation still uses a documented demo-user pattern until full auth is wired in.
+The schema now expects authenticated multi-user data:
 
-### 4. Start development server
+- `public.users.id` maps to `auth.users.id`
+- `public.user_integrations` stores future Google account linkage and calendar metadata for Cindy’s sync work
+
+Older local/demo databases may still contain demo-user rows. The schema keeps the `auth.users` foreign key migration non-destructive, but older demo data may need manual cleanup if you want to fully validate the new constraint.
+
+### 5. Test login locally
+
+1. Start the dev server:
+
+```bash
+pnpm dev
+```
+
+2. Open the app and click `Sign in with Google` in the header.
+3. After Google sign-in completes, the auth callback route exchanges the code for a Supabase session and redirects back into the app.
+4. The first authenticated API request creates or reuses your `public.users` row automatically.
+
+Protected backend routes now return `401` if there is no authenticated session.
+
+### 6. Start development server
 
 ```bash
 pnpm dev

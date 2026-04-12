@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect } from "react"
+import type { ReactNode } from "react"
 import { Button } from "@/components/ui/button"
 import { Sidebar, Moon, Sun, Shield, Check, Menu, Book } from "lucide-react"
 
@@ -11,6 +11,7 @@ interface DashboardHeaderProps {
   onOpenCalendars?: () => void
   panelsHidden?: boolean
   isDarkMode?: boolean
+  authControls?: ReactNode
 }
 
 export function DashboardHeader({ 
@@ -19,7 +20,8 @@ export function DashboardHeader({
   onToggleTheme,
   onOpenCalendars,
   panelsHidden,
-  isDarkMode = true
+  isDarkMode = true,
+  authControls,
 }: DashboardHeaderProps) {
   return (
     <div className="flex items-center justify-between mb-3">
@@ -55,6 +57,7 @@ export function DashboardHeader({
         <h1 className="text-xl font-bold text-foreground">Today</h1>
       </div>
       <div className="flex items-center gap-3">
+        {authControls}
         <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded border border-border">
           <Shield className="w-4 h-4 text-muted-foreground" />
           <span className="text-xs text-muted-foreground font-semibold">Safety</span>

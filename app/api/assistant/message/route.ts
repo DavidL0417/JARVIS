@@ -10,8 +10,10 @@ import {
   assistantMessageResponseSchema,
   createFallbackParsedAssistantInput,
 } from "@/lib/ai/parser-schema"
-import { getOrCreateDemoUser } from "@/lib/supabase/demo-user"
-import { createSupabaseAdminClient } from "@/lib/supabase/server"
+import {
+  isAuthenticationRequiredError,
+  requireAuthenticatedUser,
+} from "@/lib/supabase/auth"
 import { getCurrentDayContext } from "@/lib/time/current-day"
 
 const IS_DEV = process.env.NODE_ENV !== "production"
@@ -49,12 +51,11 @@ export async function POST(request: Request) {
       currentDay: dayContext.currentDay,
     })
 
-    const supabase = createSupabaseAdminClient()
-    const user = await getOrCreateDemoUser(supabase)
+    const { adminClient, user } = await requireAuthenticatedUser()
     const handlerResult = await handleParsedInput({
       userId: user.id,
       parsed: parserResult.parsed,
-      supabase,
+      supabase: adminClient,
     })
 
     const responsePayload = {
@@ -92,6 +93,19 @@ export async function POST(request: Request) {
       status: handlerResult.success ? 200 : 500,
     })
   } catch (error) {
+    if (isAuthenticationRequiredError(error)) {
+      return NextResponse.json(
+        {
+          ok: false,
+          rawMessage: trimmedMessage,
+          parsed: createFallbackParsedAssistantInput(),
+          actionsTaken: [],
+          error: "Authentication required.",
+        },
+        { status: 401 },
+      )
+    }
+
     const errorMessage = error instanceof Error ? error.message : ""
     const message =
       errorMessage.includes("ANTHROPIC_API_KEY") ||

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react"
 import dynamic from "next/dynamic"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { AuthControls } from "@/components/auth/auth-controls"
 import { DashboardHeader } from "@/components/dashboard/dashboard-header"
 import { WorkspaceSnapshot } from "@/components/dashboard/workspace-snapshot"
 import { PanelTabs, type PanelTabId } from "@/components/dashboard/panel-tabs"
@@ -298,7 +299,16 @@ export default function DashboardPage() {
     const loadDashboard = async () => {
       const data = await getDashboardData()
 
-      if (!isActive || !data) {
+      if (!isActive) {
+        return
+      }
+
+      if (!data) {
+        setDashboardData(null)
+        setTasks([])
+        setScheduledOverlayEvents([])
+        setPlannerStatus("Not scheduled")
+        setPlannerSummary("")
         return
       }
 
@@ -591,6 +601,7 @@ export default function DashboardPage() {
           onOpenCalendars={handleOpenCalendarsSidebar}
           panelsHidden={panelsHidden}
           isDarkMode={isDarkMode}
+          authControls={<AuthControls />}
         />
 
         {/* Calendars Sidebar - Slide-in from left */}

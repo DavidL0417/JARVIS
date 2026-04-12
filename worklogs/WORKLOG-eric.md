@@ -2,6 +2,14 @@
 
 ## Log
 
+### 2026-04-12 01:34 CDT
+
+- Replaced the demo-user backend path with real Supabase Auth profile resolution: protected routes now require a valid session, create/reuse `public.users` from the authenticated auth user, and scope all task/dashboard/onboarding/schedule/assistant writes by that real user id.
+- Added the minimal Google sign-in foundation with `app/auth/callback`, `app/auth/signout`, a shared auth/profile helper in `lib/supabase/auth.ts`, and a compact header auth control so login can be tested without redesigning Cindy’s dashboard.
+- Extended the canonical schema for auth-linked users and future account linkage by mapping `public.users.id` to `auth.users.id` and adding `public.user_integrations` for Cindy’s later Google Calendar sync metadata/token work.
+- Status: `pnpm exec tsc --noEmit --incremental false` passes and `pnpm build` passes when allowed to fetch Google Fonts outside the sandbox.
+- Next step: apply the updated schema in Supabase, enable Google auth in the Supabase dashboard, and then let Cindy build calendar account sync on top of `user_integrations` instead of the old demo-user identity.
+
 ### 2026-04-12 01:06 CDT
 
 - Fixed a timezone parsing bug for date-only task input: the assistant write layer was letting JavaScript directly parse strings like `April 20`, which produced a midnight timestamp and shifted some tasks into the previous local day.
