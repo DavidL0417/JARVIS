@@ -45,14 +45,14 @@ export function WorkspaceSnapshot({ stats }: WorkspaceSnapshotProps) {
     : mockWorkspaceStats
 
   return (
-    <Card className="bg-card border-border">
-      <CardHeader className="p-3 pb-1">
+    <Card className="overflow-hidden border-white/10 bg-[linear-gradient(140deg,rgba(17,20,31,0.96),rgba(30,37,55,0.82))] shadow-[0_18px_44px_rgba(0,0,0,0.18)]">
+      <CardHeader className="p-4 pb-2">
         <CardTitle className="text-sm font-bold text-foreground">Workspace Snapshot</CardTitle>
         <CardDescription className="text-xs text-muted-foreground leading-tight font-medium">
-          Key counts at a glance. Open a panel below to work on one area at a time.
+          Live pressure points across tasks, scheduling, and check-in load.
         </CardDescription>
       </CardHeader>
-      <CardContent className="p-3 pt-2">
+      <CardContent className="p-4 pt-0">
         <div className="grid grid-cols-2 gap-3">
           <StatItem label="Open tasks" value={workspaceStats.openTasks} />
           <StatItem label="Inbox" value={workspaceStats.inbox} />

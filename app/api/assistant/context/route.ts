@@ -3,12 +3,16 @@
 
 import { NextResponse } from "next/server"
 
-import { loadAssistantRuntimeContext } from "@/lib/assistant/context"
+import { buildFallbackAssistantContextData, loadAssistantRuntimeContext } from "@/lib/assistant/context"
 import { createSupabaseAdminClient } from "@/lib/supabase/server"
 import {
   isAuthenticationRequiredError,
   requireAuthenticatedUser,
 } from "@/lib/supabase/auth"
+import {
+  getMissingUserCalendarsTableHint,
+  isMissingUserCalendarsTableError,
+} from "@/lib/tasks-calendar"
 import { assistantContextResponseSchema } from "@/schemas/assistant"
 
 export async function GET() {
@@ -31,6 +35,16 @@ export async function GET() {
           error: "Authentication required.",
         },
         { status: 401 },
+      )
+    }
+
+    if (isMissingUserCalendarsTableError(error)) {
+      return NextResponse.json(
+        assistantContextResponseSchema.parse({
+          ok: true,
+          context: buildFallbackAssistantContextData(),
+          error: getMissingUserCalendarsTableHint(),
+        }),
       )
     }
 

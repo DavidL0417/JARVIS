@@ -21,7 +21,7 @@ import {
 import { CheckInSidebar } from "@/components/dashboard/checkin-sidebar"
 import { TaskManager } from "@/components/dashboard/task-manager"
 import { TaskSidebar } from "@/components/dashboard/task-sidebar"
-import { TASKS_CALENDAR_ID } from "@/lib/tasks-calendar"
+import { TASKS_CALENDAR_ID } from "@/lib/task-calendar-constants"
 import { X, Book } from "lucide-react"
 // ##### BACKEND API #####
 // DO NOT MODIFY UNLESS BACKEND OWNER
@@ -44,6 +44,7 @@ import type {
 
 type MobileSection = "command" | "schedule" | "status"
 type PlannerUiStatus = "Not scheduled" | "Scheduling..." | "Ready" | "Error"
+type FocusQueueTone = "neutral" | "warning" | "critical"
 
 const ScheduleView = dynamic(
   () => import("@/components/dashboard/schedule-view").then((module) => module.ScheduleView),
@@ -193,19 +194,35 @@ function getCurrentUserId(tasks: Task[], dashboardData: DashboardResponse | null
   return tasks[0]?.userId || dashboardData?.events[0]?.userId || FALLBACK_USER_ID
 }
 
-function PanelPlaceholder({
+function FocusQueueCard({
   title,
+  count,
   message,
+  tone = "neutral",
 }: {
   title: string
+  count: number
   message: string
+  tone?: FocusQueueTone
 }) {
+  const toneClasses =
+    tone === "critical"
+      ? "border-red-500/25 bg-red-500/10"
+      : tone === "warning"
+        ? "border-amber-500/25 bg-amber-500/10"
+        : "border-sky-500/25 bg-sky-500/10"
+
   return (
-    <Card className="bg-card border-border">
-      <CardHeader className="p-3 pb-1">
-        <CardTitle className="text-sm font-bold text-foreground">{title}</CardTitle>
+    <Card className={`border shadow-[0_16px_40px_rgba(0,0,0,0.18)] ${toneClasses}`}>
+      <CardHeader className="p-4 pb-2">
+        <div className="flex items-center justify-between gap-3">
+          <CardTitle className="text-sm font-bold text-foreground">{title}</CardTitle>
+          <div className="rounded-full border border-white/10 bg-black/20 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+            {count}
+          </div>
+        </div>
       </CardHeader>
-      <CardContent className="p-3 pt-2">
+      <CardContent className="p-4 pt-0">
         <p className="text-xs font-medium text-muted-foreground">{message}</p>
       </CardContent>
     </Card>
@@ -216,7 +233,6 @@ export default function DashboardPage() {
   const [rightColumnOpen, setRightColumnOpen] = useState(true)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [mobileSection, setMobileSection] = useState<MobileSection>("schedule")
-  const [isDarkMode, setIsDarkMode] = useState(false)
   const [activePanelTab, setActivePanelTab] = useState<PanelTabId>("focus")
   
   // Calendar management state
@@ -260,25 +276,16 @@ export default function DashboardPage() {
     () => pendingCheckInItems.map((item) => item.event),
     [pendingCheckInItems],
   )
+  const calendarRegistryNeedsSchema = useMemo(
+    () => calendars.some((calendar) => calendar.source === "task" && !calendar.recordId),
+    [calendars],
+  )
   
   // Get the active calendar object
   const activeCalendar = activeCalendarId 
     ? calendars.find(cal => cal.id === activeCalendarId) || null 
     : null
   const isTaskCalendarActive = activeCalendar?.id === TASKS_CALENDAR_ID
-
-  // Toggle dark/light mode
-  useEffect(() => {
-    if (isDarkMode) {
-      document.documentElement.classList.add("dark")
-    } else {
-      document.documentElement.classList.remove("dark")
-    }
-  }, [isDarkMode])
-
-  const handleToggleTheme = () => {
-    setIsDarkMode(!isDarkMode)
-  }
 
   const handleOpenCalendarsSidebar = () => {
     setCalendarsSidebarOpen(true)
@@ -620,20 +627,21 @@ export default function DashboardPage() {
 
     if (activePanelTab === "inbox") {
       return (
-        <PanelPlaceholder
-          title="Inbox"
-          message="Inbox stays placeholder for this pass while real tasks are wired into the Tasks tab."
+        <FocusQueueCard
+          title="Decision Queue"
+          count={dashboardData?.stats.unscheduled ?? 0}
+          tone={(dashboardData?.stats.unscheduled ?? 0) > 0 ? "warning" : "neutral"}
+          message={
+            (dashboardData?.stats.unscheduled ?? 0) > 0
+              ? `${dashboardData?.stats.unscheduled ?? 0} tasks still need a slot. Use Schedule or tell Master Input what changed.`
+              : "No loose tasks in the queue right now. New requests can go straight through Master Input."
+          }
         />
       )
     }
 
     if (activePanelTab === "status") {
-      return (
-        <PanelPlaceholder
-          title="Status"
-          message="Status stays placeholder in the left panel for now. The right panel continues to show the live status summary."
-        />
-      )
+      return <StatusPanel stats={dashboardData?.stats} />
     }
 
     return (
@@ -698,10 +706,8 @@ export default function DashboardPage() {
         <DashboardHeader 
           onTogglePanels={() => setRightColumnOpen((current) => !current)} 
           onToggleMobileMenu={() => setMobileMenuOpen(!mobileMenuOpen)}
-          onToggleTheme={handleToggleTheme}
           onOpenCalendars={handleOpenCalendarsSidebar}
           panelsHidden={!rightColumnOpen}
-          isDarkMode={isDarkMode}
           authControls={<AuthControls />}
         />
 
@@ -714,6 +720,12 @@ export default function DashboardPage() {
           onSelectCalendar={setActiveCalendarId}
           activeCalendarId={activeCalendarId}
         />
+
+        {calendarRegistryNeedsSchema ? (
+          <div className="mb-3 rounded-[20px] border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-xs font-medium text-amber-100">
+            Calendar registry fallback is active. The live Supabase project is missing `public.user_calendars`, so tasks and assistant flows still work, but full calendar management needs `sql/schema.sql` applied.
+          </div>
+        ) : null}
         
         {/* Mobile Navigation Menu */}
         {mobileMenuOpen && (
@@ -756,7 +768,7 @@ export default function DashboardPage() {
         )}
 
         {/* Hide Panels Toggle - Desktop only */}
-        <div className="hidden md:flex mb-3 items-center gap-3">
+        <div className="mb-3 hidden items-center gap-3 rounded-[20px] border border-white/8 bg-white/[0.03] px-3 py-2 md:flex">
           <Button
             variant="ghost"
             size="sm"
@@ -771,7 +783,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Mobile Section Navigation */}
-        <div className="flex md:hidden gap-1 mb-3 bg-secondary/50 rounded-lg p-0.5">
+        <div className="mb-3 flex gap-1 rounded-2xl border border-white/8 bg-white/[0.04] p-1 md:hidden">
           <Button
             variant="ghost"
             size="sm"

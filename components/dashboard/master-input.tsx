@@ -93,7 +93,7 @@ function MarkdownMessage({ text }: { text: string }) {
 function ThinkingBubble() {
   return (
     <div className="flex justify-start">
-      <div className="max-w-[92%] rounded-2xl border border-border bg-card px-3 py-2 text-foreground">
+      <div className="max-w-[92%] rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-2 text-foreground backdrop-blur-sm">
         <div className="flex items-center gap-2 text-xs leading-relaxed">
           <span className="font-medium">JARVIS is thinking</span>
           <span className="flex gap-1">
@@ -299,8 +299,8 @@ export function MasterInput() {
   }
 
   return (
-    <Card className="bg-card border-border flex flex-col">
-      <CardHeader className="p-3 pb-2">
+    <Card className="flex flex-col overflow-hidden border-white/10 bg-[linear-gradient(140deg,rgba(15,17,26,0.97),rgba(24,29,42,0.88))] shadow-[0_22px_50px_rgba(0,0,0,0.24)]">
+      <CardHeader className="p-4 pb-3">
         <div className="flex items-start justify-between gap-3">
           <div>
             <CardTitle className="text-sm font-bold text-foreground">Master Input</CardTitle>
@@ -308,24 +308,24 @@ export function MasterInput() {
               Secretary console. Speak naturally and I&apos;ll act on tasks, events, memory, and availability.
             </CardDescription>
           </div>
-          <div className="rounded-full border border-border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+          <div className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
             {status === "submitting" ? "Thinking" : "Ready"}
           </div>
         </div>
       </CardHeader>
-      <CardContent className="flex flex-col gap-3 p-3 pt-0">
+      <CardContent className="flex flex-col gap-3 p-4 pt-0">
         <div
           ref={transcriptRef}
-          className="h-[240px] overflow-y-auto rounded-xl border border-border bg-secondary/20"
+          className="h-[240px] overflow-y-auto rounded-2xl border border-white/10 bg-black/15"
         >
-          <div className="space-y-3 p-3">
+          <div className="space-y-3 p-4">
             {transcript.map((entry) => (
               <div key={entry.id} className={`flex ${entry.role === "user" ? "justify-end" : "justify-start"}`}>
                 <div
                   className={`max-w-[92%] rounded-2xl px-3 py-2 ${
                     entry.role === "user"
-                      ? "bg-[#3b82f6] text-white"
-                      : "border border-border bg-card text-foreground"
+                      ? "bg-gradient-to-r from-orange-300 via-rose-300 to-fuchsia-300 text-slate-950 shadow-[0_12px_30px_rgba(251,146,60,0.18)]"
+                      : "border border-white/10 bg-white/[0.04] text-foreground backdrop-blur-sm"
                   }`}
                 >
                   {entry.role === "assistant" ? (
@@ -354,7 +354,7 @@ export function MasterInput() {
           </div>
         )}
 
-        <Accordion type="multiple" className="rounded-xl border border-border px-3">
+        <Accordion type="multiple" className="rounded-2xl border border-white/10 bg-black/10 px-3">
           <AccordionItem value="availability">
             <AccordionTrigger className="py-3 text-xs font-semibold text-foreground hover:no-underline">
               Availability
@@ -367,7 +367,7 @@ export function MasterInput() {
                   </p>
                   <div className="space-y-1">
                     {availabilityLines.map((line) => (
-                      <p key={line} className="text-[11px] text-foreground">
+                      <p key={line} className="rounded-xl border border-white/8 bg-white/[0.03] px-3 py-2 text-[11px] text-foreground">
                         {line}
                       </p>
                     ))}
@@ -405,7 +405,7 @@ export function MasterInput() {
               </p>
               <div className="space-y-2">
                 {(context?.memoryEntries || []).map((entry) => (
-                  <div key={entry.id} className="rounded-lg border border-border bg-secondary/20 px-3 py-2">
+                  <div key={entry.id} className="rounded-xl border border-white/8 bg-white/[0.03] px-3 py-2">
                     <p className="text-xs text-foreground">{entry.insight}</p>
                     <p className="mt-1 text-[10px] uppercase tracking-wide text-muted-foreground">
                       {entry.category} • {new Date(entry.createdAt).toLocaleDateString()}
@@ -435,7 +435,7 @@ export function MasterInput() {
           </AccordionItem>
         </Accordion>
 
-        <div className="rounded-xl border border-border bg-secondary/20 p-2">
+        <div className="rounded-2xl border border-white/10 bg-black/15 p-3">
           <Textarea
             placeholder="Tell your secretary what changed..."
             value={message}
@@ -452,7 +452,7 @@ export function MasterInput() {
               onClick={handleSubmit}
               disabled={status === "submitting"}
               aria-label="Send secretary request"
-              className="h-8 shrink-0 bg-[#3b82f6] px-4 text-xs font-semibold text-white hover:bg-[#2563eb]"
+              className="h-8 shrink-0 bg-gradient-to-r from-orange-300 via-rose-300 to-fuchsia-300 px-4 text-xs font-semibold text-slate-950 hover:from-orange-300 hover:via-rose-300 hover:to-fuchsia-300"
             >
               {status === "submitting" ? "Thinking..." : "Send"}
             </Button>

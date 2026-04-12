@@ -2,6 +2,13 @@
 
 ## Log
 
+### 2026-04-12 08:45 CDT
+
+- Fixed the production build regression on `main`: client code was importing `TASKS_CALENDAR_*` from [`lib/tasks-calendar.ts`](./../lib/tasks-calendar.ts), which now depends on the server-only Supabase helper and pulled `next/headers` into the client bundle.
+- Moved the task-calendar constants and display helpers into new shared file [`lib/task-calendar-constants.ts`](./../lib/task-calendar-constants.ts) and rewired the affected client/shared imports to use that boundary-safe module instead.
+- Status: `pnpm exec tsc --noEmit --incremental false` passes and `pnpm build` passes again after the import split.
+- Next step: finish replacing the remaining placeholder-backed dashboard panels and decide whether Google Calendar should continue using the transitional client fetch path or move fully to server-side mirrored sync.
+
 ### 2026-04-12 03:18 CDT
 
 - Fixed a post-merge auth regression in the assistant routes: `app/api/assistant/message` and `app/api/assistant/context` had been reverted to `getOrCreateDemoUser(...)`, so secretary-created tasks/events were writing under the demo account while the dashboard read the authenticated user.

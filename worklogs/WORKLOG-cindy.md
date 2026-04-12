@@ -2,6 +2,14 @@
 
 ## Log
 
+### 2026-04-12 08:58 CDT
+
+- Removed the live dark/light toggle path and tightened the dashboard into a dark-only visual system: updated [`app/globals.css`](./../app/globals.css), [`app/page.tsx`](./../app/page.tsx), and [`components/dashboard/dashboard-header.tsx`](./../components/dashboard/dashboard-header.tsx) so the app no longer flips into a broken light palette after mount.
+- Polished the left-column surfaces and tabs in [`components/dashboard/master-input.tsx`](./../components/dashboard/master-input.tsx), [`components/dashboard/panel-tabs.tsx`](./../components/dashboard/panel-tabs.tsx), [`components/dashboard/what-to-do-now.tsx`](./../components/dashboard/what-to-do-now.tsx), [`components/dashboard/workspace-snapshot.tsx`](./../components/dashboard/workspace-snapshot.tsx), and [`components/dashboard/status-panel.tsx`](./../components/dashboard/status-panel.tsx), and replaced the old placeholder-only left-tab states with live queue/status cards.
+- Added a schema-safe calendar fallback in [`lib/tasks-calendar.ts`](./../lib/tasks-calendar.ts) and [`components/dashboard/calendars-sidebar.tsx`](./../components/dashboard/calendars-sidebar.tsx): signed-in dashboard, check-in, and master-input flows now keep working even though the live Supabase project currently returns `PGRST205` for missing `public.user_calendars`; the app now shows a non-silent banner explaining that full calendar management still needs `sql/schema.sql` applied remotely.
+- Status: `pnpm exec tsc --noEmit --incremental false` passes and `pnpm build` passes after the dark-mode removal, UI pass, and schema fallback.
+- Next step: apply [`sql/schema.sql`](./../sql/schema.sql) to the live Supabase project so the fallback banner can disappear and real per-user calendar CRUD/sync metadata can be used instead of the temporary task-calendar fallback.
+
 ### 2026-04-11 23:31 America/Chicago
 
 - Added a visible all-day lane to `components/dashboard/schedule-view.tsx` so DB-backed `allDay` events render above the timed grid instead of disappearing.

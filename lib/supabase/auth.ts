@@ -5,7 +5,11 @@ import type { User as SupabaseAuthUser } from "@supabase/supabase-js"
 
 import { mapUserRowToUserProfile } from "@/lib/data/mappers"
 import { createSupabaseAdminClient, createSupabaseServerClient } from "@/lib/supabase/server"
-import { ensureTaskCalendarForUser } from "@/lib/tasks-calendar"
+import {
+  ensureTaskCalendarForUser,
+  getMissingUserCalendarsTableHint,
+  isMissingUserCalendarsTableError,
+} from "@/lib/tasks-calendar"
 import type { UserProfile, UserRow } from "@/types"
 
 const FALLBACK_PROFILE_NAME = "JARVIS User"
@@ -91,7 +95,15 @@ export async function getOrCreateUserProfile(
   }
 
   const profile = mapUserRowToUserProfile(data)
-  await ensureTaskCalendarForUser(profile.id)
+  try {
+    await ensureTaskCalendarForUser(profile.id)
+  } catch (error) {
+    if (isMissingUserCalendarsTableError(error)) {
+      console.warn(getMissingUserCalendarsTableHint())
+    } else {
+      console.warn("Task calendar bootstrap failed during auth profile load.", error)
+    }
+  }
 
   return profile
 }

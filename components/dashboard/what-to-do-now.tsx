@@ -54,24 +54,26 @@ export function WhatToDoNow({ currentTask }: WhatToDoNowProps) {
   }
 
   return (
-    <Card className="bg-card border-border">
-      <CardHeader className="p-3 pb-1">
+    <Card className="overflow-hidden border-white/10 bg-[linear-gradient(140deg,rgba(35,20,18,0.92),rgba(61,33,47,0.78))] shadow-[0_18px_44px_rgba(0,0,0,0.18)]">
+      <CardHeader className="p-4 pb-2">
         <div className="flex items-center gap-2">
-          <div className="w-2 h-2 rounded-full bg-[#3b82f6]" />
+          <div className="w-2 h-2 rounded-full bg-orange-300 shadow-[0_0_14px_rgba(253,186,116,0.7)]" />
           <CardTitle className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
             What to do now
           </CardTitle>
         </div>
       </CardHeader>
-      <CardContent className="p-3 pt-2 space-y-2">
-        <p className="text-sm font-bold text-foreground">{task.title}</p>
+      <CardContent className="space-y-2 p-4 pt-0">
+        <p className="text-base font-bold text-foreground">{task.title}</p>
         <p className="text-xs text-muted-foreground font-medium">{task.subtitle}</p>
-        <p className="text-xs text-muted-foreground font-medium">{task.status}</p>
+        <p className="inline-flex rounded-full border border-white/10 bg-black/15 px-2 py-1 text-[11px] text-muted-foreground font-medium">
+          {task.status}
+        </p>
         <div className="flex gap-2 pt-1">
           <Button 
             size="sm" 
             onClick={handleDone}
-            className="bg-[#3b82f6] hover:bg-[#2563eb] text-white text-xs h-7 px-3 font-semibold"
+            className="h-8 bg-gradient-to-r from-orange-300 via-rose-300 to-fuchsia-300 px-3 text-xs font-semibold text-slate-950 hover:from-orange-300 hover:via-rose-300 hover:to-fuchsia-300"
           >
             Done
           </Button>
@@ -79,7 +81,7 @@ export function WhatToDoNow({ currentTask }: WhatToDoNowProps) {
             size="sm" 
             variant="outline" 
             onClick={handleSomethingElse}
-            className="border-border text-foreground hover:bg-secondary text-xs h-7 px-3 font-semibold"
+            className="h-8 border-white/10 bg-white/[0.03] px-3 text-xs font-semibold text-foreground hover:bg-white/[0.07]"
           >
             Something else
           </Button>

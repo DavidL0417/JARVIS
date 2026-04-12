@@ -8,7 +8,12 @@ import {
   isAuthenticationRequiredError,
   requireAuthenticatedUser,
 } from "@/lib/supabase/auth"
-import { ensureTaskCalendarForUser, listUserCalendars } from "@/lib/tasks-calendar"
+import {
+  ensureTaskCalendarForUser,
+  getMissingUserCalendarsTableHint,
+  isMissingUserCalendarsTableError,
+  listUserCalendars,
+} from "@/lib/tasks-calendar"
 import {
   calendarListResponseSchema,
   calendarMutationResponseSchema,
@@ -48,7 +53,15 @@ async function hasDuplicateManagedCalendarName(
 export async function GET() {
   try {
     const { user } = await requireAuthenticatedUser()
-    await ensureTaskCalendarForUser(user.id)
+    try {
+      await ensureTaskCalendarForUser(user.id)
+    } catch (error) {
+      if (isMissingUserCalendarsTableError(error)) {
+        console.warn(getMissingUserCalendarsTableHint())
+      } else {
+        throw error
+      }
+    }
     const calendars = await listUserCalendars(user.id)
 
     const payload: CalendarListResponse = {

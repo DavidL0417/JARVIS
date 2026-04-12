@@ -13,14 +13,14 @@ export async function getDashboardData(): Promise<DashboardResponse | null> {
     }
 
     if (!response.ok) {
-      console.error(`Dashboard request failed with status ${response.status}`)
+      console.warn(`Dashboard request failed with status ${response.status}`)
       return null
     }
 
     const data: DashboardResponse = await response.json()
     return data
   } catch (error) {
-    console.error("Failed to load dashboard data", error)
+    console.warn("Failed to load dashboard data", error)
     return null
   }
 }

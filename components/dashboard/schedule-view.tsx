@@ -16,7 +16,7 @@ import {
   buildTaskReminderDescription,
   getTaskDueTimeLabel,
   TASKS_CALENDAR_ID,
-} from "@/lib/tasks-calendar"
+} from "@/lib/task-calendar-constants"
 import type { ScheduleEvent, Task } from "@/types"
 import type { Calendar } from "./calendars-sidebar"
 

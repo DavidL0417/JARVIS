@@ -2,7 +2,7 @@ import {
   TASKS_CALENDAR_COLOR,
   TASKS_CALENDAR_ID,
   TASKS_CALENDAR_NAME,
-} from "@/lib/tasks-calendar"
+} from "@/lib/task-calendar-constants"
 
 export type AppCalendarSource = "local" | "google" | "imported" | "task"
 

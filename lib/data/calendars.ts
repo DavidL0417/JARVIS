@@ -12,14 +12,14 @@ export async function getCalendarsData(): Promise<CalendarListResponse["calendar
     }
 
     if (!response.ok) {
-      console.error(`Calendars request failed with status ${response.status}`)
+      console.warn(`Calendars request failed with status ${response.status}`)
       return null
     }
 
     const data = (await response.json()) as CalendarListResponse
     return data.calendars
   } catch (error) {
-    console.error("Failed to load calendars", error)
+    console.warn("Failed to load calendars", error)
     return null
   }
 }

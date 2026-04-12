@@ -48,11 +48,11 @@ export function StatusPanel({ stats }: StatusPanelProps) {
 
   return (
     <div className="space-y-3">
-      <Card className="border-rose-200/70 bg-rose-100/40 shadow-sm dark:border-rose-900/60 dark:bg-rose-950/30">
-        <CardHeader className="p-3 pb-1">
+      <Card className="border-white/10 bg-[linear-gradient(140deg,rgba(35,19,30,0.92),rgba(47,24,57,0.78))] shadow-[0_18px_44px_rgba(0,0,0,0.18)]">
+        <CardHeader className="p-4 pb-2">
           <CardTitle className="text-sm font-bold text-foreground">Status</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-3 p-3 pt-2">
+        <CardContent className="space-y-3 p-4 pt-0">
           {status ? (
             <>
               <div className="grid grid-cols-2 gap-3">
@@ -70,22 +70,22 @@ export function StatusPanel({ stats }: StatusPanelProps) {
         </CardContent>
       </Card>
 
-      <Card className="border-amber-200/70 bg-amber-100/40 shadow-sm dark:border-amber-900/60 dark:bg-amber-950/30">
-        <CardHeader className="p-3 pb-1">
+      <Card className="border-white/10 bg-[linear-gradient(140deg,rgba(41,29,19,0.92),rgba(59,41,21,0.78))] shadow-[0_18px_44px_rgba(0,0,0,0.18)]">
+        <CardHeader className="p-4 pb-2">
           <CardTitle className="text-sm font-bold text-foreground">Overdue</CardTitle>
         </CardHeader>
-        <CardContent className="p-3 pt-2">
+        <CardContent className="p-4 pt-0">
           <p className="text-xs font-medium text-muted-foreground">
             {status?.overdueMessage ?? "No overdue tasks."}
           </p>
         </CardContent>
       </Card>
 
-      <Card className="border-sky-200/70 bg-sky-100/40 shadow-sm dark:border-sky-900/60 dark:bg-sky-950/30">
-        <CardHeader className="p-3 pb-1">
+      <Card className="border-white/10 bg-[linear-gradient(140deg,rgba(20,29,41,0.92),rgba(24,44,63,0.78))] shadow-[0_18px_44px_rgba(0,0,0,0.18)]">
+        <CardHeader className="p-4 pb-2">
           <CardTitle className="text-sm font-bold text-foreground">Scheduling</CardTitle>
         </CardHeader>
-        <CardContent className="p-3 pt-2">
+        <CardContent className="p-4 pt-0">
           <p className="text-xs font-medium text-muted-foreground">
             {status?.unscheduledMessage ?? "Scheduling insights will appear here once tasks load."}
           </p>

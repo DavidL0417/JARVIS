@@ -145,7 +145,7 @@ export function CheckInSidebar({
               All tasks and events checked-in!
             </p>
             <p className="mt-1 text-xs font-medium text-muted-foreground">
-              Go Lock in now!
+              Go lock in now 💪
             </p>
           </div>
         ) : (

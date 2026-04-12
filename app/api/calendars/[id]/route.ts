@@ -9,7 +9,7 @@ import {
   isAuthenticationRequiredError,
   requireAuthenticatedUser,
 } from "@/lib/supabase/auth"
-import { TASKS_CALENDAR_ID } from "@/lib/tasks-calendar"
+import { TASKS_CALENDAR_ID } from "@/lib/task-calendar-constants"
 import {
   calendarMutationResponseSchema,
   updateCalendarRequestSchema,

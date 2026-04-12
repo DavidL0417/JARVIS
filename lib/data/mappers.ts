@@ -29,7 +29,7 @@ import type {
   UserPreferencesUpsertRow,
   UserRow,
 } from "@/types"
-import { TASKS_CALENDAR_ID } from "@/lib/tasks-calendar"
+import { TASKS_CALENDAR_ID } from "@/lib/task-calendar-constants"
 
 function normalizeNullableText(value: string | null | undefined): string | null {
   if (!value) {

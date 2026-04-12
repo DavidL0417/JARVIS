@@ -2,19 +2,20 @@
 // DO NOT MODIFY UNLESS BACKEND OWNER
 
 import { createSupabaseAdminClient } from "@/lib/supabase/server"
+import {
+  buildTaskReminderDescription,
+  getTaskDueTimeLabel,
+  isTaskCalendarKey,
+  TASKS_CALENDAR_COLOR,
+  TASKS_CALENDAR_ID,
+  TASKS_CALENDAR_MEMORY,
+  TASKS_CALENDAR_NAME,
+} from "@/lib/task-calendar-constants"
 import type { Task, UserCalendar, UserCalendarRow } from "@/types"
 
-export const TASKS_CALENDAR_ID = "cal-tasks"
-export const TASKS_CALENDAR_NAME = "Task Calendar"
-export const TASKS_CALENDAR_COLOR = "#f9a8d4"
 const GOOGLE_API_TIMEOUT_MS = 15_000
-
-export const TASKS_CALENDAR_MEMORY = [
-  "# Tasks Calendar Rule",
-  `- All tasks are stored in the ${TASKS_CALENDAR_NAME}.`,
-  `- Use calendar id \`${TASKS_CALENDAR_ID}\` for tasks.`,
-  "- Do not assign tasks to personal, work, class, or other event calendars.",
-].join("\n")
+const MISSING_USER_CALENDARS_TABLE_HINT =
+  "Calendar registry is unavailable because public.user_calendars has not been applied in Supabase yet."
 
 type StoredGoogleIntegrationRow = {
   access_token: string | null
@@ -51,6 +52,25 @@ function buildTaskCalendarRow(userId: string) {
   }
 }
 
+function buildFallbackTaskCalendar(userId: string): UserCalendar {
+  return {
+    id: "fallback-task-calendar",
+    userId,
+    calendarKey: TASKS_CALENDAR_ID,
+    name: TASKS_CALENDAR_NAME,
+    color: TASKS_CALENDAR_COLOR,
+    source: "task",
+    googleCalendarId: null,
+    remoteName: null,
+    isVisible: true,
+    isImmutable: false,
+    syncPreference: "active",
+    isTaskCalendar: true,
+    createdAt: new Date(0).toISOString(),
+    updatedAt: new Date(0).toISOString(),
+  }
+}
+
 function mapStoredUserCalendarRow(row: UserCalendarRow): UserCalendar {
   return {
     id: row.id,
@@ -68,6 +88,19 @@ function mapStoredUserCalendarRow(row: UserCalendarRow): UserCalendar {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }
+}
+
+export function isMissingUserCalendarsTableError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error)
+
+  return (
+    message.includes("public.user_calendars") &&
+    (message.includes("schema cache") || message.includes("does not exist"))
+  )
+}
+
+export function getMissingUserCalendarsTableHint() {
+  return MISSING_USER_CALENDARS_TABLE_HINT
 }
 
 async function fetchWithTimeout(
@@ -272,6 +305,11 @@ export async function ensureTaskCalendarForUser(userId: string) {
     .single<UserCalendarRow>()
 
   if (error || !data) {
+    if (isMissingUserCalendarsTableError(error)) {
+      console.warn(MISSING_USER_CALENDARS_TABLE_HINT)
+      return buildFallbackTaskCalendar(userId)
+    }
+
     throw new Error(error?.message ?? "Failed to initialize the Task Calendar.")
   }
 
@@ -297,51 +335,17 @@ export async function listUserCalendars(userId: string) {
     .order("name", { ascending: true })
 
   if (error) {
+    if (isMissingUserCalendarsTableError(error)) {
+      console.warn(MISSING_USER_CALENDARS_TABLE_HINT)
+      return [buildFallbackTaskCalendar(userId)]
+    }
+
     throw new Error(error.message)
   }
 
   return (data ?? []).map(mapStoredUserCalendarRow)
 }
 
-export function isTaskCalendarKey(calendarId: string | null | undefined) {
-  return calendarId === TASKS_CALENDAR_ID
-}
-
-function formatDeadlineTime(deadline: string | null) {
-  if (!deadline) {
-    return "No due time set"
-  }
-
-  return new Date(deadline).toLocaleString([], {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  })
-}
-
-function getTaskProgressLabel(task: Pick<Task, "status">) {
-  if (task.status === "completed") {
-    return "100% complete"
-  }
-
-  if (task.status === "scheduled") {
-    return "In progress"
-  }
-
-  if (task.status === "missed") {
-    return "Missed"
-  }
-
-  return "0% complete"
-}
-
-export function buildTaskReminderDescription(task: Pick<Task, "deadline" | "priority" | "status">) {
-  return `Due ${formatDeadlineTime(task.deadline)} · ${getTaskProgressLabel(task)} · ${task.priority} priority`
-}
-
-export function getTaskDueTimeLabel(task: Pick<Task, "deadline">) {
-  return formatDeadlineTime(task.deadline)
-}
+export { buildTaskReminderDescription, getTaskDueTimeLabel, isTaskCalendarKey }
 
 // ##### END BACKEND #####

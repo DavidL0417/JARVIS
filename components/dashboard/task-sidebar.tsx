@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input"
 import { Loader2, Pencil, Plus, Save, Trash2, X } from "lucide-react"
 
 import { getTaskScheduleActionLabel } from "@/lib/task-schedule-state"
-import { TASKS_CALENDAR_ID, TASKS_CALENDAR_NAME } from "@/lib/tasks-calendar"
+import { TASKS_CALENDAR_ID, TASKS_CALENDAR_NAME } from "@/lib/task-calendar-constants"
 import type { CreateTaskRequest, ScheduleEvent, Task, UpdateTaskRequest } from "@/types"
 
 interface TaskSidebarProps {

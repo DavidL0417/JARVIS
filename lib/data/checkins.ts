@@ -12,14 +12,14 @@ export async function getPendingCheckInApprovals() {
     }
 
     if (!response.ok) {
-      console.error(`Check-in approval request failed with status ${response.status}`)
+      console.warn(`Check-in approval request failed with status ${response.status}`)
       return null
     }
 
     const data = (await response.json()) as CheckInApprovalListResponse
     return data.items
   } catch (error) {
-    console.error("Failed to load check-in approvals", error)
+    console.warn("Failed to load check-in approvals", error)
     return null
   }
 }
