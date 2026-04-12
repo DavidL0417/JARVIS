@@ -13,7 +13,7 @@ export const checkInEnergySchema = z.enum(["low", "medium", "high"])
 
 const hhmmPattern = /^([01]\d|2[0-3]):([0-5]\d)$/
 const tagSchema = z.string().trim().min(1)
-
+//hi
 // App-facing schemas mirror camelCase shared models. Raw Supabase rows stay in `types/index.ts`.
 export const userPreferencesSchema = z.object({
   userId: z.string().uuid(),
