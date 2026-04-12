@@ -2,6 +2,13 @@
 
 ## Log
 
+### 2026-04-12 02:34 CDT
+
+- Added an authenticated preferences backend path at `app/api/preferences/route.ts` so user settings can now be read and upserted through the app’s Supabase auth context instead of manual SQL editor writes.
+- Added shared `UpdatePreferencesRequest` / `PreferencesResponse` contracts plus `schemas/preferences.ts`, and the route initializes a default per-user preferences row on first read if one does not exist yet.
+- Status: `pnpm exec tsc --noEmit --incremental false` passes and preferences storage is now properly keyed off the signed-in user id.
+- Next step: wire the frontend onboarding/settings UI to `GET`/`PUT /api/preferences` so user preference changes flow through the authenticated backend automatically.
+
 ### 2026-04-12 01:34 CDT
 
 - Replaced the demo-user backend path with real Supabase Auth profile resolution: protected routes now require a valid session, create/reuse `public.users` from the authenticated auth user, and scope all task/dashboard/onboarding/schedule/assistant writes by that real user id.

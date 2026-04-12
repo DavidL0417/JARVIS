@@ -323,6 +323,25 @@ export interface OnboardingResponse {
   taskCount: number
 }
 
+export interface UpdatePreferencesRequest {
+  timezone?: string
+  sleepPattern?: string | null
+  peakEnergyWindow?: string | null
+  procrastinationPattern?: string | null
+  workdayStart?: string
+  workdayEnd?: string
+  defaultTaskDurationMinutes?: number
+  breakDurationMinutes?: number
+  preferredFocusBlockMinutes?: number | null
+  preferredCheckInMode?: PreferredCheckInMode
+  calendarId?: string | null
+}
+
+export interface PreferencesResponse {
+  success: true
+  preferences: UserPreferences
+}
+
 export interface ScheduleEventInput {
   id: string
   title: string
