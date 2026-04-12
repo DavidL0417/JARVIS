@@ -111,6 +111,7 @@ export async function GET() {
       },
       currentTask: pickCurrentTask(tasks),
       events,
+      tasks,
     }
 
     const parsedPayload = dashboardResponseSchema.safeParse(dashboardPayload)

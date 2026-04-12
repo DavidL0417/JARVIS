@@ -3,19 +3,30 @@
 import { useEffect, useMemo, useState } from "react"
 import dynamic from "next/dynamic"
 import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { DashboardHeader } from "@/components/dashboard/dashboard-header"
 import { WorkspaceSnapshot } from "@/components/dashboard/workspace-snapshot"
-import { PanelTabs } from "@/components/dashboard/panel-tabs"
+import { PanelTabs, type PanelTabId } from "@/components/dashboard/panel-tabs"
 import { MasterInput } from "@/components/dashboard/master-input"
 import { WhatToDoNow } from "@/components/dashboard/what-to-do-now"
 import { StatusPanel } from "@/components/dashboard/status-panel"
 import { CalendarsSidebar, initialCalendars, type Calendar } from "@/components/dashboard/calendars-sidebar"
-import { TaskManager, initialTasks, type Task } from "@/components/dashboard/task-manager"
+import { TaskManager } from "@/components/dashboard/task-manager"
 import { X, Book } from "lucide-react"
 // ##### BACKEND API #####
 // DO NOT MODIFY UNLESS BACKEND OWNER
 import { getDashboardData } from "@/lib/data/dashboard"
-import type { DashboardResponse, ScheduleEvent, ScheduleEventInput, ScheduleResponse } from "@/types"
+import type {
+  CreateTaskRequest,
+  DashboardResponse,
+  DeleteTaskResponse,
+  ScheduleEvent,
+  ScheduleEventInput,
+  ScheduleResponse,
+  Task,
+  TaskMutationResponse,
+  UpdateTaskRequest,
+} from "@/types"
 // ##### END BACKEND #####
 
 type MobileSection = "command" | "schedule" | "status"
@@ -37,6 +48,7 @@ const CALENDAR_DEFAULTS: Record<string, { name: string; color: string; source: C
 }
 
 const DEFAULT_BACKEND_CALENDAR_ID = "calendar-main"
+const FALLBACK_USER_ID = "00000000-0000-4000-8000-000000000000"
 
 function getDisplayCalendarId(calendarId: string | null | undefined) {
   return calendarId || DEFAULT_BACKEND_CALENDAR_ID
@@ -104,7 +116,7 @@ function toScheduleEventInput(event: ScheduleEvent): ScheduleEventInput {
   }
 }
 
-function getScheduleErrorMessage(payload: unknown, fallback: string) {
+function getApiErrorMessage(payload: unknown, fallback: string) {
   if (payload && typeof payload === "object") {
     const details = "details" in payload && typeof payload.details === "string" ? payload.details : null
     const error = "error" in payload && typeof payload.error === "string" ? payload.error : null
@@ -121,11 +133,105 @@ function getScheduleErrorMessage(payload: unknown, fallback: string) {
   return fallback
 }
 
+function buildOptimisticTask(userId: string, input: CreateTaskRequest): Task {
+  return {
+    id: crypto.randomUUID(),
+    userId,
+    title: input.title,
+    description: input.description ?? null,
+    deadline: input.deadline ?? null,
+    durationMinutes: input.durationMinutes ?? null,
+    priority: input.priority ?? "medium",
+    status: input.status ?? "todo",
+    scheduledFor: input.scheduledFor ?? null,
+    isImmutable: input.isImmutable ?? false,
+    calendarId: input.calendarId ?? null,
+    tags: input.tags ?? [],
+  }
+}
+
+function mergeTaskUpdate(task: Task, update: UpdateTaskRequest): Task {
+  return {
+    ...task,
+    title: update.title ?? task.title,
+    description: update.description !== undefined ? update.description : task.description,
+    deadline: update.deadline !== undefined ? update.deadline : task.deadline,
+    durationMinutes:
+      update.durationMinutes !== undefined ? update.durationMinutes : task.durationMinutes,
+    priority: update.priority ?? task.priority,
+    status: update.status ?? task.status,
+    scheduledFor:
+      update.scheduledFor !== undefined
+        ? update.scheduledFor
+        : update.status === "completed"
+          ? null
+          : task.scheduledFor,
+    isImmutable: update.isImmutable ?? task.isImmutable,
+    calendarId: update.calendarId !== undefined ? update.calendarId : task.calendarId,
+    tags: update.tags ?? task.tags,
+  }
+}
+
+function applyScheduleToTasks(tasks: Task[], schedule: ScheduleResponse["schedule"]): Task[] {
+  const plannedTaskEvents = new Map(
+    schedule.proposedEvents
+      .filter((event) => event.source === "task" && event.taskId)
+      .map((event) => [event.taskId as string, event]),
+  )
+  const unscheduledTaskIds = new Set(schedule.unscheduledTaskIds)
+
+  return tasks.map((task): Task => {
+    const plannedEvent = plannedTaskEvents.get(task.id)
+
+    if (plannedEvent) {
+      return {
+        ...task,
+        status: "scheduled",
+        scheduledFor: plannedEvent.start,
+      }
+    }
+
+    if (unscheduledTaskIds.has(task.id) && task.status !== "completed" && task.status !== "missed") {
+      return {
+        ...task,
+        status: "todo",
+        scheduledFor: null,
+      }
+    }
+
+    return task
+  })
+}
+
+function getCurrentUserId(tasks: Task[], dashboardData: DashboardResponse | null) {
+  return tasks[0]?.userId || dashboardData?.events[0]?.userId || FALLBACK_USER_ID
+}
+
+function PanelPlaceholder({
+  title,
+  message,
+}: {
+  title: string
+  message: string
+}) {
+  return (
+    <Card className="bg-card border-border">
+      <CardHeader className="p-3 pb-1">
+        <CardTitle className="text-sm font-bold text-foreground">{title}</CardTitle>
+      </CardHeader>
+      <CardContent className="p-3 pt-2">
+        <p className="text-xs font-medium text-muted-foreground">{message}</p>
+      </CardContent>
+    </Card>
+  )
+}
+
 export default function DashboardPage() {
   const [panelsHidden, setPanelsHidden] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [mobileSection, setMobileSection] = useState<MobileSection>("schedule")
   const [isDarkMode, setIsDarkMode] = useState(true)
+  const [activePanelTab, setActivePanelTab] = useState<PanelTabId>("focus")
   
   // Calendar management state
   const [calendarsSidebarOpen, setCalendarsSidebarOpen] = useState(false)
@@ -133,7 +239,8 @@ export default function DashboardPage() {
   const [activeCalendarId, setActiveCalendarId] = useState<string | null>(null)
   
   // Task management state
-  const [tasks, setTasks] = useState<Task[]>(initialTasks)
+  const [tasks, setTasks] = useState<Task[]>([])
+  const [taskErrorMessage, setTaskErrorMessage] = useState("")
 
   // ##### BACKEND API #####
   // DO NOT MODIFY UNLESS BACKEND OWNER
@@ -192,6 +299,7 @@ export default function DashboardPage() {
 
       console.log("Loaded dashboard data", data)
       setDashboardData(data)
+      setTasks(data.tasks)
     }
 
     loadDashboard()
@@ -206,6 +314,21 @@ export default function DashboardPage() {
       const knownCalendarIds = new Set(currentCalendars.map((calendar) => calendar.id))
       const nextCalendars = [...currentCalendars]
 
+      for (const task of tasks) {
+        if (!task.calendarId) {
+          continue
+        }
+
+        const displayCalendarId = getDisplayCalendarId(task.calendarId)
+
+        if (knownCalendarIds.has(displayCalendarId)) {
+          continue
+        }
+
+        nextCalendars.push(createCalendarFromId(displayCalendarId))
+        knownCalendarIds.add(displayCalendarId)
+      }
+
       for (const event of mergedScheduleEvents) {
         const displayCalendarId = getDisplayCalendarId(event.calendarId)
 
@@ -219,7 +342,144 @@ export default function DashboardPage() {
 
       return nextCalendars.length === currentCalendars.length ? currentCalendars : nextCalendars
     })
-  }, [mergedScheduleEvents])
+  }, [mergedScheduleEvents, tasks])
+
+  const clearTaskError = () => {
+    setTaskErrorMessage("")
+  }
+
+  const handleCreateTask = async (input: CreateTaskRequest) => {
+    clearTaskError()
+
+    const optimisticTask = buildOptimisticTask(getCurrentUserId(tasks, dashboardData), input)
+    const previousTasks = tasks
+
+    setTasks((current) => [...current, optimisticTask])
+
+    try {
+      const response = await fetch("/api/tasks", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(input),
+      })
+      const payload = await response.json().catch(() => null)
+
+      if (!response.ok || !payload) {
+        throw new Error(getApiErrorMessage(payload, "Failed to create task."))
+      }
+
+      const taskResponse = payload as TaskMutationResponse
+
+      setTasks((current) =>
+        current.map((task) => (task.id === optimisticTask.id ? taskResponse.task : task)),
+      )
+    } catch (error) {
+      setTasks(previousTasks)
+      setTaskErrorMessage(error instanceof Error ? error.message : "Failed to create task.")
+    }
+  }
+
+  const handleUpdateTask = async (taskId: string, input: UpdateTaskRequest) => {
+    const existingTask = tasks.find((task) => task.id === taskId)
+
+    if (!existingTask) {
+      return
+    }
+
+    clearTaskError()
+
+    const previousTasks = tasks
+    const previousOverlayEvents = scheduledOverlayEvents
+    const optimisticTask = mergeTaskUpdate(existingTask, input)
+
+    setTasks((current) =>
+      current.map((task) => (task.id === taskId ? optimisticTask : task)),
+    )
+    setScheduledOverlayEvents((current) => {
+      if (optimisticTask.status === "completed") {
+        return current.filter((event) => event.taskId !== taskId)
+      }
+
+      return current.map((event) =>
+        event.taskId === taskId
+          ? {
+              ...event,
+              title: optimisticTask.title,
+            }
+          : event,
+      )
+    })
+
+    try {
+      const response = await fetch(`/api/tasks/${taskId}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(input),
+      })
+      const payload = await response.json().catch(() => null)
+
+      if (!response.ok || !payload) {
+        throw new Error(getApiErrorMessage(payload, "Failed to update task."))
+      }
+
+      const taskResponse = payload as TaskMutationResponse
+
+      setTasks((current) =>
+        current.map((task) => (task.id === taskId ? taskResponse.task : task)),
+      )
+      setScheduledOverlayEvents((current) => {
+        if (taskResponse.task.status === "completed") {
+          return current.filter((event) => event.taskId !== taskId)
+        }
+
+        return current.map((event) =>
+          event.taskId === taskId
+            ? {
+                ...event,
+                title: taskResponse.task.title,
+              }
+            : event,
+        )
+      })
+    } catch (error) {
+      setTasks(previousTasks)
+      setScheduledOverlayEvents(previousOverlayEvents)
+      setTaskErrorMessage(error instanceof Error ? error.message : "Failed to update task.")
+    }
+  }
+
+  const handleDeleteTask = async (taskId: string) => {
+    clearTaskError()
+
+    const previousTasks = tasks
+    const previousOverlayEvents = scheduledOverlayEvents
+
+    setTasks((current) => current.filter((task) => task.id !== taskId))
+    setScheduledOverlayEvents((current) => current.filter((event) => event.taskId !== taskId))
+
+    try {
+      const response = await fetch(`/api/tasks/${taskId}`, {
+        method: "DELETE",
+      })
+      const payload = await response.json().catch(() => null)
+
+      if (!response.ok || !payload) {
+        throw new Error(getApiErrorMessage(payload, "Failed to delete task."))
+      }
+
+      const deleteResponse = payload as DeleteTaskResponse
+
+      setTasks((current) => current.filter((task) => task.id !== deleteResponse.id))
+    } catch (error) {
+      setTasks(previousTasks)
+      setScheduledOverlayEvents(previousOverlayEvents)
+      setTaskErrorMessage(error instanceof Error ? error.message : "Failed to delete task.")
+    }
+  }
 
   const handleSchedule = async () => {
     if (isScheduling || !dashboardData) {
@@ -249,12 +509,13 @@ export default function DashboardPage() {
       const payload = await response.json().catch(() => null)
 
       if (!response.ok || !payload) {
-        throw new Error(getScheduleErrorMessage(payload, "Scheduling failed."))
+        throw new Error(getApiErrorMessage(payload, "Scheduling failed."))
       }
 
       const scheduleResponse = payload as ScheduleResponse
 
       setScheduledOverlayEvents(scheduleResponse.schedule.proposedEvents)
+      setTasks((current) => applyScheduleToTasks(current, scheduleResponse.schedule))
       setPlannerStatus(scheduleResponse.schedule.plannerStatus === "ready" ? "Ready" : "Not scheduled")
       setPlannerSummary(scheduleResponse.schedule.summary)
     } catch (error) {
@@ -265,6 +526,48 @@ export default function DashboardPage() {
     }
   }
   // ##### END BACKEND #####
+
+  const renderLeftPanelContent = () => {
+    if (activePanelTab === "tasks") {
+      return (
+        <TaskManager
+          mode="all"
+          calendars={calendars}
+          tasks={tasks}
+          errorMessage={taskErrorMessage}
+          onClearError={clearTaskError}
+          onCreateTask={handleCreateTask}
+          onUpdateTask={handleUpdateTask}
+          onDeleteTask={handleDeleteTask}
+        />
+      )
+    }
+
+    if (activePanelTab === "inbox") {
+      return (
+        <PanelPlaceholder
+          title="Inbox"
+          message="Inbox stays placeholder for this pass while real tasks are wired into the Tasks tab."
+        />
+      )
+    }
+
+    if (activePanelTab === "status") {
+      return (
+        <PanelPlaceholder
+          title="Status"
+          message="Status stays placeholder in the left panel for now. The right panel continues to show the live status summary."
+        />
+      )
+    }
+
+    return (
+      <>
+        <MasterInput />
+        <WhatToDoNow currentTask={dashboardData?.currentTask} />
+      </>
+    )
+  }
 
   return (
     <div className={`h-screen overflow-hidden text-foreground p-3 md:p-4 ${isDarkMode ? "bg-[#0a0a0a]" : "bg-gray-50"}`}>
@@ -380,9 +683,8 @@ export default function DashboardPage() {
           {mobileSection === "command" && (
             <div className="flex flex-col gap-3 h-full overflow-auto">
               <WorkspaceSnapshot stats={dashboardData?.stats} />
-              <PanelTabs />
-              <MasterInput />
-              <WhatToDoNow currentTask={dashboardData?.currentTask} />
+              <PanelTabs activeTab={activePanelTab} onTabChange={setActivePanelTab} />
+              {renderLeftPanelContent()}
             </div>
           )}
           {mobileSection === "schedule" && (
@@ -403,9 +705,15 @@ export default function DashboardPage() {
             <div>
               {activeCalendar ? (
                 <TaskManager 
+                  mode="calendar"
                   calendar={activeCalendar}
+                  calendars={calendars}
                   tasks={tasks}
-                  onTasksChange={setTasks}
+                  errorMessage={taskErrorMessage}
+                  onClearError={clearTaskError}
+                  onCreateTask={handleCreateTask}
+                  onUpdateTask={handleUpdateTask}
+                  onDeleteTask={handleDeleteTask}
                 />
               ) : (
                 <StatusPanel stats={dashboardData?.stats} />
@@ -420,9 +728,8 @@ export default function DashboardPage() {
           {!panelsHidden && (
             <div className="flex flex-col gap-3 overflow-auto">
               <WorkspaceSnapshot stats={dashboardData?.stats} />
-              <PanelTabs />
-              <MasterInput />
-              <WhatToDoNow currentTask={dashboardData?.currentTask} />
+              <PanelTabs activeTab={activePanelTab} onTabChange={setActivePanelTab} />
+              {renderLeftPanelContent()}
             </div>
           )}
 
@@ -445,9 +752,15 @@ export default function DashboardPage() {
             <div className="overflow-auto">
               {activeCalendar ? (
                 <TaskManager 
+                  mode="calendar"
                   calendar={activeCalendar}
+                  calendars={calendars}
                   tasks={tasks}
-                  onTasksChange={setTasks}
+                  errorMessage={taskErrorMessage}
+                  onClearError={clearTaskError}
+                  onCreateTask={handleCreateTask}
+                  onUpdateTask={handleUpdateTask}
+                  onDeleteTask={handleDeleteTask}
                 />
               ) : (
                 <StatusPanel stats={dashboardData?.stats} />

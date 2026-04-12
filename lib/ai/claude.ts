@@ -421,7 +421,7 @@ function materializeTaskPlacements(
       location: null,
       externalEventId: null,
       isImmutable: task.isImmutable,
-      calendarId: task.calendarId ?? DEFAULT_TASKS_CALENDAR_ID,
+      calendarId: DEFAULT_TASKS_CALENDAR_ID,
     }
   })
 }
@@ -576,7 +576,7 @@ function taskToFixedEvent(
     location: null,
     externalEventId: null,
     isImmutable: true,
-    calendarId: task.calendarId ?? DEFAULT_TASKS_CALENDAR_ID,
+    calendarId: DEFAULT_TASKS_CALENDAR_ID,
   }
 }
 
