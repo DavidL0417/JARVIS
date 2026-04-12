@@ -3,22 +3,12 @@
 
 import { NextResponse } from "next/server"
 
-import { parseAssistantMessage } from "@/lib/ai/claude-parser"
-import { handleParsedInput } from "@/lib/assistant/handleParsedInput"
-import {
-  assistantMessageRequestSchema,
-  assistantMessageResponseSchema,
-  createFallbackParsedAssistantInput,
-} from "@/lib/ai/parser-schema"
-import {
-  isAuthenticationRequiredError,
-  requireAuthenticatedUser,
-} from "@/lib/supabase/auth"
-import { getCurrentDayContext } from "@/lib/time/current-day"
+import { buildFallbackAssistantContextData } from "@/lib/assistant/context"
+import { runSecretaryTurn } from "@/lib/assistant/secretary"
+import { getOrCreateDemoUser } from "@/lib/supabase/demo-user"
+import { createSupabaseAdminClient } from "@/lib/supabase/server"
+import { assistantMessageRequestSchema, assistantMessageResponseSchema } from "@/schemas/assistant"
 
-const IS_DEV = process.env.NODE_ENV !== "production"
-
-// Parsing + DB action bridge only. Scheduling and Google Calendar integration are intentionally deferred.
 export async function POST(request: Request) {
   const body = await request.json().catch(() => null)
   const parsedBody = assistantMessageRequestSchema.safeParse(body)
@@ -27,107 +17,42 @@ export async function POST(request: Request) {
     return NextResponse.json(
       {
         ok: false,
-        rawMessage: "",
-        parsed: createFallbackParsedAssistantInput(),
         error: "Invalid assistant message request.",
+        reply: "I couldn't read that request.",
+        toolCalls: [],
+        needsRefresh: false,
+        clarification: "Please resend the request in plain language.",
+        context: buildFallbackAssistantContextData(),
       },
       { status: 400 },
     )
   }
 
-  const trimmedMessage = parsedBody.data.message
-
   try {
-    const dayContext = getCurrentDayContext({
-      now: parsedBody.data.now,
-      timezone: parsedBody.data.timezone,
-    })
-
-    const parserResult = await parseAssistantMessage({
-      ...parsedBody.data,
-      message: trimmedMessage,
-      now: dayContext.nowIso,
-      timezone: dayContext.timezone,
-      currentDay: dayContext.currentDay,
-    })
-
-    const { adminClient, user } = await requireAuthenticatedUser()
-    const handlerResult = await handleParsedInput({
+    const supabase = createSupabaseAdminClient()
+    const user = await getOrCreateDemoUser(supabase)
+    const result = await runSecretaryTurn({
+      supabase,
       userId: user.id,
-      parsed: parserResult.parsed,
-      supabase: adminClient,
+      message: parsedBody.data.message,
+      now: parsedBody.data.now ?? null,
+      timezone: parsedBody.data.timezone ?? null,
+      history: parsedBody.data.history,
     })
 
-    const responsePayload = {
-      ok: handlerResult.success,
-      rawMessage: trimmedMessage,
-      parsed: parserResult.parsed,
-      actionsTaken: handlerResult.actionsTaken,
-      ...(!handlerResult.success ? { error: "Failed to apply assistant input." } : {}),
-      ...(IS_DEV
-        ? {
-            debug: {
-              parserStage: parserResult.parserStage,
-              ...(parserResult.errorCode ? { errorCode: parserResult.errorCode } : {}),
-            },
-          }
-        : {}),
-    }
-
-    const parsedResponse = assistantMessageResponseSchema.safeParse(responsePayload)
-
-    if (!parsedResponse.success) {
-      return NextResponse.json(
-        {
-          ok: false,
-          rawMessage: trimmedMessage,
-          parsed: createFallbackParsedAssistantInput(),
-          actionsTaken: [],
-          error: "Invalid assistant parser response.",
-        },
-        { status: 500 },
-      )
-    }
-
-    return NextResponse.json(parsedResponse.data, {
-      status: handlerResult.success ? 200 : 500,
+    return NextResponse.json(assistantMessageResponseSchema.parse(result), {
+      status: result.ok ? 200 : 500,
     })
   } catch (error) {
-    if (isAuthenticationRequiredError(error)) {
-      return NextResponse.json(
-        {
-          ok: false,
-          rawMessage: trimmedMessage,
-          parsed: createFallbackParsedAssistantInput(),
-          actionsTaken: [],
-          error: "Authentication required.",
-        },
-        { status: 401 },
-      )
-    }
-
-    const errorMessage = error instanceof Error ? error.message : ""
-    const message =
-      errorMessage.includes("ANTHROPIC_API_KEY") ||
-      errorMessage.includes("Supabase environment variable")
-        ? errorMessage
-        : "Failed to parse assistant input."
-
     return NextResponse.json(
       {
         ok: false,
-        rawMessage: trimmedMessage,
-        parsed: createFallbackParsedAssistantInput(),
-        actionsTaken: [],
-        error: message,
-        ...(IS_DEV
-          ? {
-              debug: {
-                parserStage: "fallback" as const,
-                errorCode: "parse_error" as const,
-              },
-            }
-          : {}),
+        reply: "The secretary hit an error before it could finish that request.",
+        toolCalls: [],
+        needsRefresh: false,
+        clarification: null,
+        context: buildFallbackAssistantContextData(),
+        error: error instanceof Error ? error.message : "Failed to handle assistant input.",
       },
       { status: 500 },
     )

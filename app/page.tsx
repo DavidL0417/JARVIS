@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react"
 import dynamic from "next/dynamic"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable"
 import { AuthControls } from "@/components/auth/auth-controls"
 import { DashboardHeader } from "@/components/dashboard/dashboard-header"
 import { WorkspaceSnapshot } from "@/components/dashboard/workspace-snapshot"
@@ -13,6 +14,7 @@ import { WhatToDoNow } from "@/components/dashboard/what-to-do-now"
 import { StatusPanel } from "@/components/dashboard/status-panel"
 import { CalendarsSidebar, initialCalendars, type Calendar } from "@/components/dashboard/calendars-sidebar"
 import { TaskManager } from "@/components/dashboard/task-manager"
+import { APP_CALENDAR_PRESET_MAP } from "@/lib/calendar-config"
 import { X, Book } from "lucide-react"
 // ##### BACKEND API #####
 // DO NOT MODIFY UNLESS BACKEND OWNER
@@ -38,19 +40,12 @@ const ScheduleView = dynamic(
   { ssr: false },
 )
 
-const CALENDAR_DEFAULTS: Record<string, { name: string; color: string; source: Calendar["source"] }> = {
-  "cal-tasks": { name: "Tasks", color: "#ef4444", source: "local" },
-  "calendar-main": { name: "Main", color: "#3b82f6", source: "local" },
-  "calendar-projects": { name: "Projects", color: "#fb923c", source: "local" },
-  "calendar-academics": { name: "Academics", color: "#fde047", source: "local" },
-  "calendar-research": { name: "Research", color: "#c084fc", source: "local" },
-  "calendar-career": { name: "Career", color: "#22d3ee", source: "local" },
-  "calendar-personal": { name: "Personal", color: "#34d399", source: "local" },
-}
+const CALENDAR_DEFAULTS: Record<string, { name: string; color: string; source: Calendar["source"] }> =
+  APP_CALENDAR_PRESET_MAP
 
 const DEFAULT_BACKEND_CALENDAR_ID = "calendar-main"
-const FALLBACK_USER_ID = "00000000-0000-4000-8000-000000000000"
 const DEFAULT_TASK_CALENDAR_ID = "cal-tasks"
+const FALLBACK_USER_ID = "00000000-0000-4000-8000-000000000000"
 const DASHBOARD_REFRESH_EVENT = "jarvis-dashboard-refresh"
 
 function getDisplayCalendarId(calendarId: string | null | undefined) {
@@ -233,7 +228,7 @@ function PanelPlaceholder({
 }
 
 export default function DashboardPage() {
-  const [panelsHidden, setPanelsHidden] = useState(false)
+  const [rightColumnOpen, setRightColumnOpen] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [mobileSection, setMobileSection] = useState<MobileSection>("schedule")
   const [isDarkMode, setIsDarkMode] = useState(true)
@@ -584,7 +579,6 @@ export default function DashboardPage() {
 
     return (
       <>
-        <MasterInput />
         <WhatToDoNow currentTask={dashboardData?.currentTask} />
       </>
     )
@@ -595,11 +589,11 @@ export default function DashboardPage() {
       <div className="max-w-[1600px] mx-auto h-full flex flex-col">
         {/* Header */}
         <DashboardHeader 
-          onTogglePanels={() => setPanelsHidden(!panelsHidden)} 
+          onTogglePanels={() => setRightColumnOpen((current) => !current)} 
           onToggleMobileMenu={() => setMobileMenuOpen(!mobileMenuOpen)}
           onToggleTheme={handleToggleTheme}
           onOpenCalendars={handleOpenCalendarsSidebar}
-          panelsHidden={panelsHidden}
+          panelsHidden={!rightColumnOpen}
           isDarkMode={isDarkMode}
           authControls={<AuthControls />}
         />
@@ -659,13 +653,13 @@ export default function DashboardPage() {
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => setPanelsHidden(!panelsHidden)}
+            onClick={() => setRightColumnOpen((current) => !current)}
             className="text-muted-foreground hover:text-foreground hover:bg-secondary text-xs h-7 font-semibold"
           >
-            {panelsHidden ? "Show Panels" : "Hide Panels"}
+            {rightColumnOpen ? "Close Right Column" : "Open Right Column"}
           </Button>
           <span className="text-xs text-muted-foreground font-medium">
-            Focus panel open. Hide panels for a full-screen calendar view.
+            Master input stays pinned on the left. Toggle the right column when you need extra detail.
           </span>
         </div>
 
@@ -704,6 +698,7 @@ export default function DashboardPage() {
         <div className="md:hidden flex-1 overflow-auto">
           {mobileSection === "command" && (
             <div className="flex flex-col gap-3 h-full overflow-auto">
+              <MasterInput />
               <WorkspaceSnapshot stats={dashboardData?.stats} />
               <PanelTabs activeTab={activePanelTab} onTabChange={setActivePanelTab} />
               {renderLeftPanelContent()}
@@ -746,51 +741,66 @@ export default function DashboardPage() {
         </div>
 
         {/* Desktop Main Content Grid - iCal compact style, fit to screen */}
-        <div className={`hidden md:grid gap-3 flex-1 overflow-hidden ${panelsHidden ? "grid-cols-1" : "grid-cols-[280px_1fr_220px]"}`}>
-          {/* Left Column - Command Center */}
-          {!panelsHidden && (
-            <div className="flex flex-col gap-3 overflow-auto">
-              <WorkspaceSnapshot stats={dashboardData?.stats} />
-              <PanelTabs activeTab={activePanelTab} onTabChange={setActivePanelTab} />
-              {renderLeftPanelContent()}
-            </div>
-          )}
+        <div className="hidden md:block flex-1 overflow-hidden">
+          <ResizablePanelGroup
+            direction="horizontal"
+            autoSaveId={rightColumnOpen ? "dashboard-panels-with-right" : "dashboard-panels-main"}
+            className="h-full w-full gap-3"
+          >
+            <ResizablePanel defaultSize={36} minSize={24} maxSize={55}>
+              <div className="h-full overflow-auto pr-1">
+                <div className="flex flex-col gap-3">
+                  <MasterInput />
+                  <WorkspaceSnapshot stats={dashboardData?.stats} />
+                  <PanelTabs activeTab={activePanelTab} onTabChange={setActivePanelTab} />
+                  {renderLeftPanelContent()}
+                </div>
+              </div>
+            </ResizablePanel>
 
-          {/* Center Column - Schedule View */}
-          <div className={`${panelsHidden ? "col-span-1" : ""} overflow-hidden`}>
-            <ScheduleView 
-              onSyncWithGoogle={handleSyncWithGoogle}
-              visibleCalendarIds={visibleCalendarIds}
-              calendars={calendars}
-              events={mergedScheduleEvents}
-              tasks={tasks}
-              plannerStatus={plannerStatus}
-              plannerSummary={plannerSummary}
-              onSchedule={handleSchedule}
-              isScheduling={isScheduling}
-            />
-          </div>
+            <ResizableHandle withHandle className="mx-1" />
 
-          {/* Right Column - Status Panel or Task Manager */}
-          {!panelsHidden && (
-            <div className="overflow-auto">
-              {activeCalendar ? (
-                <TaskManager 
-                  mode="calendar"
-                  calendar={activeCalendar}
+            <ResizablePanel defaultSize={rightColumnOpen ? 44 : 64} minSize={30}>
+              <div className="h-full overflow-hidden">
+                <ScheduleView 
+                  onSyncWithGoogle={handleSyncWithGoogle}
+                  visibleCalendarIds={visibleCalendarIds}
                   calendars={calendars}
+                  events={mergedScheduleEvents}
                   tasks={tasks}
-                  errorMessage={taskErrorMessage}
-                  onClearError={clearTaskError}
-                  onCreateTask={handleCreateTask}
-                  onUpdateTask={handleUpdateTask}
-                  onDeleteTask={handleDeleteTask}
+                  plannerStatus={plannerStatus}
+                  plannerSummary={plannerSummary}
+                  onSchedule={handleSchedule}
+                  isScheduling={isScheduling}
                 />
-              ) : (
-                <StatusPanel stats={dashboardData?.stats} />
-              )}
-            </div>
-          )}
+              </div>
+            </ResizablePanel>
+
+            {rightColumnOpen && (
+              <>
+                <ResizableHandle withHandle className="mx-1" />
+                <ResizablePanel defaultSize={20} minSize={16} maxSize={30}>
+                  <div className="h-full overflow-auto pl-1">
+                    {activeCalendar ? (
+                      <TaskManager 
+                        mode="calendar"
+                        calendar={activeCalendar}
+                        calendars={calendars}
+                        tasks={tasks}
+                        errorMessage={taskErrorMessage}
+                        onClearError={clearTaskError}
+                        onCreateTask={handleCreateTask}
+                        onUpdateTask={handleUpdateTask}
+                        onDeleteTask={handleDeleteTask}
+                      />
+                    ) : (
+                      <StatusPanel stats={dashboardData?.stats} />
+                    )}
+                  </div>
+                </ResizablePanel>
+              </>
+            )}
+          </ResizablePanelGroup>
         </div>
       </div>
     </div>
