@@ -372,11 +372,11 @@ export function CalendarsSidebar({
   return (
     <>
       <div
-        className="fixed inset-0 bg-black/30 backdrop-blur-sm z-40 transition-opacity"
+        className="fixed inset-0 z-40 bg-background/70 transition-opacity"
         onClick={onClose}
       />
 
-      <div className="fixed left-0 top-0 h-full w-72 bg-card/95 backdrop-blur-xl border-r border-border z-50 shadow-2xl transform transition-transform duration-300 ease-out animate-in slide-in-from-left">
+      <div className="fixed left-0 top-0 z-50 h-full w-72 transform border-r border-border bg-card shadow-xl transition-transform duration-200 ease-out animate-in slide-in-from-left">
         <div className="flex h-full flex-col">
           <div className="flex items-center justify-between border-b border-border p-4">
             <h2 className="text-base font-bold text-foreground">Calendars</h2>
@@ -392,13 +392,13 @@ export function CalendarsSidebar({
 
           <div className="flex-1 overflow-auto p-3 space-y-1">
             {errorMessage ? (
-              <div className="rounded-xl border border-red-200/70 bg-red-100/40 px-3 py-2 text-xs font-medium text-red-700 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-200">
+              <div className="rounded-md border border-destructive/35 bg-destructive/10 px-3 py-2 text-xs font-medium text-destructive">
                 {errorMessage}
               </div>
             ) : null}
 
             {calendars.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-border/70 bg-secondary/30 px-4 py-8 text-center">
+              <div className="rounded-md border border-dashed border-border/70 bg-secondary/30 px-4 py-8 text-center">
                 <p className="text-sm font-semibold text-foreground">No calendars yet</p>
                 <p className="mt-1 text-xs font-medium text-muted-foreground">
                   Create a real calendar to start organizing your events.
@@ -463,7 +463,7 @@ export function CalendarsSidebar({
                         </DropdownMenuItem>
                         <DropdownMenuItem
                           onClick={() => void handleDeleteCalendar(calendar.id)}
-                          className="text-red-500 focus:text-red-500"
+                          className="text-destructive focus:text-destructive"
                         >
                           <Trash2 className="mr-2 h-3.5 w-3.5" />
                           Delete

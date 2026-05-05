@@ -38,6 +38,21 @@ const EMPTY_CREATE_DRAFT: CreateDraft = {
   deadline: "",
 }
 
+function toDateTimeInputValue(value: string | null) {
+  if (!value) {
+    return ""
+  }
+
+  const date = new Date(value)
+
+  if (Number.isNaN(date.getTime())) {
+    return ""
+  }
+
+  const offsetMilliseconds = date.getTimezoneOffset() * 60_000
+  return new Date(date.getTime() - offsetMilliseconds).toISOString().slice(0, 16)
+}
+
 function toIsoDateTime(value: string) {
   return value ? new Date(value).toISOString() : null
 }

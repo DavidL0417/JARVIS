@@ -35,18 +35,18 @@ function getMacaronCardClasses(calendarId: string | null, calendars: Calendar[])
   const name = calendar?.name.toLowerCase() ?? ""
 
   if (name.includes("work")) {
-    return "border-blue-200/80 bg-blue-100/40 dark:border-blue-900/60 dark:bg-blue-950/30"
+    return "border-info/35 bg-info/10"
   }
 
   if (name.includes("class") || name.includes("academic")) {
-    return "border-amber-200/80 bg-amber-100/40 dark:border-amber-900/60 dark:bg-amber-950/30"
+    return "border-warning/35 bg-warning/10"
   }
 
   if (name.includes("social") || name.includes("personal")) {
-    return "border-emerald-200/80 bg-emerald-100/40 dark:border-emerald-900/60 dark:bg-emerald-950/30"
+    return "border-success/35 bg-success/10"
   }
 
-  return "border-pink-200/80 bg-pink-100/40 dark:border-pink-900/60 dark:bg-pink-950/30"
+  return "border-border bg-surface-subtle"
 }
 
 export function CheckInSidebar({
@@ -126,26 +126,26 @@ export function CheckInSidebar({
   }
 
   return (
-    <Card className="border-cyan-200/70 bg-cyan-100/35 shadow-sm dark:border-cyan-900/60 dark:bg-cyan-950/25">
+    <Card className="border-info/35 bg-card shadow-sm">
       <CardHeader className="p-3 pb-1">
         <CardTitle className="text-sm font-bold text-foreground">Check-ins</CardTitle>
       </CardHeader>
       <CardContent className="space-y-3 p-3 pt-2">
         {errorMessage ? (
-          <div className="rounded-xl border border-red-200/70 bg-red-100/40 px-3 py-2 text-xs font-medium text-red-700 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-200">
+          <div className="rounded-md border border-destructive/35 bg-destructive/10 px-3 py-2 text-xs font-medium text-destructive">
             {errorMessage}
           </div>
         ) : null}
         {pendingEvents.length === 0 ? (
-          <div className="flex flex-col items-center justify-center rounded-2xl border border-emerald-200/70 bg-emerald-100/40 px-4 py-8 text-center dark:border-emerald-900/60 dark:bg-emerald-950/30">
-            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500 text-white shadow-sm">
+          <div className="flex flex-col items-center justify-center rounded-md border border-success/35 bg-success/10 px-4 py-8 text-center">
+            <div className="flex h-12 w-12 items-center justify-center rounded-md bg-success text-success-foreground shadow-sm">
               <CheckCircle2 className="h-7 w-7" />
             </div>
             <p className="mt-3 text-sm font-semibold text-foreground">
-              All tasks and events checked-in!
+              All check-ins are clear.
             </p>
             <p className="mt-1 text-xs font-medium text-muted-foreground">
-              Go lock in now 💪
+              The schedule has no pending approvals.
             </p>
           </div>
         ) : (
@@ -159,7 +159,7 @@ export function CheckInSidebar({
             return (
               <div
                 key={event.id}
-                className={`animate-in slide-in-from-bottom-1 fade-in-50 rounded-2xl border p-3 shadow-sm transition-all duration-300 ease-out ${getMacaronCardClasses(
+                className={`animate-in slide-in-from-bottom-1 fade-in-50 rounded-md border p-3 shadow-sm transition-all duration-200 ease-out ${getMacaronCardClasses(
                   event.calendarId,
                   calendars,
                 )}`}
@@ -221,7 +221,7 @@ export function CheckInSidebar({
                     size="sm"
                     onClick={() => void handleSave(event)}
                     disabled={isSaving}
-                    className="bg-emerald-200 text-emerald-950 hover:bg-emerald-300 dark:bg-emerald-800/80 dark:text-emerald-50 dark:hover:bg-emerald-700"
+                    className="bg-success text-success-foreground hover:bg-success/90"
                   >
                     {isSaving ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}
                     Save

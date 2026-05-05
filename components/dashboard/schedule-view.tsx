@@ -45,20 +45,7 @@ export interface CalendarEvent {
   dueTimeLabel?: string
 }
 
-const colorClasses: Record<CalendarEvent["color"], string> = {
-  mint: "bg-[#4ade80] text-[#052e16]",
-  blue: "bg-[#3b82f6] text-white",
-  yellow: "bg-[#fde047] text-[#422006]",
-  orange: "bg-[#fb923c] text-[#431407]",
-  purple: "bg-[#c084fc] text-[#3b0764]",
-  cyan: "bg-[#22d3ee] text-[#083344]",
-}
-
-// Full 24-hour time scale (00:00 - 23:00)
-const timeSlots = [
-  "12AM", "1AM", "2AM", "3AM", "4AM", "5AM", "6AM", "7AM", "8AM", "9AM", "10AM", "11AM",
-  "12PM", "1PM", "2PM", "3PM", "4PM", "5PM", "6PM", "7PM", "8PM", "9PM", "10PM", "11PM"
-]
+const HOUR_HEIGHT = 56
 
 const fallbackColors: CalendarEvent["color"][] = ["mint", "blue", "yellow", "orange", "purple", "cyan"]
 const DEFAULT_BACKEND_CALENDAR_ID = "calendar-main"
@@ -77,18 +64,30 @@ function getFallbackColor(calendarId: string | null) {
 function getFallbackEventColorStyle(color: CalendarEvent["color"]) {
   switch (color) {
     case "mint":
-      return { backgroundColor: "#4ade80", color: "#052e16" }
+      return { backgroundColor: "oklch(0.7 0.12 154)", color: "oklch(0.16 0.018 292)" }
     case "blue":
-      return { backgroundColor: "#3b82f6", color: "#ffffff" }
+      return { backgroundColor: "oklch(0.68 0.095 220)", color: "oklch(0.16 0.018 292)" }
     case "yellow":
-      return { backgroundColor: "#fde047", color: "#422006" }
+      return { backgroundColor: "oklch(0.74 0.115 76)", color: "oklch(0.18 0.018 292)" }
     case "orange":
-      return { backgroundColor: "#fb923c", color: "#431407" }
+      return { backgroundColor: "oklch(0.72 0.12 38)", color: "oklch(0.18 0.018 292)" }
     case "purple":
-      return { backgroundColor: "#c084fc", color: "#3b0764" }
+      return { backgroundColor: "oklch(0.66 0.105 320)", color: "oklch(0.96 0.01 88)" }
     case "cyan":
-      return { backgroundColor: "#22d3ee", color: "#083344" }
+      return { backgroundColor: "oklch(0.72 0.09 195)", color: "oklch(0.16 0.018 292)" }
   }
+}
+
+function formatHourLabel(hour: number) {
+  if (hour === 0) {
+    return "12AM"
+  }
+
+  if (hour === 12) {
+    return "12PM"
+  }
+
+  return hour > 12 ? `${hour - 12}PM` : `${hour}AM`
 }
 
 function isSameCalendarDay(left: Date, right: Date) {
@@ -258,7 +257,13 @@ export function ScheduleView({
   onSchedule,
   isScheduling = false,
 }: ScheduleViewProps) {
-  const [viewMode, setViewMode] = useState<ViewMode>("7days")
+  const [viewMode, setViewMode] = useState<ViewMode>(() => {
+    if (typeof window !== "undefined" && window.matchMedia("(max-width: 767px)").matches) {
+      return "1day"
+    }
+
+    return "3days"
+  })
   const [selectedDate, setSelectedDate] = useState<Date>(() => new Date())
   const [monthViewDate, setMonthViewDate] = useState<Date>(() => {
     const today = new Date()
@@ -344,16 +349,6 @@ export function ScheduleView({
     setMonthViewDate(new Date(today.getFullYear(), today.getMonth(), 1))
   }
 
-  const getEventStyle = (event: CalendarEvent) => {
-    const pixelsPerHour = 48
-    const top = event.startHour * pixelsPerHour
-    const height = event.duration * pixelsPerHour
-    return {
-      top: `${top}px`,
-      height: `${Math.max(height, 20)}px`,
-    }
-  }
-
   // Get event background color from calendar
   const getEventColorStyle = (event: CalendarEvent) => {
     const calendar = calendars?.find(cal => cal.id === event.calendarId)
@@ -364,7 +359,7 @@ export function ScheduleView({
       const g = parseInt(hex.slice(3, 5), 16)
       const b = parseInt(hex.slice(5, 7), 16)
       const brightness = (r * 299 + g * 587 + b * 114) / 1000
-      const textColor = brightness > 128 ? "#1a1a1a" : "#ffffff"
+      const textColor = brightness > 128 ? "oklch(0.18 0.018 292)" : "oklch(0.96 0.01 88)"
       return {
         backgroundColor: calendar.color,
         color: textColor,
@@ -482,6 +477,49 @@ export function ScheduleView({
   )
   const hasVisibleEvents = events.length > 0
 
+  const timelineBounds = useMemo(() => {
+    if (viewMode === "1month") {
+      return { startHour: 0, endHour: 24 }
+    }
+
+    const now = new Date()
+    const isCurrentPeriodVisible = displayDates.some((date) => isSameCalendarDay(date, now))
+    const eventStarts = timedEvents.map((event) => event.startHour)
+    const eventEnds = timedEvents.map((event) => event.startHour + event.duration)
+    const earliest = eventStarts.length > 0 ? Math.floor(Math.min(...eventStarts)) - 1 : 7
+    const latest = eventEnds.length > 0 ? Math.ceil(Math.max(...eventEnds)) + 1 : 22
+    const currentHour = now.getHours()
+    const shouldAnchorToNow = isCurrentPeriodVisible && currentHour >= 7 && currentHour <= 22
+    const currentStart = shouldAnchorToNow ? currentHour - 1 : 7
+    const currentEnd = shouldAnchorToNow ? currentHour + 3 : 22
+    let startHour = Math.max(0, Math.min(7, earliest, currentStart))
+    let endHour = Math.min(24, Math.max(22, latest, currentEnd))
+
+    if (endHour - startHour < 8) {
+      endHour = Math.min(24, startHour + 8)
+      startHour = Math.max(0, endHour - 8)
+    }
+
+    return { startHour, endHour }
+  }, [displayDates, timedEvents, viewMode])
+
+  const visibleTimeSlots = useMemo(() => {
+    return Array.from(
+      { length: timelineBounds.endHour - timelineBounds.startHour },
+      (_, index) => timelineBounds.startHour + index,
+    )
+  }, [timelineBounds])
+
+  const getEventStyle = (event: CalendarEvent) => {
+    const top = (event.startHour - timelineBounds.startHour) * HOUR_HEIGHT
+    const height = event.duration * HOUR_HEIGHT
+
+    return {
+      top: `${Math.max(top, 0)}px`,
+      height: `${Math.max(height, 22)}px`,
+    }
+  }
+
   useEffect(() => {
     hasAutoScrolledRef.current = false
   }, [selectedDate, viewMode])
@@ -501,16 +539,18 @@ export function ScheduleView({
       timedEvents.length > 0
         ? Math.max(Math.floor(Math.min(...timedEvents.map((event) => event.startHour))) - 1, 0)
         : null
-    const targetHour = isCurrentWeekVisible
+    const currentHour = now.getHours()
+    const shouldAnchorToNow = isCurrentWeekVisible && currentHour >= 7 && currentHour <= 22
+    const targetHour = shouldAnchorToNow
       ? Math.max(now.getHours() - 1, 0)
       : earliestTimedHour ?? 7
 
     gridScrollRef.current.scrollTo({
-      top: targetHour * 48,
+      top: Math.max(targetHour - timelineBounds.startHour, 0) * HOUR_HEIGHT,
       behavior: "auto",
     })
     hasAutoScrolledRef.current = true
-  }, [displayDates, isGoogleEventsLoading, timedEvents, viewMode])
+  }, [displayDates, isGoogleEventsLoading, timedEvents, timelineBounds, viewMode])
 
   const formatDateRange = () => {
     const start = new Date(selectedDate)
@@ -554,7 +594,7 @@ export function ScheduleView({
           key={day}
           onClick={() => handleDateClick(day)}
           className={`h-10 md:h-12 rounded-lg text-sm font-semibold transition-colors flex items-center justify-center
-            ${isTodayDate ? "bg-[#3b82f6] text-white ring-2 ring-[#3b82f6] ring-offset-2 ring-offset-background" : ""}
+            ${isTodayDate ? "bg-primary text-primary-foreground ring-2 ring-primary ring-offset-2 ring-offset-background" : ""}
             ${isSelected && !isTodayDate ? "bg-secondary text-foreground" : ""}
             ${!isTodayDate && !isSelected ? "hover:bg-secondary text-foreground" : ""}
           `}
@@ -568,7 +608,7 @@ export function ScheduleView({
   }
 
   return (
-    <Card className="bg-card border-border h-full flex flex-col">
+    <Card className="flex h-full flex-col border-border bg-card">
       <Dialog open={selectedTaskReminder !== null} onOpenChange={(open) => !open && setSelectedTaskReminder(null)}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
@@ -590,38 +630,37 @@ export function ScheduleView({
         </DialogContent>
       </Dialog>
       {syncStatus === "success" ? (
-        <div className="fixed left-1/2 top-4 z-[200] -translate-x-1/2 rounded-full bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-lg">
+        <div className="fixed left-1/2 top-4 z-[200] -translate-x-1/2 rounded-md border border-success/40 bg-success px-4 py-2 text-sm font-semibold text-success-foreground shadow-lg">
           Successfully synced
         </div>
       ) : null}
       {syncStatus === "error" ? (
-        <div className="fixed left-1/2 bottom-4 z-[200] flex -translate-x-1/2 items-center gap-3 rounded-xl bg-red-600 px-4 py-3 text-sm font-semibold text-white shadow-xl">
-          <span>Sync failed: Please check your GCal Cloud connection</span>
+        <div className="fixed left-1/2 bottom-4 z-[200] flex -translate-x-1/2 items-center gap-3 rounded-md border border-destructive/40 bg-destructive px-4 py-3 text-sm font-semibold text-destructive-foreground shadow-xl">
+          <span>Sync failed. Check the Google Calendar connection.</span>
           <button
             type="button"
             onClick={() => setSyncStatus("idle")}
-            className="rounded-full p-1 transition-colors hover:bg-white/15"
+            className="rounded-md p-1 transition-colors hover:bg-background/20"
             aria-label="Dismiss sync error"
           >
             <X className="h-4 w-4" />
           </button>
         </div>
       ) : null}
-      <CardHeader className="p-3 pb-2 flex-shrink-0">
-        <div className="flex items-center justify-between">
-          <div>
-            <CardTitle className="text-base font-bold text-foreground">Schedule</CardTitle>
-            <CardDescription className="text-xs text-muted-foreground font-semibold">
+      <CardHeader className="flex-shrink-0 p-3 pb-2">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0">
+            <CardTitle className="text-base font-semibold text-foreground">Schedule</CardTitle>
+            <CardDescription className="text-xs font-medium text-muted-foreground">
               {viewMode === "1month" 
                 ? `${monthNames[monthViewDate.getMonth()]} ${monthViewDate.getFullYear()}`
                 : formatDateRange()}
             </CardDescription>
           </div>
-          <div className="flex items-center gap-3">
-            {/* Sync Status */}
+          <div className="flex flex-wrap items-center gap-2">
             <div className="flex items-center gap-2">
-              <span className="text-xs text-muted-foreground font-semibold">
-                Last synced: {formatLastSynced()}
+              <span className="text-xs font-medium text-muted-foreground">
+                Synced {formatLastSynced()}
               </span>
               <Button
                 variant="outline"
@@ -638,34 +677,32 @@ export function ScheduleView({
                 Sync
               </Button>
             </div>
-            <span className="text-xs text-muted-foreground font-semibold">Planner: {plannerStatus}</span>
+            <span className="rounded-md border border-border bg-surface-subtle px-2 py-1 text-xs font-medium text-muted-foreground">
+              Planner {plannerStatus}
+            </span>
           </div>
         </div>
-        <p className="text-[11px] text-muted-foreground leading-tight font-medium">
-          Schedule runs only when you click Schedule/Replan. Dragging a block pins it by default.
-        </p>
         {!isGoogleEventsLoading && scheduleEvents.length === 0 && tasks.length === 0 ? (
-          <p className="text-[11px] leading-tight font-medium mt-1 text-muted-foreground">
-            No events found.
+          <p className="mt-1 text-[11px] font-medium leading-tight text-muted-foreground">
+            No calendar or task blocks yet.
           </p>
         ) : null}
         {plannerSummary ? (
-          <p className={`text-[11px] leading-tight font-medium mt-1 ${
-            plannerStatus === "Error" ? "text-red-400" : "text-muted-foreground"
+          <p className={`mt-1 text-[11px] font-medium leading-tight ${
+            plannerStatus === "Error" ? "text-destructive" : "text-muted-foreground"
           }`}>
             {plannerSummary}
           </p>
         ) : null}
       </CardHeader>
-      <CardContent className="p-3 pt-0 flex-1 flex flex-col overflow-hidden">
-        {/* Controls - hidden on mobile, shown on tablet+ */}
+      <CardContent className="flex flex-1 flex-col overflow-hidden p-3 pt-0">
         <div className="hidden md:flex items-center justify-between mb-3 flex-wrap gap-2">
           <div className="flex gap-1 flex-wrap">
             <Button
               size="sm"
               onClick={() => onSchedule?.()}
               disabled={isScheduling || !onSchedule}
-              className="bg-[#3b82f6] hover:bg-[#2563eb] text-white text-xs h-7 px-3 font-semibold disabled:opacity-70"
+              className="h-7 px-3 text-xs font-semibold disabled:opacity-70"
             >
               {isScheduling ? (
                 <Loader2 className="w-3 h-3 mr-1 animate-spin" />
@@ -704,7 +741,7 @@ export function ScheduleView({
           </div>
           <div className="flex items-center gap-2">
             <span className="text-xs text-muted-foreground font-semibold">Days:</span>
-            <div className="flex gap-0.5 bg-secondary/50 rounded-lg p-0.5">
+            <div className="flex gap-0.5 rounded-md bg-secondary/60 p-0.5">
               {(["1day", "3days", "7days", "1month"] as ViewMode[]).map((mode) => (
                 <Button
                   key={mode}
@@ -713,7 +750,7 @@ export function ScheduleView({
                   onClick={() => setViewMode(mode)}
                   className={
                     viewMode === mode
-                      ? "bg-[#3b82f6] text-white text-xs h-7 px-3 font-semibold"
+                      ? "h-7 px-3 text-xs font-semibold"
                       : "text-muted-foreground hover:text-foreground text-xs h-7 px-3 font-semibold"
                   }
                 >
@@ -724,14 +761,13 @@ export function ScheduleView({
           </div>
         </div>
 
-        {/* Mobile Controls */}
         <div className="flex md:hidden items-center justify-between mb-2 gap-2">
           <div className="flex items-center gap-1.5">
             <Button
               size="sm"
               onClick={() => onSchedule?.()}
               disabled={isScheduling || !onSchedule}
-              className="bg-[#3b82f6] hover:bg-[#2563eb] text-white text-[10px] h-6 px-2 font-semibold disabled:opacity-70"
+              className="h-7 px-2 text-[10px] font-semibold disabled:opacity-70"
             >
               {isScheduling ? (
                 <Loader2 className="w-3 h-3 mr-1 animate-spin" />
@@ -742,7 +778,7 @@ export function ScheduleView({
           </div>
           <div className="flex items-center gap-2 ml-auto">
             <span className="text-xs text-muted-foreground font-semibold">Days:</span>
-            <div className="flex gap-0.5 bg-secondary/50 rounded-lg p-0.5">
+            <div className="flex gap-0.5 rounded-md bg-secondary/60 p-0.5">
             {(["1day", "3days", "7days", "1month"] as ViewMode[]).map((mode) => (
               <Button
                 key={mode}
@@ -751,7 +787,7 @@ export function ScheduleView({
                 onClick={() => setViewMode(mode)}
                 className={
                   viewMode === mode
-                    ? "bg-[#3b82f6] text-white text-[10px] h-6 px-2 font-semibold"
+                    ? "h-6 px-2 text-[10px] font-semibold"
                     : "text-muted-foreground hover:text-foreground text-[10px] h-6 px-2 font-semibold"
                 }
               >
@@ -764,9 +800,8 @@ export function ScheduleView({
 
         {/* Month View */}
         {viewMode === "1month" ? (
-          <div className="flex-1 flex flex-col">
-            {/* Month navigation */}
-            <div className="flex items-center justify-center gap-2 mb-4">
+          <div className="flex flex-1 flex-col">
+            <div className="mb-4 flex items-center justify-center gap-2">
               <Button
                 variant="ghost"
                 size="icon"
@@ -796,7 +831,6 @@ export function ScheduleView({
               </span>
             </div>
             
-            {/* Day headers */}
             <div className="grid grid-cols-7 gap-1 mb-2">
               {dayNames.map((day) => (
                 <div key={day} className="text-center text-xs text-muted-foreground font-semibold">
@@ -805,29 +839,24 @@ export function ScheduleView({
               ))}
             </div>
             
-            {/* Calendar grid */}
             <div className="grid grid-cols-7 gap-1 flex-1">
               {renderMonthView()}
             </div>
             
-            <p className="text-xs text-muted-foreground text-center mt-3 font-medium">
-              Click a date to view that day
-            </p>
+            <p className="mt-3 text-center text-xs font-medium text-muted-foreground">Choose a date to focus the timeline.</p>
           </div>
         ) : (
-          /* Calendar Grid - Day Views (1, 3, 7 days) */
           <div ref={gridScrollRef} className="flex-1 overflow-auto relative">
             {isGoogleEventsLoading && !hasVisibleEvents ? (
-              <div className="absolute inset-0 z-20 flex items-center justify-center bg-card/80 backdrop-blur-sm">
-                <div className="flex items-center gap-3 rounded-full border border-border bg-card px-4 py-2 text-sm font-semibold text-foreground shadow-sm">
+              <div className="absolute inset-0 z-20 flex items-center justify-center bg-card/90">
+                <div className="flex items-center gap-3 rounded-md border border-border bg-card px-4 py-2 text-sm font-semibold text-foreground shadow-sm">
                   <Loader2 className="h-4 w-4 animate-spin" />
                   Loading calendar events...
                 </div>
               </div>
             ) : null}
-            {/* Day Headers */}
             <div 
-              className={`grid gap-px sticky top-0 z-10 bg-card dark:bg-[#141414] ${
+              className={`sticky top-0 z-10 grid gap-px bg-card ${
                 viewMode === "1day" 
                   ? "grid-cols-[60px_1fr]" 
                   : viewMode === "3days" 
@@ -835,11 +864,11 @@ export function ScheduleView({
                   : "grid-cols-[60px_repeat(7,1fr)]"
               }`}
             >
-              <div className="h-12" /> {/* Empty corner cell */}
+              <div className="h-12" />
               {displayDates.map((date, i) => (
                 <div 
                   key={i} 
-                  className="h-12 flex flex-col items-center justify-center border-l border-border dark:border-[#2a2a2a] bg-card dark:bg-[#1a1a1a]"
+                  className="flex h-12 flex-col items-center justify-center border-l border-border bg-card"
                 >
                   <span className="text-xs font-semibold text-muted-foreground">
                     {dayNames[date.getDay()]}
@@ -855,9 +884,8 @@ export function ScheduleView({
               ))}
             </div>
 
-            {/* All-day lane */}
             <div
-              className={`grid gap-px sticky top-12 z-[9] bg-card dark:bg-[#141414] ${
+              className={`sticky top-12 z-[9] grid gap-px bg-card ${
                 viewMode === "1day"
                   ? "grid-cols-[60px_1fr]"
                   : viewMode === "3days"
@@ -865,7 +893,7 @@ export function ScheduleView({
                   : "grid-cols-[60px_repeat(7,1fr)]"
               }`}
             >
-              <div className="min-h-9 px-2 py-2 text-[10px] font-semibold text-muted-foreground text-right">
+              <div className="min-h-9 px-2 py-2 text-right text-[10px] font-semibold text-muted-foreground">
                 All day
               </div>
               {displayDates.map((_, dayIndex) => {
@@ -876,7 +904,7 @@ export function ScheduleView({
                 return (
                   <div
                     key={`all-day-${dayIndex}`}
-                    className="min-h-9 border-l border-border dark:border-[#2a2a2a] bg-card dark:bg-[#181818] px-1 py-1"
+                    className="min-h-9 border-l border-border bg-card px-1 py-1"
                   >
                     {!hasAnyAllDayContent ? (
                       <div className="h-6 rounded border border-dashed border-border/50" />
@@ -887,7 +915,7 @@ export function ScheduleView({
                             type="button"
                             key={event.id}
                             onClick={() => setSelectedTaskReminder(event)}
-                            className="flex w-full items-center justify-between rounded-full border border-[#f9a8d4]/70 bg-[#fce7f3] px-2 py-1 text-left text-[10px] font-semibold text-slate-800 shadow-sm transition-transform hover:-translate-y-0.5 dark:border-[#51324b] dark:bg-[#3d2234] dark:text-[#fce7f3]"
+                            className="flex w-full items-center justify-between rounded-md border border-warning/35 bg-warning/10 px-2 py-1 text-left text-[10px] font-semibold text-foreground transition-colors hover:bg-warning/15"
                           >
                             <span className="truncate">{event.title}</span>
                             <span className="ml-2 shrink-0 text-[9px] uppercase tracking-wide opacity-70">
@@ -898,10 +926,8 @@ export function ScheduleView({
                         {dayAllDayEvents.map((event) => (
                           <div
                             key={event.id}
-                            className={`rounded px-2 py-1 overflow-hidden ${
-                              calendars ? "" : colorClasses[event.color]
-                            } ${event.isReadOnly ? "opacity-90" : ""}`}
-                            style={calendars ? getEventColorStyle(event) : {}}
+                            className={`overflow-hidden rounded px-2 py-1 ${event.isReadOnly ? "opacity-90" : ""}`}
+                            style={getEventColorStyle(event)}
                           >
                             <p className="text-[10px] font-semibold truncate leading-tight">
                               {event.title}
@@ -920,7 +946,6 @@ export function ScheduleView({
               })}
             </div>
             
-            {/* Time Grid */}
             <div 
               className={`grid gap-px ${
                 viewMode === "1day" 
@@ -929,51 +954,46 @@ export function ScheduleView({
                   ? "grid-cols-[60px_repeat(3,1fr)]" 
                   : "grid-cols-[60px_repeat(7,1fr)]"
               }`}
-              style={{ minHeight: `${24 * 48}px` }}
+              style={{ minHeight: `${visibleTimeSlots.length * HOUR_HEIGHT}px` }}
             >
-              {/* Time column */}
               <div className="flex flex-col">
-                {timeSlots.map((time, i) => (
+                {visibleTimeSlots.map((hour) => (
                   <div 
-                    key={i} 
-                    className="h-[48px] text-xs font-semibold text-muted-foreground pr-2 text-right flex items-start pt-0.5"
+                    key={hour} 
+                    className="flex items-start justify-end pr-2 pt-0.5 text-xs font-semibold text-muted-foreground"
+                    style={{ height: `${HOUR_HEIGHT}px` }}
                   >
-                    {time}
+                    {formatHourLabel(hour)}
                   </div>
                 ))}
               </div>
 
-              {/* Day columns */}
               {Array.from({ length: viewMode === "1day" ? 1 : viewMode === "3days" ? 3 : 7 }).map((_, dayIndex) => (
                 <div
                   key={dayIndex}
-                  className="relative bg-secondary/30 border-l border-border flex-1"
-                  style={{ height: `${24 * 48}px` }}
+                  className="relative flex-1 border-l border-border bg-surface-subtle"
+                  style={{ height: `${visibleTimeSlots.length * HOUR_HEIGHT}px` }}
                 >
-                  {/* Hour lines */}
-                  {timeSlots.map((_, i) => (
+                  {visibleTimeSlots.map((_, i) => (
                     <div
                       key={i}
                       className="absolute w-full border-t border-border/50"
-                      style={{ top: `${i * 48}px` }}
+                      style={{ top: `${i * HOUR_HEIGHT}px` }}
                     />
                   ))}
 
-                  {/* Events */}
                   {timedEvents
                     .filter((event) => event.day === dayIndex)
                     .map((event) => (
                       <div
                         key={event.id}
-                        className={`absolute left-0.5 right-0.5 rounded px-1 py-0.5 overflow-hidden ${
-                          calendars ? "" : colorClasses[event.color]
-                        } ${event.isReadOnly ? "opacity-90" : ""}`}
+                        className={`absolute left-1 right-1 overflow-hidden rounded-md px-1.5 py-1 shadow-sm ${event.isReadOnly ? "opacity-90" : ""}`}
                         style={{
                           ...getEventStyle(event),
-                          ...(calendars ? getEventColorStyle(event) : {}),
+                          ...getEventColorStyle(event),
                         }}
                       >
-                        <p className="text-[9px] font-semibold truncate leading-tight pr-3">{event.title}</p>
+                        <p className="truncate pr-3 text-[10px] font-semibold leading-tight">{event.title}</p>
                         {event.location && event.duration >= 0.75 && (
                           <div className="flex items-center gap-0.5">
                             <MapPin className="w-2 h-2 flex-shrink-0" />

@@ -8,7 +8,10 @@ import {
   Brain,
   CalendarDays,
   Database,
+  HelpCircle,
+  Inbox,
   Loader2,
+  Moon,
   PanelLeft,
   RefreshCw,
   Sparkles,
@@ -24,7 +27,9 @@ import {
   type Calendar,
 } from "@/components/dashboard/calendars-sidebar"
 import { CheckInSidebar } from "@/components/dashboard/checkin-sidebar"
+import { LandingPage } from "@/components/dashboard/landing-page"
 import { MasterInput } from "@/components/dashboard/master-input"
+import { OnboardingPanel } from "@/components/dashboard/onboarding-panel"
 import { TaskManager } from "@/components/dashboard/task-manager"
 import { Button } from "@/components/ui/button"
 import type {
@@ -108,7 +113,7 @@ function toScheduleEventInput(event: ScheduleEvent): ScheduleEventInput {
   }
 }
 
-function StatPill({
+function StatusChip({
   icon: Icon,
   label,
   value,
@@ -118,7 +123,7 @@ function StatPill({
   value: string | number
 }) {
   return (
-    <div className="flex h-10 min-w-0 items-center gap-2 rounded-md border border-border bg-card px-3">
+    <div className="flex h-9 min-w-0 items-center gap-2 rounded-md border border-border bg-surface-subtle px-2.5">
       <Icon className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
       <span className="truncate text-xs font-medium text-muted-foreground">{label}</span>
       <span className="ml-auto text-sm font-semibold text-foreground">{value}</span>
@@ -159,6 +164,7 @@ export default function DashboardPage() {
   const [viewState, setViewState] = useState<DashboardViewState>({ status: "loading" })
   const [calendars, setCalendars] = useState<Calendar[]>([])
   const [calendarsSidebarOpen, setCalendarsSidebarOpen] = useState(false)
+  const [guideOpen, setGuideOpen] = useState(false)
   const [pendingCheckInItems, setPendingCheckInItems] = useState<CheckInApprovalItem[]>([])
   const [plannerStatus, setPlannerStatus] = useState<PlannerUiStatus>("Idle")
   const [plannerSummary, setPlannerSummary] = useState("")
@@ -167,7 +173,6 @@ export default function DashboardPage() {
   const [taskErrorMessage, setTaskErrorMessage] = useState("")
 
   const dashboard = viewState.status === "ready" ? viewState.dashboard : null
-  const events = dashboard?.events ?? []
   const pendingCheckInEvents = useMemo(
     () => pendingCheckInItems.map((item) => item.event),
     [pendingCheckInItems],
@@ -204,6 +209,7 @@ export default function DashboardPage() {
       setCalendars(sortCalendars(calendarData.calendars.map(toSidebarCalendar)))
       setPendingCheckInItems(checkInData.items)
       setTaskErrorMessage("")
+      return dashboardData
     } catch (error) {
       if (error instanceof AuthRequiredError) {
         setViewState({ status: "signed-out" })
@@ -215,6 +221,7 @@ export default function DashboardPage() {
           message: error instanceof Error ? error.message : "Backend request failed.",
         })
       }
+      return null
     } finally {
       setIsRefreshing(false)
     }
@@ -280,8 +287,10 @@ export default function DashboardPage() {
     })
   }
 
-  async function handleSchedule(taskIds: string[] = []) {
-    if (isScheduling || !dashboard) {
+  async function handleSchedule(taskIds: string[] = [], dashboardOverride?: DashboardResponse | null) {
+    const currentDashboard = dashboardOverride ?? dashboard
+
+    if (isScheduling || !currentDashboard) {
       return
     }
 
@@ -291,7 +300,7 @@ export default function DashboardPage() {
 
     try {
       const selectedTaskIds = new Set(taskIds)
-      const hardEvents = events
+      const hardEvents = currentDashboard.events
         .filter((event) => !event.taskId || !selectedTaskIds.has(event.taskId))
         .filter((event) => !visibleCalendarIds || !event.calendarId || visibleCalendarIds.includes(event.calendarId))
         .map(toScheduleEventInput)
@@ -323,6 +332,17 @@ export default function DashboardPage() {
     [loadDashboard],
   )
 
+  const handleOnboardingComplete = useCallback(
+    async ({ scheduleAfter }: { scheduleAfter: boolean }) => {
+      const nextDashboard = await loadDashboard(true)
+
+      if (scheduleAfter && nextDashboard) {
+        await handleSchedule([], nextDashboard)
+      }
+    },
+    [handleSchedule, loadDashboard],
+  )
+
   const renderContent = () => {
     if (viewState.status === "loading") {
       return (
@@ -335,14 +355,7 @@ export default function DashboardPage() {
     }
 
     if (viewState.status === "signed-out") {
-      return (
-        <ShellMessage
-          icon={Sparkles}
-          title="Sign in"
-          detail="JARVIS needs an authenticated Supabase user before it can read tasks, calendars, or memory."
-          action={<AuthControls />}
-        />
-      )
+      return null
     }
 
     if (viewState.status === "error") {
@@ -366,21 +379,25 @@ export default function DashboardPage() {
 
     return (
       <div className="flex min-h-0 flex-1 flex-col gap-3">
-        <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
-          <StatPill icon={ListTodo} label="Tasks" value={dashboardData.stats.tasks} />
-          <StatPill icon={CalendarDays} label="Loose" value={dashboardData.stats.unscheduled} />
-          <StatPill icon={Brain} label="Memory" value={dashboardData.stats.memories} />
-          <StatPill icon={Database} label="Sources" value={dashboardData.stats.sources} />
+        <div className="flex min-h-9 flex-wrap items-center gap-2 rounded-lg border border-border bg-card px-2 py-2">
+          <StatusChip icon={ListTodo} label="Tasks" value={dashboardData.stats.tasks} />
+          <StatusChip icon={Inbox} label="Unscheduled" value={dashboardData.stats.unscheduled} />
+          <StatusChip icon={Brain} label="Memory" value={dashboardData.stats.memories} />
+          <StatusChip icon={Database} label="Sources" value={dashboardData.stats.sources} />
+          <div className="ml-auto hidden items-center gap-2 px-2 text-xs text-muted-foreground lg:flex">
+            <Moon className="size-3.5 text-primary" aria-hidden="true" />
+            Plan from real state. Empty means empty.
+          </div>
         </div>
 
         {isEmpty ? (
-          <div className="rounded-md border border-border bg-card px-3 py-2 text-xs text-muted-foreground">
-            Empty account. Add a task or sync Google to start.
+          <div className="rounded-md border border-primary/25 bg-primary/10 px-3 py-2 text-xs text-foreground">
+            Start with setup in the right rail, or add a task manually. JARVIS will not invent placeholder work.
           </div>
         ) : null}
 
-        <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_390px]">
-          <div className="min-h-[560px] xl:min-h-0">
+        <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_380px]">
+          <div className="min-h-[620px] xl:min-h-0">
             <ScheduleView
               calendars={calendars}
               visibleCalendarIds={visibleCalendarIds}
@@ -394,7 +411,13 @@ export default function DashboardPage() {
             />
           </div>
 
-          <div className="flex min-h-0 flex-col gap-3">
+          <div className="flex min-h-0 flex-col gap-3 xl:overflow-auto xl:pr-1">
+            <OnboardingPanel
+              isEmpty={isEmpty}
+              forceOpen={guideOpen}
+              onForceOpenChange={setGuideOpen}
+              onComplete={handleOnboardingComplete}
+            />
             <MasterInput tasks={dashboardData.tasks} />
             {pendingCheckInEvents.length > 0 ? (
               <CheckInSidebar
@@ -420,10 +443,14 @@ export default function DashboardPage() {
     )
   }
 
+  if (viewState.status === "signed-out") {
+    return <LandingPage authControls={<AuthControls />} />
+  }
+
   return (
-    <main className="h-screen overflow-hidden bg-background text-foreground">
-      <div className="mx-auto flex h-full max-w-[1680px] gap-3 p-3">
-        <aside className="hidden w-12 shrink-0 flex-col items-center gap-2 rounded-lg border border-border bg-card p-2 md:flex">
+    <main className="min-h-screen overflow-x-hidden bg-background text-foreground xl:h-screen xl:overflow-hidden">
+      <div className="mx-auto flex min-h-screen max-w-[1720px] gap-3 p-3 xl:h-full xl:min-h-0">
+        <aside className="hidden w-12 shrink-0 flex-col items-center gap-2 rounded-lg border border-border bg-sidebar p-2 md:flex">
           <Button
             size="icon"
             variant="ghost"
@@ -461,20 +488,40 @@ export default function DashboardPage() {
               <CalendarDays className="h-4 w-4" aria-hidden="true" />
             )}
           </Button>
+          <div className="my-1 h-px w-6 bg-border" />
+          <Button
+            size="icon"
+            variant="ghost"
+            aria-label="Guide"
+            title="Guide"
+            onClick={() => setGuideOpen(true)}
+          >
+            <HelpCircle className="h-4 w-4" aria-hidden="true" />
+          </Button>
         </aside>
 
         <section className="flex min-w-0 flex-1 flex-col gap-3">
           <header className="flex h-auto shrink-0 flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-card px-3 py-2">
             <div className="flex min-w-0 items-center gap-2">
-              <div className="flex h-8 w-8 items-center justify-center rounded-md border border-border bg-background">
-                <Sparkles className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+              <div className="flex h-8 w-8 items-center justify-center rounded-md border border-border bg-surface-subtle">
+                <Sparkles className="h-4 w-4 text-primary" aria-hidden="true" />
               </div>
               <div className="min-w-0">
                 <h1 className="truncate text-sm font-semibold text-foreground">JARVIS</h1>
-                <p className="truncate text-[11px] text-muted-foreground">Secretary scheduler</p>
+                <p className="truncate text-[11px] text-muted-foreground">Late-night planning workbench</p>
               </div>
             </div>
             <div className="flex items-center gap-2">
+              <Button
+                size="icon"
+                variant="ghost"
+                aria-label="Guide"
+                title="Guide"
+                onClick={() => setGuideOpen(true)}
+                className="md:hidden"
+              >
+                <HelpCircle className="h-4 w-4" aria-hidden="true" />
+              </Button>
               <Button
                 size="icon"
                 variant="ghost"
@@ -484,6 +531,21 @@ export default function DashboardPage() {
                 className="md:hidden"
               >
                 <PanelLeft className="h-4 w-4" aria-hidden="true" />
+              </Button>
+              <Button
+                size="icon"
+                variant="ghost"
+                aria-label="Schedule"
+                title="Schedule"
+                onClick={() => handleSchedule()}
+                disabled={isScheduling || !dashboard}
+                className="md:hidden"
+              >
+                {isScheduling ? (
+                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                ) : (
+                  <CalendarDays className="h-4 w-4" aria-hidden="true" />
+                )}
               </Button>
               <AuthControls />
             </div>

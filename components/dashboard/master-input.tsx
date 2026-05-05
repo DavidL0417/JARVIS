@@ -74,10 +74,10 @@ function ToolCallReceipt({ toolCalls }: { toolCalls: AssistantMessageResponse["t
           key={toolCall.id}
           className={`rounded-lg border px-3 py-2 ${
             toolCall.status === "completed"
-              ? "border-emerald-500/30 bg-emerald-500/10"
+              ? "border-success/35 bg-success/10"
               : toolCall.status === "clarification" || toolCall.status === "pending_approval"
-                ? "border-amber-500/30 bg-amber-500/10"
-                : "border-red-500/30 bg-red-500/10"
+                ? "border-warning/35 bg-warning/10"
+                : "border-destructive/35 bg-destructive/10"
           }`}
         >
           <div className="flex items-center justify-between gap-3">
@@ -104,7 +104,7 @@ function MarkdownMessage({ text }: { text: string }) {
           strong: ({ children }) => <strong className="font-semibold text-inherit">{children}</strong>,
           em: ({ children }) => <em className="italic text-inherit">{children}</em>,
           code: ({ children }) => (
-            <code className="rounded bg-black/20 px-1 py-0.5 font-mono text-[11px] text-inherit">
+            <code className="rounded bg-secondary px-1 py-0.5 font-mono text-[11px] text-inherit">
               {children}
             </code>
           ),
@@ -119,7 +119,7 @@ function MarkdownMessage({ text }: { text: string }) {
 function ThinkingBubble() {
   return (
     <div className="flex justify-start">
-      <div className="max-w-[92%] rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-2 text-foreground backdrop-blur-sm">
+      <div className="max-w-[92%] rounded-md border border-border bg-surface-subtle px-3 py-2 text-foreground">
         <div className="flex items-center gap-2 text-xs leading-relaxed">
           <span className="font-medium">JARVIS is thinking</span>
           <span className="flex gap-1">
@@ -356,7 +356,7 @@ export function MasterInput({
       <CardHeader className="p-4 pb-3">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <CardTitle className="text-sm font-semibold text-foreground">Master Input</CardTitle>
+            <CardTitle className="text-sm font-semibold text-foreground">Command</CardTitle>
           </div>
           <div className="rounded-md border border-border bg-background px-2 py-1 text-[10px] font-semibold uppercase text-muted-foreground">
             {status === "submitting" ? "Thinking" : "Ready"}
@@ -372,7 +372,7 @@ export function MasterInput({
             {transcript.map((entry) => (
               <div key={entry.id} className={`flex ${entry.role === "user" ? "justify-end" : "justify-start"}`}>
                 <div
-                  className={`max-w-[92%] rounded-2xl px-3 py-2 ${
+                  className={`max-w-[92%] rounded-md px-3 py-2 ${
                     entry.role === "user"
                       ? "bg-primary text-primary-foreground"
                       : "border border-border bg-card text-foreground"
@@ -384,10 +384,10 @@ export function MasterInput({
                     <p className="whitespace-pre-wrap text-xs leading-relaxed">{entry.text}</p>
                   )}
                   {entry.error && (
-                    <p className="mt-2 text-[11px] font-medium text-red-300">{entry.error}</p>
+                    <p className="mt-2 text-[11px] font-medium text-destructive">{entry.error}</p>
                   )}
                   {entry.clarification && (
-                    <p className="mt-2 text-[11px] font-medium text-amber-300">{entry.clarification}</p>
+                    <p className="mt-2 text-[11px] font-medium text-warning">{entry.clarification}</p>
                   )}
                   {entry.toolCalls && <ToolCallReceipt toolCalls={entry.toolCalls} />}
                 </div>
@@ -399,8 +399,8 @@ export function MasterInput({
         </div>
 
         {errorMessage && (
-          <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2">
-            <p className="text-xs font-medium text-red-300">{errorMessage}</p>
+          <div className="rounded-md border border-destructive/35 bg-destructive/10 px-3 py-2">
+            <p className="text-xs font-medium text-destructive">{errorMessage}</p>
           </div>
         )}
 

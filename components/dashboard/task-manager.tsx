@@ -443,22 +443,25 @@ export function TaskManager({
   }
 
   return (
-    <div className="space-y-3">
-      {errorMessage ? (
-        <Card className="border-red-500/40 bg-red-500/10">
-          <CardContent className="p-3">
-            <p className="text-xs font-medium text-red-300">{errorMessage}</p>
-          </CardContent>
-        </Card>
-      ) : null}
+    <Card className="border-border bg-card">
+      <CardHeader className="p-3 pb-1">
+        <div className="flex items-center justify-between gap-3">
+          <CardTitle className="text-sm font-semibold text-foreground">{headerTitle}</CardTitle>
+          <div className="rounded-md border border-border bg-surface-subtle px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+            {activeTasks.length} active
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4 p-3 pt-2">
+        {errorMessage ? (
+          <div className="rounded-md border border-destructive/35 bg-destructive/10 px-3 py-2">
+            <p className="text-xs font-medium text-destructive">{errorMessage}</p>
+          </div>
+        ) : null}
 
-      <Card className="bg-card border-border">
-        <CardHeader className="p-3 pb-1">
-          <CardTitle className="text-sm font-bold text-foreground">{headerTitle}</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-2 p-3 pt-2">
+        <div className="space-y-2 rounded-md border border-border bg-surface-subtle p-2">
           <Input
-            placeholder="Add a task title..."
+            placeholder="Task title"
             value={createDraft.title}
             onChange={(event) => {
               onClearError?.()
@@ -472,7 +475,7 @@ export function TaskManager({
             }}
             className="h-8 text-sm"
           />
-          <div className="grid grid-cols-1 gap-2">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,0.75fr)]">
             <Input
               type="datetime-local"
               value={createDraft.deadline}
@@ -480,11 +483,13 @@ export function TaskManager({
               className="h-8 text-xs"
             />
             <Input
-              placeholder="Tags (comma separated)"
+              placeholder="Tags"
               value={createDraft.tags}
               onChange={(event) => setCreateDraft((current) => ({ ...current, tags: event.target.value }))}
               className="h-8 text-xs"
             />
+          </div>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
             <select
               value={createDraft.calendarId}
               onChange={(event) => setCreateDraft((current) => ({ ...current, calendarId: event.target.value }))}
@@ -497,81 +502,78 @@ export function TaskManager({
                 </option>
               ))}
             </select>
+            <Button
+              size="sm"
+              onClick={() => void handleCreate()}
+              disabled={!createDraft.title.trim()}
+              className="h-8 text-xs font-semibold"
+            >
+              <Plus className="mr-1 h-3.5 w-3.5" />
+              Add Task
+            </Button>
           </div>
-          <Button
-            size="sm"
-            onClick={() => void handleCreate()}
-            disabled={!createDraft.title.trim()}
-            className="h-8 w-full bg-[#3b82f6] text-xs font-semibold text-white hover:bg-[#2563eb]"
-          >
-            <Plus className="mr-1 h-3.5 w-3.5" />
-            Add Task
-          </Button>
-        </CardContent>
-      </Card>
+        </div>
 
-      {[
-        {
-          id: "overdue",
-          title: "Overdue / Missed",
-          tasks: overdueTasks,
-          empty: "No overdue tasks.",
-        },
-        {
-          id: "todo",
-          title: "Unscheduled Todo",
-          tasks: unscheduledTasks,
-          empty: "No unscheduled todo tasks.",
-        },
-        {
-          id: "scheduled",
-          title: "Scheduled Upcoming",
-          tasks: scheduledTasks,
-          empty: "No scheduled tasks yet.",
-        },
-      ].map((section) => (
-        <Card key={section.id} className="bg-card border-border">
-          <CardHeader className="p-3 pb-1">
-            <CardTitle className="text-sm font-bold text-foreground">
-              {section.title} ({section.tasks.length})
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2 p-3 pt-2">
+        {[
+          {
+            id: "overdue",
+            title: "Overdue / Missed",
+            tasks: overdueTasks,
+            empty: "No overdue tasks.",
+          },
+          {
+            id: "todo",
+            title: "Unscheduled Todo",
+            tasks: unscheduledTasks,
+            empty: "No unscheduled tasks.",
+          },
+          {
+            id: "scheduled",
+            title: "Scheduled",
+            tasks: scheduledTasks,
+            empty: "No scheduled tasks yet.",
+          },
+        ].map((section) => (
+          <section key={section.id} className="space-y-2">
+            <div className="flex items-center justify-between gap-3 border-b border-border pb-1">
+              <h3 className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                {section.title}
+              </h3>
+              <span className="text-xs font-semibold text-foreground">{section.tasks.length}</span>
+            </div>
             {section.tasks.length === 0 ? (
               <p className="py-2 text-xs font-medium text-muted-foreground">{section.empty}</p>
             ) : (
               section.tasks.map(renderTaskRow)
             )}
-          </CardContent>
-        </Card>
-      ))}
+          </section>
+        ))}
 
-      <Card className="bg-card border-border">
-        <CardHeader className="p-3 pb-1">
+        <section className="space-y-2">
           <button
-            className="flex w-full items-center justify-between"
+            className="flex w-full items-center justify-between border-b border-border pb-1 text-left"
             onClick={() => setShowCompleted((current) => !current)}
           >
-            <CardTitle className="text-sm font-bold text-foreground">
-              Completed ({completedTasks.length})
-            </CardTitle>
+            <span className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+              Completed
+            </span>
             {showCompleted ? (
               <ChevronUp className="h-4 w-4 text-muted-foreground" />
             ) : (
               <ChevronDown className="h-4 w-4 text-muted-foreground" />
             )}
           </button>
-        </CardHeader>
-        {showCompleted ? (
-          <CardContent className="space-y-2 p-3 pt-2">
+          {showCompleted ? (
+            <div className="space-y-2">
             {completedTasks.length === 0 ? (
               <p className="py-2 text-xs font-medium text-muted-foreground">No completed tasks yet.</p>
             ) : (
               completedTasks.map(renderTaskRow)
             )}
-          </CardContent>
-        ) : null}
-      </Card>
-    </div>
+            </div>
+          ) : null}
+        </section>
+      </CardContent>
+    </Card>
   )
 }
