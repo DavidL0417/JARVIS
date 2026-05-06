@@ -584,19 +584,17 @@ export function TaskManager({
           <button
             type="button"
             onClick={() => setShowCompleted((current) => !current)}
-            className="flex w-full items-baseline justify-between gap-2 py-1 text-left"
+            className="flex items-center gap-2 py-1 text-left text-muted-foreground transition-colors hover:text-foreground"
             aria-expanded={showCompleted}
           >
-            <span className="flex items-baseline gap-2">
-              <h3 className="eyebrow">Completed</h3>
-              <span className="num text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
-                {completedTasks.length}
-              </span>
+            <h3 className="eyebrow group-hover:text-foreground">Completed</h3>
+            <span className="num text-[11px] font-medium uppercase tracking-[0.14em]">
+              {completedTasks.length}
             </span>
             {showCompleted ? (
-              <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+              <ChevronDown className="h-3.5 w-3.5" />
             ) : (
-              <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
+              <ChevronRight className="h-3.5 w-3.5" />
             )}
           </button>
           {showCompleted ? (

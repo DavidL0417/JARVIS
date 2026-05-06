@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import ReactMarkdown from "react-markdown"
 import remarkBreaks from "remark-breaks"
 import remarkGfm from "remark-gfm"
-import { ChevronDown, CornerDownLeft, Loader2, Send } from "lucide-react"
+import { ChevronDown, Loader2, Send } from "lucide-react"
 
 import { Textarea } from "@/components/ui/textarea"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
@@ -121,9 +121,9 @@ function MarkdownMessage({ text }: { text: string }) {
 
 function ThinkingBubble() {
   return (
-    <div className="flex items-baseline gap-2 text-[11px] text-muted-foreground">
-      <span className="num text-[10px] uppercase tracking-[0.12em] copper">JARVIS</span>
-      <span className="flex gap-1">
+    <div>
+      <span className="num text-[10.5px] font-medium uppercase tracking-[0.16em] copper">JARVIS</span>
+      <span className="mt-1.5 flex gap-1">
         <span className="h-1 w-1 animate-pulse rounded-full bg-copper [animation-delay:-0.3s]" />
         <span className="h-1 w-1 animate-pulse rounded-full bg-copper [animation-delay:-0.15s]" />
         <span className="h-1 w-1 animate-pulse rounded-full bg-copper" />
@@ -370,19 +370,19 @@ export function MasterInput({ tasks = [] }: MasterInputProps) {
 
       <div
         ref={transcriptRef}
-        className="h-[240px] overflow-y-auto border-y border-rule-strong"
+        className="h-[260px] overflow-y-auto border-t border-rule"
       >
-        <div className="space-y-3.5 py-3.5">
+        <div className="space-y-4 py-4">
           {transcript.map((entry) => (
-            <div key={entry.id} className="flex gap-3">
+            <div key={entry.id}>
               <span
-                className={`num w-14 shrink-0 pt-0.5 text-[11px] font-medium uppercase tracking-[0.14em] ${
+                className={`num text-[10.5px] font-medium uppercase tracking-[0.16em] ${
                   entry.role === "user" ? "text-muted-foreground" : "copper"
                 }`}
               >
                 {entry.role === "user" ? "You" : "JARVIS"}
               </span>
-              <div className="min-w-0 flex-1">
+              <div className="mt-1.5 min-w-0">
                 {entry.role === "assistant" ? (
                   <MarkdownMessage text={entry.text} />
                 ) : (
@@ -400,12 +400,7 @@ export function MasterInput({ tasks = [] }: MasterInputProps) {
               </div>
             </div>
           ))}
-          {status === "submitting" && (
-            <div className="flex gap-3">
-              <span className="w-14 shrink-0" />
-              <ThinkingBubble />
-            </div>
-          )}
+          {status === "submitting" && <ThinkingBubble />}
           <div ref={transcriptBottomRef} />
         </div>
       </div>
@@ -414,43 +409,43 @@ export function MasterInput({ tasks = [] }: MasterInputProps) {
         <p className="mt-2 text-[12px] text-destructive">{errorMessage}</p>
       )}
 
-      <div className="mt-3 flex items-end gap-2 rounded-sm border border-rule bg-panel/40 px-3 py-2 transition-colors focus-within:border-copper/60">
-        <Textarea
-          placeholder="Message JARVIS…"
-          value={message}
-          onChange={(event) => setMessage(event.target.value)}
-          onKeyDown={handleKeyDown}
-          aria-label="Secretary input"
-          className="min-h-[40px] resize-none border-0 bg-transparent px-0 text-[14px] leading-[1.5] text-foreground shadow-none placeholder:text-muted-foreground/70 focus-visible:ring-0"
-        />
-        <div className="flex items-center gap-2">
-          <span className="num hidden items-center gap-1 text-[10.5px] font-medium uppercase tracking-[0.14em] text-muted-foreground sm:flex">
-            <CornerDownLeft className="h-3.5 w-3.5" aria-hidden="true" />
-            Send
-          </span>
+      <div className="group/composer relative border-t border-rule transition-colors focus-within:border-copper">
+        <div className="flex items-end gap-2 pt-3">
+          <Textarea
+            placeholder="Message JARVIS…"
+            value={message}
+            onChange={(event) => setMessage(event.target.value)}
+            onKeyDown={handleKeyDown}
+            aria-label="Secretary input"
+            className="min-h-[44px] resize-none border-0 bg-transparent p-0 text-[14px] leading-[1.55] text-foreground shadow-none placeholder:text-muted-foreground/70 focus-visible:ring-0"
+          />
           <Tooltip>
             <TooltipTrigger asChild>
               <button
                 type="button"
                 onClick={handleSubmit}
                 disabled={status === "submitting" || !message.trim()}
-                aria-label="Send"
-                className="flex h-9 w-9 items-center justify-center rounded-sm bg-copper text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-30"
+                aria-label="Send (Enter)"
+                className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-sm transition-colors disabled:opacity-30 ${
+                  message.trim() && status !== "submitting"
+                    ? "text-copper hover:bg-copper-soft"
+                    : "text-muted-foreground"
+                }`}
               >
                 {status === "submitting" ? (
-                  <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2} />
+                  <Loader2 className="h-4 w-4 animate-spin" strokeWidth={1.75} />
                 ) : (
-                  <Send className="h-4 w-4" strokeWidth={2} />
+                  <Send className="h-4 w-4" strokeWidth={1.75} />
                 )}
               </button>
             </TooltipTrigger>
-            <TooltipContent side="top" className="text-[11px]">Send</TooltipContent>
+            <TooltipContent side="top" className="text-[11px]">Send · Enter</TooltipContent>
           </Tooltip>
         </div>
       </div>
 
-      <div className="mt-3 border-t border-rule pt-3">
-        <div className="flex gap-1">
+      <div className="mt-3">
+        <div className="flex gap-3">
           {(["availability", "memory"] as const).map((key) => {
             const open = openContext === key
             return (
@@ -458,13 +453,13 @@ export function MasterInput({ tasks = [] }: MasterInputProps) {
                 key={key}
                 type="button"
                 onClick={() => toggleContext(key)}
-                className={`flex items-center gap-1.5 rounded-sm px-2.5 py-1.5 text-[11px] font-medium uppercase tracking-[0.14em] transition-colors ${
-                  open ? "bg-accent text-foreground" : "text-muted-foreground hover:text-foreground"
+                className={`group/chip flex items-center gap-1 text-[10.5px] font-medium uppercase tracking-[0.16em] transition-colors ${
+                  open ? "text-foreground" : "text-muted-foreground hover:text-foreground"
                 }`}
               >
                 <span className="num">{key}</span>
                 <ChevronDown
-                  className={`h-3.5 w-3.5 transition-transform ${open ? "rotate-180" : ""}`}
+                  className={`h-3 w-3 transition-transform ${open ? "rotate-180 copper" : ""}`}
                   aria-hidden="true"
                 />
               </button>
