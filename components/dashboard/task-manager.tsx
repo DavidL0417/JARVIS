@@ -457,8 +457,8 @@ export function TaskManager({
   ]
 
   return (
-    <section className="flex flex-col border-t-2 border-rule-strong pt-8">
-      <header className="mb-5 flex items-center justify-between gap-2">
+    <section className="mt-7 flex flex-col border-t border-rule-strong pt-7">
+      <header className="mb-4 flex items-center justify-between gap-2">
         <div className="flex items-baseline gap-2">
           <h2 className="eyebrow">{headerTitle}</h2>
           <span className="num text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">

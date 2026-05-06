@@ -110,21 +110,21 @@ export function CheckInSidebar({
   }
 
   return (
-    <section className="flex flex-col">
-      <header className="mb-3 flex items-baseline justify-between gap-2">
+    <section className="mt-7 flex flex-col border-t border-rule-strong pt-7">
+      <header className="mb-4 flex items-baseline justify-between gap-2">
         <div className="flex items-baseline gap-2">
           <h2 className="eyebrow">Check-in</h2>
-          <span className="num text-[10px] uppercase tracking-[0.12em] copper">
+          <span className="num text-[11px] font-medium uppercase tracking-[0.14em] copper">
             {pendingEvents.length}
           </span>
         </div>
       </header>
 
       {errorMessage ? (
-        <p className="mb-2 text-[11px] text-destructive">{errorMessage}</p>
+        <p className="mb-3 text-[12px] text-destructive">{errorMessage}</p>
       ) : null}
 
-      <ul className="border-y border-rule">
+      <ul className="divide-y divide-rule">
         {pendingEvents.map((event) => {
           const draft = drafts[event.id] ?? {
             priority: event.priority,
@@ -136,27 +136,27 @@ export function CheckInSidebar({
           return (
             <li
               key={event.id}
-              className="space-y-2 border-b border-rule px-1 py-2 last:border-b-0"
+              className="space-y-2.5 py-3.5 first:pt-0 last:pb-0"
             >
-              <div className="flex items-baseline gap-3">
+              <div className="flex items-start gap-3">
                 {calendarColor ? (
                   <span
-                    className="mt-1 h-2 w-2 shrink-0 rounded-full"
+                    className="mt-[7px] h-2 w-2 shrink-0 rounded-full"
                     style={{ backgroundColor: calendarColor }}
                     aria-hidden="true"
                   />
                 ) : (
-                  <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-copper" aria-hidden="true" />
+                  <span className="mt-[7px] h-2 w-2 shrink-0 rounded-full bg-copper" aria-hidden="true" />
                 )}
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-[13px] text-foreground">{event.title}</p>
-                  <p className="num mt-0.5 text-[10.5px] uppercase tracking-[0.1em] text-muted-foreground">
+                  <p className="truncate text-[13.5px] leading-[1.35] text-foreground">{event.title}</p>
+                  <p className="num mt-1 text-[10.5px] uppercase tracking-[0.12em] text-muted-foreground">
                     Ends {formatEventWindow(event)} · {event.source}
                   </p>
                 </div>
               </div>
 
-              <div className="flex flex-wrap items-center gap-2 pl-5">
+              <div className="flex items-center gap-2 pl-5">
                 <div className="flex items-center gap-0.5 rounded-sm border border-rule p-0.5">
                   {PRIORITIES.map((priority) => {
                     const active = draft.priority === priority
@@ -171,7 +171,7 @@ export function CheckInSidebar({
                           }))
                         }
                         aria-pressed={active}
-                        className={`num rounded-sm px-1.5 py-0.5 text-[10px] uppercase tracking-[0.12em] transition-colors ${
+                        className={`num flex h-5 w-5 items-center justify-center rounded-[2px] text-[10px] font-medium uppercase tracking-[0.12em] transition-colors ${
                           active ? "bg-copper-soft text-foreground" : "text-muted-foreground hover:text-foreground"
                         }`}
                       >
@@ -194,7 +194,7 @@ export function CheckInSidebar({
                       aria-label={draft.isImmutable ? "Make mutable" : "Make immutable"}
                       aria-pressed={draft.isImmutable}
                       className={`flex h-6 w-6 items-center justify-center rounded-sm border border-rule transition-colors ${
-                        draft.isImmutable ? "bg-copper-soft text-foreground" : "text-muted-foreground hover:bg-accent"
+                        draft.isImmutable ? "bg-copper-soft text-foreground" : "text-muted-foreground hover:bg-accent hover:text-foreground"
                       }`}
                     >
                       {draft.isImmutable ? <Lock className="h-3 w-3" /> : <LockOpen className="h-3 w-3" />}
@@ -209,7 +209,7 @@ export function CheckInSidebar({
                   type="button"
                   onClick={() => void handleSave(event)}
                   disabled={isSaving}
-                  className="num ml-auto flex h-6 items-center gap-1 rounded-sm bg-copper px-2 text-[10px] uppercase tracking-[0.12em] text-primary-foreground hover:opacity-90 disabled:opacity-50"
+                  className="num ml-auto flex h-7 items-center gap-1.5 rounded-sm bg-copper px-2.5 text-[10.5px] font-medium uppercase tracking-[0.12em] text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
                 >
                   {isSaving ? (
                     <Loader2 className="h-3 w-3 animate-spin" />
