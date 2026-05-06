@@ -570,36 +570,50 @@ export function ScheduleView({
       </Dialog>
 
       {syncStatus === "success" ? (
-        <div className="num fixed left-1/2 top-4 z-[200] -translate-x-1/2 rounded-sm border border-rule bg-popover px-3 py-1.5 text-[11px] uppercase tracking-[0.12em] text-foreground shadow-lg">
+        <div className="num fixed right-6 top-20 z-[200] flex items-center gap-2 rounded-sm border border-rule-strong bg-popover px-2.5 py-1.5 text-[11px] uppercase tracking-[0.14em] text-foreground shadow-lg">
+          <span className="h-1.5 w-1.5 rounded-full bg-copper" aria-hidden="true" />
           Synced
         </div>
       ) : null}
       {syncStatus === "error" ? (
-        <div className="num fixed bottom-4 left-1/2 z-[200] flex -translate-x-1/2 items-center gap-3 rounded-sm border border-destructive/40 bg-popover px-3 py-2 text-[11px] uppercase tracking-[0.12em] text-destructive shadow-lg">
-          <span>Sync failed — check Google Calendar connection</span>
+        <div className="num fixed right-6 top-20 z-[200] flex max-w-xs items-center gap-2.5 rounded-sm border border-destructive/50 bg-popover px-2.5 py-1.5 text-[11px] tracking-[0.04em] text-destructive shadow-lg">
+          <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-destructive" aria-hidden="true" />
+          <span className="leading-tight">Sync failed. Check Google Calendar.</span>
           <button
             type="button"
             onClick={() => setSyncStatus("idle")}
             aria-label="Dismiss"
-            className="hover:text-foreground"
+            className="ml-1 shrink-0 text-destructive/70 hover:text-destructive"
           >
             <X className="h-3.5 w-3.5" />
           </button>
         </div>
       ) : null}
 
-      <header className="mb-3 flex flex-wrap items-baseline gap-x-4 gap-y-1">
-        <h1 className="text-2xl font-semibold leading-none tracking-tight text-foreground">
+      <header className="mb-4 flex flex-wrap items-baseline gap-x-4 gap-y-1.5">
+        <h1 className="text-[28px] font-semibold leading-none tracking-tight text-foreground">
           {viewMode === "1month"
             ? `${monthNames[monthViewDate.getMonth()]} ${monthViewDate.getFullYear()}`
             : formatDateRange()}
         </h1>
-        <span className="num text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+        <span className="num inline-flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
+          <span
+            className={`h-1.5 w-1.5 rounded-full ${
+              plannerStatus === "Ready"
+                ? "bg-copper"
+                : plannerStatus === "Scheduling"
+                  ? "bg-copper/60 animate-pulse"
+                  : plannerStatus === "Error"
+                    ? "bg-destructive"
+                    : "bg-muted-foreground/50"
+            }`}
+            aria-hidden="true"
+          />
           {plannerStatus}
         </span>
         {plannerSummary ? (
           <span
-            className={`text-[11px] ${
+            className={`text-[12px] leading-tight ${
               plannerStatus === "Error" ? "text-destructive" : "text-muted-foreground"
             }`}
           >
@@ -608,7 +622,7 @@ export function ScheduleView({
         ) : null}
       </header>
 
-      <div className="mb-3 flex flex-wrap items-center gap-2 border-y border-rule py-2">
+      <div className="mb-4 flex flex-wrap items-center gap-2 border-y border-rule-strong py-2.5">
         <Tooltip>
           <TooltipTrigger asChild>
             <button
@@ -616,12 +630,12 @@ export function ScheduleView({
               onClick={() => onSchedule?.()}
               disabled={isScheduling || !onSchedule}
               aria-label="Run scheduler"
-              className="flex h-7 items-center gap-1.5 rounded-sm bg-copper px-2.5 text-[11px] uppercase tracking-[0.12em] text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
+              className="flex h-8 items-center gap-1.5 rounded-sm bg-copper px-3 text-[12px] font-medium uppercase tracking-[0.12em] text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
             >
               {isScheduling ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2} />
               ) : (
-                <CalendarPlus className="h-3.5 w-3.5" />
+                <CalendarPlus className="h-4 w-4" strokeWidth={2} />
               )}
               <span className="num">Plan</span>
             </button>
@@ -641,14 +655,14 @@ export function ScheduleView({
                 onClick={handleSyncWithGoogle}
                 disabled={syncStatus === "syncing" || isGoogleEventsLoading}
                 aria-label="Sync Google"
-                className="flex h-7 items-center gap-1.5 rounded-sm border border-rule px-2 text-[11px] text-foreground hover:bg-accent disabled:opacity-50"
+                className="flex h-8 items-center gap-1.5 rounded-sm border border-rule px-2.5 text-[12px] text-foreground hover:bg-accent hover:border-rule-strong disabled:opacity-50"
               >
                 {syncStatus === "syncing" || isGoogleEventsLoading ? (
-                  <Loader2 className="h-3 w-3 animate-spin" />
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
                 ) : (
-                  <RefreshCw className="h-3 w-3" />
+                  <RefreshCw className="h-3.5 w-3.5" />
                 )}
-                <span className="num text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+                <span className="num text-[10.5px] uppercase tracking-[0.14em] text-muted-foreground">
                   {formatLastSynced()}
                 </span>
               </button>
@@ -666,9 +680,9 @@ export function ScheduleView({
                 type="button"
                 onClick={handlePrevPeriod}
                 aria-label="Previous"
-                className="flex h-7 w-7 items-center justify-center rounded-sm text-muted-foreground hover:bg-accent hover:text-foreground"
+                className="flex h-8 w-8 items-center justify-center rounded-sm text-muted-foreground hover:bg-accent hover:text-foreground"
               >
-                <ChevronLeft className="h-4 w-4" />
+                <ChevronLeft className="h-[18px] w-[18px]" strokeWidth={1.75} />
               </button>
             </TooltipTrigger>
             <TooltipContent side="bottom" className="text-[11px]">Previous</TooltipContent>
@@ -676,7 +690,7 @@ export function ScheduleView({
           <button
             type="button"
             onClick={handleGoToToday}
-            className="num flex h-7 items-center rounded-sm px-2 text-[11px] uppercase tracking-[0.12em] text-muted-foreground hover:bg-accent hover:text-foreground"
+            className="num flex h-8 items-center rounded-sm px-2.5 text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground hover:bg-accent hover:text-foreground"
           >
             Today
           </button>
@@ -686,9 +700,9 @@ export function ScheduleView({
                 type="button"
                 onClick={handleNextPeriod}
                 aria-label="Next"
-                className="flex h-7 w-7 items-center justify-center rounded-sm text-muted-foreground hover:bg-accent hover:text-foreground"
+                className="flex h-8 w-8 items-center justify-center rounded-sm text-muted-foreground hover:bg-accent hover:text-foreground"
               >
-                <ChevronRight className="h-4 w-4" />
+                <ChevronRight className="h-[18px] w-[18px]" strokeWidth={1.75} />
               </button>
             </TooltipTrigger>
             <TooltipContent side="bottom" className="text-[11px]">Next</TooltipContent>
@@ -704,8 +718,8 @@ export function ScheduleView({
                 type="button"
                 onClick={() => setViewMode(mode.value)}
                 aria-pressed={active}
-                className={`num flex h-7 items-center rounded-sm px-2 text-[11px] uppercase tracking-[0.12em] transition-colors ${
-                  active ? "bg-copper-soft text-foreground" : "text-muted-foreground hover:bg-accent hover:text-foreground"
+                className={`num flex h-8 items-center rounded-sm px-2.5 text-[11px] font-medium uppercase tracking-[0.14em] transition-colors ${
+                  active ? "bg-copper-soft text-copper" : "text-muted-foreground hover:bg-accent hover:text-foreground"
                 }`}
               >
                 {mode.label}
@@ -739,19 +753,19 @@ export function ScheduleView({
 
           {/* Day headers */}
           <div
-            className={`sticky top-0 z-10 grid bg-background ${dayColumnTemplate} border-b border-rule`}
+            className={`sticky top-0 z-10 grid bg-background ${dayColumnTemplate} border-b border-rule-strong`}
           >
-            <div className="h-12" />
+            <div className="h-14" />
             {displayDates.map((date, i) => (
               <div
                 key={i}
-                className="flex h-12 flex-col items-start justify-center border-l border-rule px-2"
+                className="flex h-14 flex-col items-start justify-center gap-1 border-l border-rule px-2.5"
               >
-                <span className="num text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+                <span className="num text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
                   {dayNamesShort[date.getDay()]}
                 </span>
                 <span
-                  className={`num text-[18px] font-medium leading-none tabular-nums ${
+                  className={`num text-[22px] font-semibold leading-none tabular-nums ${
                     isToday(date) ? "copper" : "text-foreground"
                   }`}
                 >
@@ -763,9 +777,9 @@ export function ScheduleView({
 
           {/* All-day lane */}
           <div
-            className={`sticky top-12 z-[9] grid bg-background ${dayColumnTemplate} border-b border-rule`}
+            className={`sticky top-14 z-[9] grid bg-background ${dayColumnTemplate} border-b border-rule`}
           >
-            <div className="num flex min-h-9 items-start justify-end px-2 py-1.5 text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+            <div className="num flex min-h-9 items-start justify-end px-2 py-1.5 text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
               All
             </div>
             {displayDates.map((_, dayIndex) => {
@@ -811,7 +825,7 @@ export function ScheduleView({
               {Array.from({ length: 24 }).map((_, i) => (
                 <div
                   key={i}
-                  className="num h-[48px] pr-2 pt-1 text-right text-[10px] uppercase tracking-[0.14em] text-muted-foreground tabular-nums"
+                  className="num h-[48px] pr-2.5 pt-1 text-right text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground tabular-nums"
                 >
                   {i === 0 ? "" : formatHour(i)}
                 </div>

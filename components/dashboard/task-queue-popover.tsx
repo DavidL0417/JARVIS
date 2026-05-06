@@ -48,10 +48,10 @@ export function TaskQueuePopover({ tasks, onToggleComplete }: TaskQueuePopoverPr
             <button
               type="button"
               aria-label="Task queue"
-              className="flex h-7 items-center gap-1.5 rounded-sm border border-rule px-2 text-[11px] text-foreground hover:bg-accent"
+              className="flex h-8 items-center gap-1.5 rounded-sm border border-rule px-2.5 text-[12px] text-foreground hover:bg-accent hover:border-rule-strong"
             >
-              <ListTodo className="h-3.5 w-3.5 text-muted-foreground" />
-              <span className="num text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+              <ListTodo className="h-4 w-4 text-muted-foreground" strokeWidth={1.75} />
+              <span className="num text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
                 {sortedTasks.length}
               </span>
             </button>
@@ -64,17 +64,17 @@ export function TaskQueuePopover({ tasks, onToggleComplete }: TaskQueuePopoverPr
         sideOffset={6}
         className="w-[min(28rem,calc(100vw-2rem))] border-rule bg-popover p-0 text-popover-foreground"
       >
-        <div className="border-b border-rule px-3 py-2">
+        <div className="border-b border-rule-strong px-3.5 py-2.5">
           <div className="flex items-baseline justify-between gap-2">
             <h3 className="eyebrow">Queue</h3>
-            <span className="num text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+            <span className="num text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
               {sortedTasks.length}
             </span>
           </div>
         </div>
 
         {sortedTasks.length === 0 ? (
-          <p className="px-3 py-6 text-center text-[12px] text-muted-foreground">No live tasks.</p>
+          <p className="px-3 py-6 text-center text-[13px] text-muted-foreground">No live tasks.</p>
         ) : (
           <ScrollArea className="h-[min(24rem,60vh)]">
             <ul>
@@ -83,26 +83,26 @@ export function TaskQueuePopover({ tasks, onToggleComplete }: TaskQueuePopoverPr
                 return (
                   <li
                     key={task.id}
-                    className="flex items-baseline gap-3 border-b border-rule px-3 py-2 last:border-b-0"
+                    className="flex items-baseline gap-3 border-b border-rule px-3.5 py-2.5 last:border-b-0"
                   >
-                    <span className="num w-5 shrink-0 text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
+                    <span className="num w-6 shrink-0 text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
                       {String(index + 1).padStart(2, "0")}
                     </span>
                     <button
                       type="button"
                       onClick={() => void onToggleComplete?.(task)}
                       aria-label={task.status === "completed" ? `Mark ${task.title} todo` : `Mark ${task.title} done`}
-                      className={`mt-0.5 flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-sm border transition-colors ${
+                      className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border transition-colors ${
                         task.status === "completed"
                           ? "border-copper bg-copper text-primary-foreground"
-                          : "border-rule-strong hover:border-foreground/60"
+                          : "border-rule-strong hover:border-foreground"
                       }`}
                     >
-                      {task.status === "completed" ? <Check className="h-2.5 w-2.5" strokeWidth={3} /> : null}
+                      {task.status === "completed" ? <Check className="h-3 w-3" strokeWidth={3} /> : null}
                     </button>
                     <div className="min-w-0 flex-1">
                       <p
-                        className={`truncate text-[13px] ${
+                        className={`truncate text-[14px] ${
                           task.status === "completed"
                             ? "text-muted-foreground line-through"
                             : "text-foreground"
@@ -110,11 +110,11 @@ export function TaskQueuePopover({ tasks, onToggleComplete }: TaskQueuePopoverPr
                       >
                         {task.title}
                       </p>
-                      <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10.5px] text-muted-foreground">
-                        <span className="num uppercase tracking-[0.1em]">{task.priority}</span>
+                      <div className="mt-0.5 flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-[11.5px] text-muted-foreground">
+                        <span className="num font-medium uppercase tracking-[0.12em]">{task.priority}</span>
                         {deadlineLabel ? (
                           <span className="num inline-flex items-center gap-1">
-                            <CalendarClock className="h-2.5 w-2.5" />
+                            <CalendarClock className="h-3 w-3" />
                             {deadlineLabel}
                           </span>
                         ) : null}

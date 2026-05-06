@@ -345,26 +345,26 @@ export function TaskManager({
     return (
       <li
         key={task.id}
-        className="group flex items-baseline gap-3 border-b border-rule px-1 py-2"
+        className="group flex items-baseline gap-3 border-b border-rule px-1 py-2.5"
       >
-        <span className="num w-5 shrink-0 text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
+        <span className="num w-6 shrink-0 text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
           {String(index + 1).padStart(2, "0")}
         </span>
         <button
           type="button"
           onClick={() => void handleToggleComplete(task)}
           aria-label={task.status === "completed" ? "Mark todo" : "Mark complete"}
-          className={`mt-0.5 flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-sm border transition-colors ${
+          className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border transition-colors ${
             task.status === "completed"
               ? "border-copper bg-copper text-primary-foreground"
-              : "border-rule-strong hover:border-foreground/60"
+              : "border-rule-strong hover:border-foreground"
           }`}
         >
-          {task.status === "completed" ? <Check className="h-2.5 w-2.5" strokeWidth={3} /> : null}
+          {task.status === "completed" ? <Check className="h-3 w-3" strokeWidth={3} /> : null}
         </button>
         <div className="min-w-0 flex-1">
           <p
-            className={`text-[13px] leading-[1.4] ${
+            className={`text-[14px] leading-[1.4] ${
               task.status === "completed"
                 ? "text-muted-foreground line-through"
                 : "text-foreground"
@@ -372,27 +372,27 @@ export function TaskManager({
           >
             {task.title}
           </p>
-          <div className="mt-0.5 flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-[10.5px] text-muted-foreground">
+          <div className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-[11.5px] text-muted-foreground">
             {overdue ? (
-              <span className="num inline-flex items-center gap-1 uppercase tracking-[0.1em] text-destructive">
-                <AlertCircle className="h-2.5 w-2.5" /> Overdue
+              <span className="num inline-flex items-center gap-1 font-medium uppercase tracking-[0.12em] text-destructive">
+                <AlertCircle className="h-3 w-3" /> Overdue
               </span>
             ) : null}
             {isScheduledTask && !overdue && task.status !== "completed" ? (
-              <span className="num inline-flex items-center gap-1 uppercase tracking-[0.1em] copper">
+              <span className="num inline-flex items-center gap-1 font-medium uppercase tracking-[0.12em] copper">
                 Scheduled
               </span>
             ) : null}
             {deadlineLabel ? (
               <span className="num inline-flex items-center gap-1">
-                <CalendarClock className="h-2.5 w-2.5" />
+                <CalendarClock className="h-3 w-3" />
                 {deadlineLabel}
               </span>
             ) : null}
             {calendarColor ? (
               <span className="inline-flex items-center gap-1">
                 <span
-                  className="h-1.5 w-1.5 rounded-full"
+                  className="h-2 w-2 rounded-full"
                   style={{ backgroundColor: calendarColor }}
                   aria-hidden="true"
                 />
@@ -401,7 +401,7 @@ export function TaskManager({
             ) : null}
             {task.tags.length > 0 ? (
               <span className="inline-flex items-center gap-1">
-                <Tag className="h-2.5 w-2.5" />
+                <Tag className="h-3 w-3" />
                 {task.tags.join(", ")}
               </span>
             ) : null}
@@ -414,9 +414,9 @@ export function TaskManager({
                 type="button"
                 onClick={() => handleStartEditing(task)}
                 aria-label="Edit"
-                className="flex h-6 w-6 items-center justify-center rounded-sm text-muted-foreground hover:bg-accent hover:text-foreground"
+                className="flex h-7 w-7 items-center justify-center rounded-sm text-muted-foreground hover:bg-accent hover:text-foreground"
               >
-                <Pencil className="h-3 w-3" />
+                <Pencil className="h-3.5 w-3.5" />
               </button>
             </TooltipTrigger>
             <TooltipContent side="top" className="text-[11px]">Edit</TooltipContent>
@@ -427,9 +427,9 @@ export function TaskManager({
                 type="button"
                 onClick={() => void handleRemoveTask(task)}
                 aria-label={isScheduledTask ? "Unschedule" : "Delete"}
-                className="flex h-6 w-6 items-center justify-center rounded-sm text-muted-foreground hover:bg-accent hover:text-destructive"
+                className="flex h-7 w-7 items-center justify-center rounded-sm text-muted-foreground hover:bg-accent hover:text-destructive"
               >
-                {isScheduledTask ? <X className="h-3 w-3" /> : <Trash2 className="h-3 w-3" />}
+                {isScheduledTask ? <X className="h-3.5 w-3.5" /> : <Trash2 className="h-3.5 w-3.5" />}
               </button>
             </TooltipTrigger>
             <TooltipContent side="top" className="text-[11px]">
@@ -461,7 +461,7 @@ export function TaskManager({
       <header className="mb-3 flex items-baseline justify-between gap-2">
         <div className="flex items-baseline gap-2">
           <h2 className="eyebrow">{headerTitle}</h2>
-          <span className="num text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+          <span className="num text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
             {activeTasks.length}
           </span>
         </div>
@@ -472,11 +472,11 @@ export function TaskManager({
               onClick={() => setCreateOpen((current) => !current)}
               aria-label="Add task"
               aria-expanded={createOpen}
-              className={`flex h-6 w-6 items-center justify-center rounded-sm transition-colors ${
-                createOpen ? "bg-copper-soft text-foreground" : "text-muted-foreground hover:bg-accent hover:text-foreground"
+              className={`flex h-7 w-7 items-center justify-center rounded-sm transition-colors ${
+                createOpen ? "bg-copper-soft text-copper" : "text-muted-foreground hover:bg-accent hover:text-foreground"
               }`}
             >
-              <Plus className={`h-3.5 w-3.5 transition-transform ${createOpen ? "rotate-45" : ""}`} />
+              <Plus className={`h-4 w-4 transition-transform ${createOpen ? "rotate-45" : ""}`} />
             </button>
           </TooltipTrigger>
           <TooltipContent side="left" className="text-[11px]">Add task</TooltipContent>
@@ -484,7 +484,7 @@ export function TaskManager({
       </header>
 
       {errorMessage ? (
-        <p className="mb-2 text-[11px] text-destructive">{errorMessage}</p>
+        <p className="mb-2 text-[12px] text-destructive">{errorMessage}</p>
       ) : null}
 
       {createOpen ? (
@@ -559,17 +559,17 @@ export function TaskManager({
         </div>
       ) : null}
 
-      <div className="space-y-4">
+      <div className="space-y-5">
         {sections.map((section) => (
           <div key={section.id}>
-            <div className="mb-1 flex items-baseline gap-2">
+            <div className="mb-1.5 flex items-baseline gap-2">
               <h3 className="eyebrow">{section.title}</h3>
-              <span className="num text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+              <span className="num text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
                 {section.tasks.length}
               </span>
             </div>
             {section.tasks.length === 0 ? (
-              <p className="border-b border-rule py-2 text-[11px] text-muted-foreground">
+              <p className="border-b border-rule py-2.5 text-[12.5px] text-muted-foreground">
                 {section.id === "overdue" ? "Nothing overdue." : section.id === "todo" ? "Inbox empty." : "Nothing scheduled."}
               </p>
             ) : (
@@ -589,19 +589,19 @@ export function TaskManager({
           >
             <span className="flex items-baseline gap-2">
               <h3 className="eyebrow">Completed</h3>
-              <span className="num text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+              <span className="num text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
                 {completedTasks.length}
               </span>
             </span>
             {showCompleted ? (
-              <ChevronDown className="h-3 w-3 text-muted-foreground" />
+              <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
             ) : (
-              <ChevronRight className="h-3 w-3 text-muted-foreground" />
+              <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
             )}
           </button>
           {showCompleted ? (
             completedTasks.length === 0 ? (
-              <p className="border-b border-rule py-2 text-[11px] text-muted-foreground">
+              <p className="border-b border-rule py-2.5 text-[12.5px] text-muted-foreground">
                 Nothing closed yet.
               </p>
             ) : (

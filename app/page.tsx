@@ -121,9 +121,12 @@ function StatGlyph({
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <span className="inline-flex items-center gap-1.5 text-foreground/85">
-          <Icon className="h-3 w-3 text-muted-foreground" aria-hidden="true" />
-          <span className="num text-[12px] tabular-nums">{value}</span>
+        <span className="inline-flex items-center gap-2 rounded-sm px-1.5 py-1 text-foreground transition-colors hover:bg-accent/60">
+          <Icon className="h-4 w-4 text-muted-foreground" aria-hidden="true" strokeWidth={1.75} />
+          <span className="num text-[14px] font-medium tabular-nums leading-none">{value}</span>
+          <span className="hidden text-[10.5px] uppercase tracking-[0.14em] text-muted-foreground lg:inline">
+            {label}
+          </span>
         </span>
       </TooltipTrigger>
       <TooltipContent sideOffset={6} className="text-[11px]">{label}</TooltipContent>
@@ -166,11 +169,11 @@ function LiveClock() {
   }, [])
 
   if (!now) {
-    return <span className="num text-[12px] tabular-nums text-muted-foreground">—:—</span>
+    return <span className="num text-[13px] tabular-nums text-muted-foreground">—:—</span>
   }
 
   return (
-    <span className="num text-[12px] tabular-nums text-foreground/85">
+    <span className="num text-[13px] font-medium tabular-nums leading-none text-foreground">
       {now.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
     </span>
   )
@@ -199,16 +202,16 @@ function RailButton({
           aria-label={label}
           onClick={onClick}
           disabled={disabled}
-          className={`group flex h-9 w-9 items-center justify-center rounded-sm transition-colors disabled:opacity-40 ${
+          className={`group flex h-10 w-10 items-center justify-center rounded-sm transition-colors disabled:opacity-40 ${
             active
-              ? "bg-copper-soft text-foreground"
+              ? "bg-copper-soft text-copper"
               : "text-muted-foreground hover:bg-accent hover:text-foreground"
           }`}
         >
           {spinning ? (
-            <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+            <Loader2 className="h-[18px] w-[18px] animate-spin" aria-hidden="true" strokeWidth={1.75} />
           ) : (
-            <Icon className="h-4 w-4" aria-hidden="true" />
+            <Icon className="h-[18px] w-[18px]" aria-hidden="true" strokeWidth={1.75} />
           )}
         </button>
       </TooltipTrigger>
@@ -474,7 +477,7 @@ export default function DashboardPage() {
     <TooltipProvider delayDuration={250} skipDelayDuration={400}>
       <main className="h-screen overflow-hidden bg-background text-foreground">
         <div className="flex h-full">
-          <aside className="hidden w-12 shrink-0 flex-col items-center gap-1 border-r border-rule py-3 md:flex">
+          <aside className="hidden w-14 shrink-0 flex-col items-center gap-1.5 border-r border-rule py-4 md:flex">
             <RailButton
               label="Calendars"
               icon={PanelLeft}
@@ -498,40 +501,41 @@ export default function DashboardPage() {
           </aside>
 
           <section className="flex min-w-0 flex-1 flex-col">
-            <header className="flex h-12 shrink-0 items-center gap-4 border-b border-rule px-6">
-              <div className="flex min-w-0 items-center gap-2.5">
-                <span className="text-[15px] font-semibold leading-none tracking-tight text-foreground">
+            <header className="flex h-16 shrink-0 items-center gap-5 border-b border-rule-strong px-6">
+              <div className="flex min-w-0 items-center gap-3">
+                <span className="text-[19px] font-semibold leading-none tracking-tight text-foreground">
                   JARVIS
                 </span>
-                <span className="hidden h-3 w-px bg-rule sm:block" />
-                <span className="hidden text-[11px] uppercase tracking-[0.14em] text-muted-foreground sm:block">
+                <span className="hidden h-4 w-px bg-rule-strong sm:block" />
+                <span className="hidden text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground sm:block">
                   Secretary
                 </span>
               </div>
 
-              <div className="ml-auto flex items-center gap-5">
+              <div className="ml-auto flex items-center gap-3">
                 {stats ? (
-                  <div className="hidden items-center gap-4 md:flex">
+                  <div className="hidden items-center gap-1 md:flex">
                     <StatGlyph icon={ListTodo} label="Tasks" value={stats.tasks} />
                     <StatGlyph icon={CalendarDays} label="Loose" value={stats.unscheduled} />
                     <StatGlyph icon={Brain} label="Memory" value={stats.memories} />
                     <StatGlyph icon={Database} label="Sources" value={stats.sources} />
                   </div>
                 ) : null}
+                <span className="hidden h-5 w-px bg-rule md:block" />
                 <LiveClock />
                 <button
                   type="button"
                   aria-label="Calendars"
                   onClick={() => setCalendarsSidebarOpen(true)}
-                  className="flex h-8 w-8 items-center justify-center rounded-sm text-muted-foreground hover:bg-accent hover:text-foreground md:hidden"
+                  className="flex h-9 w-9 items-center justify-center rounded-sm text-muted-foreground hover:bg-accent hover:text-foreground md:hidden"
                 >
-                  <PanelLeft className="h-4 w-4" aria-hidden="true" />
+                  <PanelLeft className="h-[18px] w-[18px]" aria-hidden="true" />
                 </button>
                 <AuthControls />
               </div>
             </header>
 
-            <div className="flex min-h-0 flex-1 flex-col px-6 py-5">{renderContent()}</div>
+            <div className="flex min-h-0 flex-1 flex-col px-6 py-6">{renderContent()}</div>
           </section>
         </div>
 

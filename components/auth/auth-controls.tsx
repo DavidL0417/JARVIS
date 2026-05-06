@@ -195,7 +195,7 @@ export function AuthControls() {
   }
 
   return (
-    <div className="flex items-center gap-1.5">
+    <div className="flex items-center gap-2">
       <Tooltip>
         <TooltipTrigger asChild>
           <button
@@ -203,9 +203,9 @@ export function AuthControls() {
             aria-label={authState.user.email}
             className="flex items-center"
           >
-            <Avatar className="h-7 w-7 rounded-sm">
+            <Avatar className="h-8 w-8 rounded-sm ring-1 ring-rule">
               <AvatarImage src={authState.user.avatarUrl || undefined} alt={authState.user.name} />
-              <AvatarFallback className="num rounded-sm bg-accent text-[10px] font-medium text-foreground">
+              <AvatarFallback className="num rounded-sm bg-accent text-[11px] font-medium text-foreground">
                 {getFallbackInitials(authState.user.name, authState.user.email)}
               </AvatarFallback>
             </Avatar>
@@ -222,12 +222,12 @@ export function AuthControls() {
             aria-label="Sign out"
             onClick={handleSignOut}
             disabled={isMutating}
-            className="flex h-7 w-7 items-center justify-center rounded-sm text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50"
+            className="flex h-8 w-8 items-center justify-center rounded-sm text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50"
           >
             {isMutating ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
-              <LogOut className="h-3.5 w-3.5" />
+              <LogOut className="h-4 w-4" strokeWidth={1.75} />
             )}
           </button>
         </TooltipTrigger>

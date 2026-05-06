@@ -77,14 +77,14 @@ function ToolCallReceipt({ toolCalls }: { toolCalls: AssistantMessageResponse["t
               : "text-destructive"
 
         return (
-          <div key={toolCall.id} className="flex items-baseline gap-2 text-[11px]">
-            <span className="num text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+          <div key={toolCall.id} className="flex items-baseline gap-2 text-[12px]">
+            <span className="num text-[10.5px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
               {toolCall.tool}
             </span>
-            <span className={`num text-[10px] uppercase tracking-[0.12em] ${tone}`}>
+            <span className={`num text-[10.5px] font-medium uppercase tracking-[0.14em] ${tone}`}>
               {toolCall.status}
             </span>
-            <span className="flex-1 truncate text-[11px] text-muted-foreground">
+            <span className="flex-1 truncate text-[12px] text-muted-foreground">
               {toolCall.summary}
             </span>
           </div>
@@ -96,7 +96,7 @@ function ToolCallReceipt({ toolCalls }: { toolCalls: AssistantMessageResponse["t
 
 function MarkdownMessage({ text }: { text: string }) {
   return (
-    <div className="text-[12.5px] leading-[1.55] text-foreground">
+    <div className="text-[13.5px] leading-[1.55] text-foreground">
       <ReactMarkdown
         remarkPlugins={[remarkGfm, remarkBreaks]}
         components={{
@@ -353,14 +353,14 @@ export function MasterInput({ tasks = [] }: MasterInputProps) {
     <section className="flex flex-col">
       <header className="mb-3 flex items-baseline justify-between gap-2">
         <h2 className="eyebrow">Secretary</h2>
-        <span className="num flex items-center gap-1.5 text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+        <span className="num flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
           <span
             className={`h-1.5 w-1.5 rounded-full ${
               status === "submitting"
                 ? "animate-pulse bg-copper"
                 : status === "error"
                   ? "bg-destructive"
-                  : "bg-foreground/40"
+                  : "bg-copper"
             }`}
             aria-hidden="true"
           />
@@ -370,13 +370,13 @@ export function MasterInput({ tasks = [] }: MasterInputProps) {
 
       <div
         ref={transcriptRef}
-        className="h-[220px] overflow-y-auto border-y border-rule"
+        className="h-[240px] overflow-y-auto border-y border-rule-strong"
       >
-        <div className="space-y-3 py-3">
+        <div className="space-y-3.5 py-3.5">
           {transcript.map((entry) => (
             <div key={entry.id} className="flex gap-3">
               <span
-                className={`num w-12 shrink-0 pt-0.5 text-[10px] uppercase tracking-[0.12em] ${
+                className={`num w-14 shrink-0 pt-0.5 text-[11px] font-medium uppercase tracking-[0.14em] ${
                   entry.role === "user" ? "text-muted-foreground" : "copper"
                 }`}
               >
@@ -386,15 +386,15 @@ export function MasterInput({ tasks = [] }: MasterInputProps) {
                 {entry.role === "assistant" ? (
                   <MarkdownMessage text={entry.text} />
                 ) : (
-                  <p className="whitespace-pre-wrap text-[12.5px] leading-[1.55] text-foreground">
+                  <p className="whitespace-pre-wrap text-[13.5px] leading-[1.55] text-foreground">
                     {entry.text}
                   </p>
                 )}
                 {entry.error && (
-                  <p className="mt-1 text-[11px] text-destructive">{entry.error}</p>
+                  <p className="mt-1 text-[12px] text-destructive">{entry.error}</p>
                 )}
                 {entry.clarification && (
-                  <p className="mt-1 text-[11px] copper">{entry.clarification}</p>
+                  <p className="mt-1 text-[12px] copper">{entry.clarification}</p>
                 )}
                 {entry.toolCalls && <ToolCallReceipt toolCalls={entry.toolCalls} />}
               </div>
@@ -402,7 +402,7 @@ export function MasterInput({ tasks = [] }: MasterInputProps) {
           ))}
           {status === "submitting" && (
             <div className="flex gap-3">
-              <span className="w-12 shrink-0" />
+              <span className="w-14 shrink-0" />
               <ThinkingBubble />
             </div>
           )}
@@ -411,21 +411,21 @@ export function MasterInput({ tasks = [] }: MasterInputProps) {
       </div>
 
       {errorMessage && (
-        <p className="mt-2 text-[11px] text-destructive">{errorMessage}</p>
+        <p className="mt-2 text-[12px] text-destructive">{errorMessage}</p>
       )}
 
-      <div className="mt-3 flex items-end gap-2">
+      <div className="mt-3 flex items-end gap-2 rounded-sm border border-rule bg-panel/40 px-3 py-2 transition-colors focus-within:border-copper/60">
         <Textarea
-          placeholder="Message"
+          placeholder="Message JARVIS…"
           value={message}
           onChange={(event) => setMessage(event.target.value)}
           onKeyDown={handleKeyDown}
           aria-label="Secretary input"
-          className="min-h-[44px] resize-none border-0 bg-transparent px-0 text-[13px] text-foreground shadow-none placeholder:text-muted-foreground focus-visible:ring-0"
+          className="min-h-[40px] resize-none border-0 bg-transparent px-0 text-[14px] leading-[1.5] text-foreground shadow-none placeholder:text-muted-foreground/70 focus-visible:ring-0"
         />
-        <div className="flex items-center gap-1.5">
-          <span className="num hidden items-center gap-1 text-[10px] uppercase tracking-[0.12em] text-muted-foreground sm:flex">
-            <CornerDownLeft className="h-3 w-3" aria-hidden="true" />
+        <div className="flex items-center gap-2">
+          <span className="num hidden items-center gap-1 text-[10.5px] font-medium uppercase tracking-[0.14em] text-muted-foreground sm:flex">
+            <CornerDownLeft className="h-3.5 w-3.5" aria-hidden="true" />
             Send
           </span>
           <Tooltip>
@@ -435,12 +435,12 @@ export function MasterInput({ tasks = [] }: MasterInputProps) {
                 onClick={handleSubmit}
                 disabled={status === "submitting" || !message.trim()}
                 aria-label="Send"
-                className="flex h-8 w-8 items-center justify-center rounded-sm bg-copper text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-30"
+                className="flex h-9 w-9 items-center justify-center rounded-sm bg-copper text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-30"
               >
                 {status === "submitting" ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2} />
                 ) : (
-                  <Send className="h-3.5 w-3.5" />
+                  <Send className="h-4 w-4" strokeWidth={2} />
                 )}
               </button>
             </TooltipTrigger>
@@ -458,13 +458,13 @@ export function MasterInput({ tasks = [] }: MasterInputProps) {
                 key={key}
                 type="button"
                 onClick={() => toggleContext(key)}
-                className={`flex items-center gap-1.5 rounded-sm px-2 py-1 text-[10px] uppercase tracking-[0.12em] transition-colors ${
+                className={`flex items-center gap-1.5 rounded-sm px-2.5 py-1.5 text-[11px] font-medium uppercase tracking-[0.14em] transition-colors ${
                   open ? "bg-accent text-foreground" : "text-muted-foreground hover:text-foreground"
                 }`}
               >
                 <span className="num">{key}</span>
                 <ChevronDown
-                  className={`h-3 w-3 transition-transform ${open ? "rotate-180" : ""}`}
+                  className={`h-3.5 w-3.5 transition-transform ${open ? "rotate-180" : ""}`}
                   aria-hidden="true"
                 />
               </button>
@@ -473,15 +473,15 @@ export function MasterInput({ tasks = [] }: MasterInputProps) {
         </div>
 
         {openContext === "availability" ? (
-          <div className="mt-2 space-y-2">
+          <div className="mt-3 space-y-2.5">
             {context ? (
               <>
-                <p className="whitespace-pre-line text-[12px] leading-[1.5] text-muted-foreground">
+                <p className="whitespace-pre-line text-[13px] leading-[1.55] text-muted-foreground">
                   {context.availability.availabilitySummary}
                 </p>
                 <ul className="space-y-1">
                   {availabilityLines.map((line) => (
-                    <li key={line} className="num text-[11px] text-foreground">
+                    <li key={line} className="num text-[12.5px] text-foreground">
                       {line}
                     </li>
                   ))}
@@ -490,7 +490,7 @@ export function MasterInput({ tasks = [] }: MasterInputProps) {
                   <div className="space-y-0.5 pt-1">
                     <p className="eyebrow">Windows</p>
                     {context.availabilityWindows.slice(0, 8).map((window) => (
-                      <p key={`${window.localDay}-${window.start}`} className="num text-[11px] text-foreground">
+                      <p key={`${window.localDay}-${window.start}`} className="num text-[12.5px] text-foreground">
                         {window.localDay}{" "}
                         {new Date(window.start).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
                         –{new Date(window.end).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
@@ -500,34 +500,34 @@ export function MasterInput({ tasks = [] }: MasterInputProps) {
                 ) : null}
               </>
             ) : (
-              <p className="text-[11px] text-muted-foreground">Loading…</p>
+              <p className="text-[12px] text-muted-foreground">Loading…</p>
             )}
           </div>
         ) : null}
 
         {openContext === "memory" ? (
-          <div className="mt-2 space-y-2">
+          <div className="mt-3 space-y-2.5">
             {context ? (
               <>
-                <p className="whitespace-pre-line text-[12px] leading-[1.5] text-muted-foreground">
+                <p className="whitespace-pre-line text-[13px] leading-[1.55] text-muted-foreground">
                   {context.memorySummary || "No memory summary."}
                 </p>
-                <ul className="space-y-1.5">
+                <ul className="space-y-2">
                   {context.memoryEntries.map((entry) => (
-                    <li key={entry.id} className="border-l border-rule pl-2">
-                      <p className="text-[12px] text-foreground">{entry.insight}</p>
-                      <p className="num mt-0.5 text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
+                    <li key={entry.id} className="border-l border-rule pl-2.5">
+                      <p className="text-[13px] leading-snug text-foreground">{entry.insight}</p>
+                      <p className="num mt-0.5 text-[10.5px] uppercase tracking-[0.14em] text-muted-foreground">
                         {entry.category} · {new Date(entry.createdAt).toLocaleDateString()}
                       </p>
                     </li>
                   ))}
                   {context.memoryEntries.length === 0 ? (
-                    <li className="text-[11px] text-muted-foreground">No memory yet.</li>
+                    <li className="text-[12px] text-muted-foreground">No memory yet.</li>
                   ) : null}
                 </ul>
               </>
             ) : (
-              <p className="text-[11px] text-muted-foreground">Loading…</p>
+              <p className="text-[12px] text-muted-foreground">Loading…</p>
             )}
           </div>
         ) : null}
