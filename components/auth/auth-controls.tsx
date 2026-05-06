@@ -5,11 +5,8 @@ import { useRouter } from "next/navigation"
 import { Loader2, LogIn, LogOut } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
-import {
-  Avatar,
-  AvatarFallback,
-  AvatarImage,
-} from "@/components/ui/avatar"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { tryCreateSupabaseBrowserClient } from "@/lib/supabase/client"
 
 type AuthViewState =
@@ -150,81 +147,92 @@ export function AuthControls() {
 
   if (authState.status === "loading") {
     return (
-      <Button
-        variant="outline"
-        size="sm"
-        disabled
-        className="text-xs h-8 px-3 font-semibold"
+      <div
+        aria-label="Loading auth"
+        className="flex h-8 w-8 items-center justify-center text-muted-foreground"
       >
-        <Loader2 className="w-3 h-3 mr-2 animate-spin" />
-        Auth
-      </Button>
+        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+      </div>
     )
   }
 
   if (authState.status === "signed-out") {
     if (!supabase) {
       return (
-        <Button
-          variant="outline"
-          size="sm"
-          disabled
-          className="text-xs h-8 px-3 font-semibold"
-          title="Add NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY to enable auth."
-        >
-          <LogIn className="w-3 h-3 mr-2" />
-          Auth unavailable
-        </Button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              disabled
+              aria-label="Auth unavailable"
+              className="flex h-8 w-8 items-center justify-center rounded-sm text-muted-foreground/60"
+            >
+              <LogIn className="h-4 w-4" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom" className="text-[11px]">
+            Set Supabase env vars to enable auth
+          </TooltipContent>
+        </Tooltip>
       )
     }
 
     return (
       <Button
-        variant="outline"
         size="sm"
         onClick={handleSignIn}
         disabled={isMutating}
-        className="text-xs h-8 px-3 font-semibold"
+        className="h-8 gap-2 bg-copper px-3 text-[12px] font-medium text-primary-foreground hover:opacity-90"
       >
         {isMutating ? (
-          <Loader2 className="w-3 h-3 mr-2 animate-spin" />
+          <Loader2 className="h-3.5 w-3.5 animate-spin" />
         ) : (
-          <LogIn className="w-3 h-3 mr-2" />
+          <LogIn className="h-3.5 w-3.5" />
         )}
-        Sign in with Google
+        Sign in
       </Button>
     )
   }
 
   return (
-    <div className="flex items-center gap-2 rounded border border-border px-2 py-1.5">
-      <Avatar className="w-7 h-7">
-        <AvatarImage src={authState.user.avatarUrl || undefined} alt={authState.user.name} />
-        <AvatarFallback className="text-[10px] font-semibold">
-          {getFallbackInitials(authState.user.name, authState.user.email)}
-        </AvatarFallback>
-      </Avatar>
-      <div className="hidden sm:flex flex-col min-w-0">
-        <span className="text-[11px] font-semibold text-foreground truncate max-w-[180px]">
-          {authState.user.name}
-        </span>
-        <span className="text-[10px] text-muted-foreground truncate max-w-[180px]">
+    <div className="flex items-center gap-2">
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            aria-label={authState.user.email}
+            className="flex items-center"
+          >
+            <Avatar className="h-8 w-8 rounded-sm ring-1 ring-rule">
+              <AvatarImage src={authState.user.avatarUrl || undefined} alt={authState.user.name} />
+              <AvatarFallback className="num rounded-sm bg-accent text-[11px] font-medium text-foreground">
+                {getFallbackInitials(authState.user.name, authState.user.email)}
+              </AvatarFallback>
+            </Avatar>
+          </button>
+        </TooltipTrigger>
+        <TooltipContent side="bottom" className="text-[11px]">
           {authState.user.email}
-        </span>
-      </div>
-      <Button
-        variant="ghost"
-        size="sm"
-        onClick={handleSignOut}
-        disabled={isMutating}
-        className="text-xs h-7 px-2 font-semibold"
-      >
-        {isMutating ? (
-          <Loader2 className="w-3 h-3 animate-spin" />
-        ) : (
-          <LogOut className="w-3 h-3" />
-        )}
-      </Button>
+        </TooltipContent>
+      </Tooltip>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            aria-label="Sign out"
+            onClick={handleSignOut}
+            disabled={isMutating}
+            className="flex h-8 w-8 items-center justify-center rounded-sm text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50"
+          >
+            {isMutating ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <LogOut className="h-4 w-4" strokeWidth={1.75} />
+            )}
+          </button>
+        </TooltipTrigger>
+        <TooltipContent side="bottom" className="text-[11px]">Sign out</TooltipContent>
+      </Tooltip>
     </div>
   )
 }

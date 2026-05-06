@@ -1,12 +1,9 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import { CheckCircle2, Loader2 } from "lucide-react"
+import { Check, Lock, LockOpen, Loader2 } from "lucide-react"
 
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Switch } from "@/components/ui/switch"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import type { ScheduleEvent } from "@/types"
 import type { Calendar } from "./calendars-sidebar"
 
@@ -30,24 +27,7 @@ function formatEventWindow(event: ScheduleEvent) {
   })
 }
 
-function getMacaronCardClasses(calendarId: string | null, calendars: Calendar[]) {
-  const calendar = calendars.find((item) => item.id === calendarId)
-  const name = calendar?.name.toLowerCase() ?? ""
-
-  if (name.includes("work")) {
-    return "border-blue-200/80 bg-blue-100/40 dark:border-blue-900/60 dark:bg-blue-950/30"
-  }
-
-  if (name.includes("class") || name.includes("academic")) {
-    return "border-amber-200/80 bg-amber-100/40 dark:border-amber-900/60 dark:bg-amber-950/30"
-  }
-
-  if (name.includes("social") || name.includes("personal")) {
-    return "border-emerald-200/80 bg-emerald-100/40 dark:border-emerald-900/60 dark:bg-emerald-950/30"
-  }
-
-  return "border-pink-200/80 bg-pink-100/40 dark:border-pink-900/60 dark:bg-pink-950/30"
-}
+const PRIORITIES: ScheduleEvent["priority"][] = ["high", "medium", "low"]
 
 export function CheckInSidebar({
   events,
@@ -114,124 +94,135 @@ export function CheckInSidebar({
         | null
 
       if (!response.ok || !payload?.success || !payload.event) {
-        throw new Error(payload?.details || payload?.error || "Failed to save check-in approval.")
+        throw new Error(payload?.details || payload?.error || "Failed to save check-in.")
       }
 
       onEventApproved(payload.event)
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Failed to save check-in approval.")
+      setErrorMessage(error instanceof Error ? error.message : "Failed to save check-in.")
     } finally {
       setSavingEventId(null)
     }
   }
 
+  if (pendingEvents.length === 0) {
+    return null
+  }
+
   return (
-    <Card className="border-cyan-200/70 bg-cyan-100/35 shadow-sm dark:border-cyan-900/60 dark:bg-cyan-950/25">
-      <CardHeader className="p-3 pb-1">
-        <CardTitle className="text-sm font-bold text-foreground">Check-ins</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-3 p-3 pt-2">
-        {errorMessage ? (
-          <div className="rounded-xl border border-red-200/70 bg-red-100/40 px-3 py-2 text-xs font-medium text-red-700 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-200">
-            {errorMessage}
-          </div>
-        ) : null}
-        {pendingEvents.length === 0 ? (
-          <div className="flex flex-col items-center justify-center rounded-2xl border border-emerald-200/70 bg-emerald-100/40 px-4 py-8 text-center dark:border-emerald-900/60 dark:bg-emerald-950/30">
-            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500 text-white shadow-sm">
-              <CheckCircle2 className="h-7 w-7" />
-            </div>
-            <p className="mt-3 text-sm font-semibold text-foreground">
-              All tasks and events checked-in!
-            </p>
-            <p className="mt-1 text-xs font-medium text-muted-foreground">
-              Go lock in now 💪
-            </p>
-          </div>
-        ) : (
-          pendingEvents.map((event) => {
-            const draft = drafts[event.id] ?? {
-              priority: event.priority,
-              isImmutable: event.isImmutable,
-            }
-            const isSaving = savingEventId === event.id
+    <section className="flex flex-col">
+      <header className="mb-3 flex items-baseline justify-between gap-2">
+        <div className="flex items-baseline gap-2">
+          <h2 className="eyebrow">Check-in</h2>
+          <span className="num text-[10px] uppercase tracking-[0.12em] copper">
+            {pendingEvents.length}
+          </span>
+        </div>
+      </header>
 
-            return (
-              <div
-                key={event.id}
-                className={`animate-in slide-in-from-bottom-1 fade-in-50 rounded-2xl border p-3 shadow-sm transition-all duration-300 ease-out ${getMacaronCardClasses(
-                  event.calendarId,
-                  calendars,
-                )}`}
-              >
-                <div className="grid gap-3 md:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)_minmax(0,1fr)]">
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-semibold text-foreground">{event.title}</p>
-                    <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                      <Badge variant="outline">{formatEventWindow(event)}</Badge>
-                      <Badge variant="outline">{event.source}</Badge>
-                    </div>
-                  </div>
+      {errorMessage ? (
+        <p className="mb-2 text-[11px] text-destructive">{errorMessage}</p>
+      ) : null}
 
-                  <label className="space-y-1 text-xs font-semibold text-muted-foreground">
-                    <span>Priority</span>
-                    <select
-                      value={draft.priority}
-                      onChange={(nextEvent) =>
-                        setDrafts((currentDrafts) => ({
-                          ...currentDrafts,
-                          [event.id]: {
-                            ...draft,
-                            priority: nextEvent.target.value as ScheduleEvent["priority"],
-                          },
-                        }))
-                      }
-                      className="h-9 w-full rounded-md border border-input bg-background/90 px-2 text-sm text-foreground"
-                    >
-                      <option value="high">High</option>
-                      <option value="medium">Medium</option>
-                      <option value="low">Low</option>
-                    </select>
-                  </label>
+      <ul className="border-y border-rule">
+        {pendingEvents.map((event) => {
+          const draft = drafts[event.id] ?? {
+            priority: event.priority,
+            isImmutable: event.isImmutable,
+          }
+          const isSaving = savingEventId === event.id
+          const calendarColor = calendars.find((c) => c.id === event.calendarId)?.color
 
-                  <div className="space-y-1 text-xs font-semibold text-muted-foreground">
-                    <span>Mutable</span>
-                    <div className="flex h-9 items-center justify-between rounded-md border border-input bg-background/90 px-3">
-                      <span className="text-sm text-foreground">
-                        {draft.isImmutable ? "No" : "Yes"}
-                      </span>
-                      <Switch
-                        checked={!draft.isImmutable}
-                        onCheckedChange={(checked) =>
-                          setDrafts((currentDrafts) => ({
-                            ...currentDrafts,
-                            [event.id]: {
-                              ...draft,
-                              isImmutable: !checked,
-                            },
-                          }))
-                        }
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="mt-3 flex justify-end">
-                  <Button
-                    size="sm"
-                    onClick={() => void handleSave(event)}
-                    disabled={isSaving}
-                    className="bg-emerald-200 text-emerald-950 hover:bg-emerald-300 dark:bg-emerald-800/80 dark:text-emerald-50 dark:hover:bg-emerald-700"
-                  >
-                    {isSaving ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}
-                    Save
-                  </Button>
+          return (
+            <li
+              key={event.id}
+              className="space-y-2 border-b border-rule px-1 py-2 last:border-b-0"
+            >
+              <div className="flex items-baseline gap-3">
+                {calendarColor ? (
+                  <span
+                    className="mt-1 h-2 w-2 shrink-0 rounded-full"
+                    style={{ backgroundColor: calendarColor }}
+                    aria-hidden="true"
+                  />
+                ) : (
+                  <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-copper" aria-hidden="true" />
+                )}
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-[13px] text-foreground">{event.title}</p>
+                  <p className="num mt-0.5 text-[10.5px] uppercase tracking-[0.1em] text-muted-foreground">
+                    Ends {formatEventWindow(event)} · {event.source}
+                  </p>
                 </div>
               </div>
-            )
-          })
-        )}
-      </CardContent>
-    </Card>
+
+              <div className="flex flex-wrap items-center gap-2 pl-5">
+                <div className="flex items-center gap-0.5 rounded-sm border border-rule p-0.5">
+                  {PRIORITIES.map((priority) => {
+                    const active = draft.priority === priority
+                    return (
+                      <button
+                        key={priority}
+                        type="button"
+                        onClick={() =>
+                          setDrafts((current) => ({
+                            ...current,
+                            [event.id]: { ...draft, priority },
+                          }))
+                        }
+                        aria-pressed={active}
+                        className={`num rounded-sm px-1.5 py-0.5 text-[10px] uppercase tracking-[0.12em] transition-colors ${
+                          active ? "bg-copper-soft text-foreground" : "text-muted-foreground hover:text-foreground"
+                        }`}
+                      >
+                        {priority.charAt(0)}
+                      </button>
+                    )
+                  })}
+                </div>
+
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setDrafts((current) => ({
+                          ...current,
+                          [event.id]: { ...draft, isImmutable: !draft.isImmutable },
+                        }))
+                      }
+                      aria-label={draft.isImmutable ? "Make mutable" : "Make immutable"}
+                      aria-pressed={draft.isImmutable}
+                      className={`flex h-6 w-6 items-center justify-center rounded-sm border border-rule transition-colors ${
+                        draft.isImmutable ? "bg-copper-soft text-foreground" : "text-muted-foreground hover:bg-accent"
+                      }`}
+                    >
+                      {draft.isImmutable ? <Lock className="h-3 w-3" /> : <LockOpen className="h-3 w-3" />}
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="text-[11px]">
+                    {draft.isImmutable ? "Pinned" : "Movable"}
+                  </TooltipContent>
+                </Tooltip>
+
+                <button
+                  type="button"
+                  onClick={() => void handleSave(event)}
+                  disabled={isSaving}
+                  className="num ml-auto flex h-6 items-center gap-1 rounded-sm bg-copper px-2 text-[10px] uppercase tracking-[0.12em] text-primary-foreground hover:opacity-90 disabled:opacity-50"
+                >
+                  {isSaving ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : (
+                    <Check className="h-3 w-3" />
+                  )}
+                  Save
+                </button>
+              </div>
+            </li>
+          )
+        })}
+      </ul>
+    </section>
   )
 }

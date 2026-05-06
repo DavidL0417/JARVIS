@@ -4,11 +4,10 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import ReactMarkdown from "react-markdown"
 import remarkBreaks from "remark-breaks"
 import remarkGfm from "remark-gfm"
+import { ChevronDown, CornerDownLeft, Loader2, Send } from "lucide-react"
 
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Textarea } from "@/components/ui/textarea"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import type {
   AssistantContextResponse,
   AssistantMessageRequest,
@@ -53,10 +52,10 @@ function buildIntroFromTaskContext(tasks: Task[]) {
       .map((task) => task.title)
 
     if (upcomingTitles.length > 0) {
-      return `I see ${tasks.length} tasks, including ${formatTaskTitles(upcomingTitles)}.`
+      return `${tasks.length} open tasks. Top of queue: ${formatTaskTitles(upcomingTitles)}.`
     }
 
-    return `I see ${tasks.length} tasks.`
+    return `${tasks.length} tasks on file.`
   }
 
   return "Ready."
@@ -68,32 +67,36 @@ function ToolCallReceipt({ toolCalls }: { toolCalls: AssistantMessageResponse["t
   }
 
   return (
-    <div className="mt-3 grid grid-cols-1 gap-2">
-      {toolCalls.map((toolCall) => (
-        <div
-          key={toolCall.id}
-          className={`rounded-lg border px-3 py-2 ${
-            toolCall.status === "completed"
-              ? "border-emerald-500/30 bg-emerald-500/10"
-              : toolCall.status === "clarification" || toolCall.status === "pending_approval"
-                ? "border-amber-500/30 bg-amber-500/10"
-                : "border-red-500/30 bg-red-500/10"
-          }`}
-        >
-          <div className="flex items-center justify-between gap-3">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-foreground">{toolCall.tool}</p>
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{toolCall.status}</p>
+    <div className="mt-2 space-y-1">
+      {toolCalls.map((toolCall) => {
+        const tone =
+          toolCall.status === "completed"
+            ? "text-foreground/80"
+            : toolCall.status === "clarification" || toolCall.status === "pending_approval"
+              ? "copper"
+              : "text-destructive"
+
+        return (
+          <div key={toolCall.id} className="flex items-baseline gap-2 text-[12px]">
+            <span className="num text-[10.5px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
+              {toolCall.tool}
+            </span>
+            <span className={`num text-[10.5px] font-medium uppercase tracking-[0.14em] ${tone}`}>
+              {toolCall.status}
+            </span>
+            <span className="flex-1 truncate text-[12px] text-muted-foreground">
+              {toolCall.summary}
+            </span>
           </div>
-          <p className="mt-1 text-xs text-muted-foreground">{toolCall.summary}</p>
-        </div>
-      ))}
+        )
+      })}
     </div>
   )
 }
 
 function MarkdownMessage({ text }: { text: string }) {
   return (
-    <div className="text-xs leading-relaxed text-inherit">
+    <div className="text-[13.5px] leading-[1.55] text-foreground">
       <ReactMarkdown
         remarkPlugins={[remarkGfm, remarkBreaks]}
         components={{
@@ -101,10 +104,10 @@ function MarkdownMessage({ text }: { text: string }) {
           ul: ({ children }) => <ul className="mb-2 list-disc space-y-1 pl-4 last:mb-0">{children}</ul>,
           ol: ({ children }) => <ol className="mb-2 list-decimal space-y-1 pl-4 last:mb-0">{children}</ol>,
           li: ({ children }) => <li>{children}</li>,
-          strong: ({ children }) => <strong className="font-semibold text-inherit">{children}</strong>,
-          em: ({ children }) => <em className="italic text-inherit">{children}</em>,
+          strong: ({ children }) => <strong className="font-medium text-foreground">{children}</strong>,
+          em: ({ children }) => <em className="italic text-foreground">{children}</em>,
           code: ({ children }) => (
-            <code className="rounded bg-black/20 px-1 py-0.5 font-mono text-[11px] text-inherit">
+            <code className="num rounded-sm bg-accent px-1 py-0.5 text-[11px] text-foreground">
               {children}
             </code>
           ),
@@ -118,17 +121,13 @@ function MarkdownMessage({ text }: { text: string }) {
 
 function ThinkingBubble() {
   return (
-    <div className="flex justify-start">
-      <div className="max-w-[92%] rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-2 text-foreground backdrop-blur-sm">
-        <div className="flex items-center gap-2 text-xs leading-relaxed">
-          <span className="font-medium">JARVIS is thinking</span>
-          <span className="flex gap-1">
-            <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground [animation-delay:-0.3s]" />
-            <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground [animation-delay:-0.15s]" />
-            <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground" />
-          </span>
-        </div>
-      </div>
+    <div className="flex items-baseline gap-2 text-[11px] text-muted-foreground">
+      <span className="num text-[10px] uppercase tracking-[0.12em] copper">JARVIS</span>
+      <span className="flex gap-1">
+        <span className="h-1 w-1 animate-pulse rounded-full bg-copper [animation-delay:-0.3s]" />
+        <span className="h-1 w-1 animate-pulse rounded-full bg-copper [animation-delay:-0.15s]" />
+        <span className="h-1 w-1 animate-pulse rounded-full bg-copper" />
+      </span>
     </div>
   )
 }
@@ -137,9 +136,7 @@ interface MasterInputProps {
   tasks?: Task[]
 }
 
-export function MasterInput({
-  tasks = [],
-}: MasterInputProps) {
+export function MasterInput({ tasks = [] }: MasterInputProps) {
   const [message, setMessage] = useState("")
   const [status, setStatus] = useState<SubmitStatus>("idle")
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
@@ -151,6 +148,7 @@ export function MasterInput({
       text: buildIntroFromTaskContext(tasks),
     },
   ])
+  const [openContext, setOpenContext] = useState<"none" | "availability" | "memory">("none")
   const transcriptRef = useRef<HTMLDivElement | null>(null)
   const transcriptBottomRef = useRef<HTMLDivElement | null>(null)
 
@@ -232,16 +230,12 @@ export function MasterInput({
     }
 
     return [
-      `Timezone: ${context.availability.timezone}`,
-      `Workday: ${context.availability.workdayStart} - ${context.availability.workdayEnd}`,
-      context.availability.peakEnergyWindow
-        ? `Peak energy: ${context.availability.peakEnergyWindow}`
-        : null,
-      context.availability.sleepPattern
-        ? `Sleep / no-work note: ${context.availability.sleepPattern}`
-        : null,
+      `Timezone ${context.availability.timezone}`,
+      `Workday ${context.availability.workdayStart}–${context.availability.workdayEnd}`,
+      context.availability.peakEnergyWindow ? `Peak ${context.availability.peakEnergyWindow}` : null,
+      context.availability.sleepPattern ? `Sleep ${context.availability.sleepPattern}` : null,
       context.availability.procrastinationPattern
-        ? `Planning friction: ${context.availability.procrastinationPattern}`
+        ? `Friction ${context.availability.procrastinationPattern}`
         : null,
     ].filter((line): line is string => Boolean(line))
   }, [context])
@@ -325,7 +319,7 @@ export function MasterInput({
 
       setStatus("idle")
     } catch (error) {
-      const nextError = error instanceof Error ? error.message : "Something went wrong while talking to the secretary."
+      const nextError = error instanceof Error ? error.message : "Something went wrong."
       setStatus("error")
       setErrorMessage(nextError)
       setTranscript((current) => [
@@ -333,7 +327,7 @@ export function MasterInput({
         {
           id: crypto.randomUUID(),
           role: "assistant",
-          text: "I hit an error before I could finish that request.",
+          text: "Hit an error before that finished.",
           error: nextError,
         },
       ])
@@ -351,147 +345,193 @@ export function MasterInput({
     }
   }
 
+  const toggleContext = (key: "availability" | "memory") => {
+    setOpenContext((current) => (current === key ? "none" : key))
+  }
+
   return (
-    <Card className="flex flex-col overflow-hidden border-border bg-card">
-      <CardHeader className="p-4 pb-3">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <CardTitle className="text-sm font-semibold text-foreground">Master Input</CardTitle>
-          </div>
-          <div className="rounded-md border border-border bg-background px-2 py-1 text-[10px] font-semibold uppercase text-muted-foreground">
-            {status === "submitting" ? "Thinking" : "Ready"}
-          </div>
-        </div>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-3 p-4 pt-0">
-        <div
-          ref={transcriptRef}
-          className="h-[240px] overflow-y-auto rounded-md border border-border bg-background/50"
-        >
-          <div className="space-y-3 p-4">
-            {transcript.map((entry) => (
-              <div key={entry.id} className={`flex ${entry.role === "user" ? "justify-end" : "justify-start"}`}>
-                <div
-                  className={`max-w-[92%] rounded-2xl px-3 py-2 ${
-                    entry.role === "user"
-                      ? "bg-primary text-primary-foreground"
-                      : "border border-border bg-card text-foreground"
-                  }`}
-                >
-                  {entry.role === "assistant" ? (
-                    <MarkdownMessage text={entry.text} />
-                  ) : (
-                    <p className="whitespace-pre-wrap text-xs leading-relaxed">{entry.text}</p>
-                  )}
-                  {entry.error && (
-                    <p className="mt-2 text-[11px] font-medium text-red-300">{entry.error}</p>
-                  )}
-                  {entry.clarification && (
-                    <p className="mt-2 text-[11px] font-medium text-amber-300">{entry.clarification}</p>
-                  )}
-                  {entry.toolCalls && <ToolCallReceipt toolCalls={entry.toolCalls} />}
-                </div>
-              </div>
-            ))}
-            {status === "submitting" && <ThinkingBubble />}
-            <div ref={transcriptBottomRef} />
-          </div>
-        </div>
+    <section className="flex flex-col">
+      <header className="mb-3 flex items-baseline justify-between gap-2">
+        <h2 className="eyebrow">Secretary</h2>
+        <span className="num flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
+          <span
+            className={`h-1.5 w-1.5 rounded-full ${
+              status === "submitting"
+                ? "animate-pulse bg-copper"
+                : status === "error"
+                  ? "bg-destructive"
+                  : "bg-copper"
+            }`}
+            aria-hidden="true"
+          />
+          {status === "submitting" ? "Thinking" : status === "error" ? "Error" : "Ready"}
+        </span>
+      </header>
 
-        {errorMessage && (
-          <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2">
-            <p className="text-xs font-medium text-red-300">{errorMessage}</p>
-          </div>
-        )}
-
-        <Accordion type="multiple" className="rounded-md border border-border bg-background/40 px-3">
-          <AccordionItem value="availability">
-            <AccordionTrigger className="py-3 text-xs font-semibold text-foreground hover:no-underline">
-              Availability
-            </AccordionTrigger>
-            <AccordionContent className="space-y-2">
-              {context ? (
-                <>
-                  <p className="text-xs text-muted-foreground whitespace-pre-line">
-                    {context.availability.availabilitySummary}
+      <div
+        ref={transcriptRef}
+        className="h-[240px] overflow-y-auto border-y border-rule-strong"
+      >
+        <div className="space-y-3.5 py-3.5">
+          {transcript.map((entry) => (
+            <div key={entry.id} className="flex gap-3">
+              <span
+                className={`num w-14 shrink-0 pt-0.5 text-[11px] font-medium uppercase tracking-[0.14em] ${
+                  entry.role === "user" ? "text-muted-foreground" : "copper"
+                }`}
+              >
+                {entry.role === "user" ? "You" : "JARVIS"}
+              </span>
+              <div className="min-w-0 flex-1">
+                {entry.role === "assistant" ? (
+                  <MarkdownMessage text={entry.text} />
+                ) : (
+                  <p className="whitespace-pre-wrap text-[13.5px] leading-[1.55] text-foreground">
+                    {entry.text}
                   </p>
-                  <div className="space-y-1">
-                    {availabilityLines.map((line) => (
-                      <p key={line} className="rounded-md border border-border bg-card px-3 py-2 text-[11px] text-foreground">
-                        {line}
+                )}
+                {entry.error && (
+                  <p className="mt-1 text-[12px] text-destructive">{entry.error}</p>
+                )}
+                {entry.clarification && (
+                  <p className="mt-1 text-[12px] copper">{entry.clarification}</p>
+                )}
+                {entry.toolCalls && <ToolCallReceipt toolCalls={entry.toolCalls} />}
+              </div>
+            </div>
+          ))}
+          {status === "submitting" && (
+            <div className="flex gap-3">
+              <span className="w-14 shrink-0" />
+              <ThinkingBubble />
+            </div>
+          )}
+          <div ref={transcriptBottomRef} />
+        </div>
+      </div>
+
+      {errorMessage && (
+        <p className="mt-2 text-[12px] text-destructive">{errorMessage}</p>
+      )}
+
+      <div className="mt-3 flex items-end gap-2 rounded-sm border border-rule bg-panel/40 px-3 py-2 transition-colors focus-within:border-copper/60">
+        <Textarea
+          placeholder="Message JARVIS…"
+          value={message}
+          onChange={(event) => setMessage(event.target.value)}
+          onKeyDown={handleKeyDown}
+          aria-label="Secretary input"
+          className="min-h-[40px] resize-none border-0 bg-transparent px-0 text-[14px] leading-[1.5] text-foreground shadow-none placeholder:text-muted-foreground/70 focus-visible:ring-0"
+        />
+        <div className="flex items-center gap-2">
+          <span className="num hidden items-center gap-1 text-[10.5px] font-medium uppercase tracking-[0.14em] text-muted-foreground sm:flex">
+            <CornerDownLeft className="h-3.5 w-3.5" aria-hidden="true" />
+            Send
+          </span>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                onClick={handleSubmit}
+                disabled={status === "submitting" || !message.trim()}
+                aria-label="Send"
+                className="flex h-9 w-9 items-center justify-center rounded-sm bg-copper text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-30"
+              >
+                {status === "submitting" ? (
+                  <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2} />
+                ) : (
+                  <Send className="h-4 w-4" strokeWidth={2} />
+                )}
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="top" className="text-[11px]">Send</TooltipContent>
+          </Tooltip>
+        </div>
+      </div>
+
+      <div className="mt-3 border-t border-rule pt-3">
+        <div className="flex gap-1">
+          {(["availability", "memory"] as const).map((key) => {
+            const open = openContext === key
+            return (
+              <button
+                key={key}
+                type="button"
+                onClick={() => toggleContext(key)}
+                className={`flex items-center gap-1.5 rounded-sm px-2.5 py-1.5 text-[11px] font-medium uppercase tracking-[0.14em] transition-colors ${
+                  open ? "bg-accent text-foreground" : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                <span className="num">{key}</span>
+                <ChevronDown
+                  className={`h-3.5 w-3.5 transition-transform ${open ? "rotate-180" : ""}`}
+                  aria-hidden="true"
+                />
+              </button>
+            )
+          })}
+        </div>
+
+        {openContext === "availability" ? (
+          <div className="mt-3 space-y-2.5">
+            {context ? (
+              <>
+                <p className="whitespace-pre-line text-[13px] leading-[1.55] text-muted-foreground">
+                  {context.availability.availabilitySummary}
+                </p>
+                <ul className="space-y-1">
+                  {availabilityLines.map((line) => (
+                    <li key={line} className="num text-[12.5px] text-foreground">
+                      {line}
+                    </li>
+                  ))}
+                </ul>
+                {context.availabilityWindows.length > 0 ? (
+                  <div className="space-y-0.5 pt-1">
+                    <p className="eyebrow">Windows</p>
+                    {context.availabilityWindows.slice(0, 8).map((window) => (
+                      <p key={`${window.localDay}-${window.start}`} className="num text-[12.5px] text-foreground">
+                        {window.localDay}{" "}
+                        {new Date(window.start).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
+                        –{new Date(window.end).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
                       </p>
                     ))}
                   </div>
-                  <div className="space-y-1 pt-1">
-                    <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                      Derived windows
-                    </p>
-                    {context.availabilityWindows.length === 0 ? (
-                      <p className="text-[11px] text-muted-foreground">No preferred windows are currently derived.</p>
-                    ) : (
-                      context.availabilityWindows.slice(0, 8).map((window) => (
-                        <p key={`${window.localDay}-${window.start}`} className="text-[11px] text-foreground">
-                          {window.localDay}:{" "}
-                          {new Date(window.start).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })} -{" "}
-                          {new Date(window.end).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
-                        </p>
-                      ))
-                    )}
-                  </div>
-                </>
-              ) : (
-                <p className="text-xs text-muted-foreground">Loading availability context...</p>
-              )}
-            </AccordionContent>
-          </AccordionItem>
-
-          <AccordionItem value="memory">
-            <AccordionTrigger className="py-3 text-xs font-semibold text-foreground hover:no-underline">
-              Memory
-            </AccordionTrigger>
-            <AccordionContent className="space-y-2">
-              <p className="text-xs text-muted-foreground whitespace-pre-line">
-                {context?.memorySummary || "Loading memory context..."}
-              </p>
-              <div className="space-y-2">
-                {(context?.memoryEntries || []).map((entry) => (
-                  <div key={entry.id} className="rounded-md border border-border bg-card px-3 py-2">
-                    <p className="text-xs text-foreground">{entry.insight}</p>
-                    <p className="mt-1 text-[10px] uppercase tracking-wide text-muted-foreground">
-                      {entry.category} - {new Date(entry.createdAt).toLocaleDateString()}
-                    </p>
-                  </div>
-                ))}
-                {context && context.memoryEntries.length === 0 && (
-                  <p className="text-[11px] text-muted-foreground">No saved memory notes yet.</p>
-                )}
-              </div>
-            </AccordionContent>
-          </AccordionItem>
-        </Accordion>
-
-        <div className="rounded-md border border-border bg-background/50 p-3">
-          <Textarea
-            placeholder="Tell your secretary what changed..."
-            value={message}
-            onChange={(event) => setMessage(event.target.value)}
-            onKeyDown={handleKeyDown}
-            aria-label="Secretary input request"
-            className="min-h-[72px] resize-none border-0 bg-transparent px-1 text-xs text-foreground shadow-none focus-visible:ring-0"
-          />
-          <div className="mt-2 flex items-center justify-between gap-2">
-            <p className="text-[11px] text-muted-foreground">Enter to send.</p>
-            <Button
-              onClick={handleSubmit}
-              disabled={status === "submitting"}
-              aria-label="Send secretary request"
-              className="h-8 shrink-0 px-4 text-xs font-semibold"
-            >
-              {status === "submitting" ? "Thinking..." : "Send"}
-            </Button>
+                ) : null}
+              </>
+            ) : (
+              <p className="text-[12px] text-muted-foreground">Loading…</p>
+            )}
           </div>
-        </div>
-      </CardContent>
-    </Card>
+        ) : null}
+
+        {openContext === "memory" ? (
+          <div className="mt-3 space-y-2.5">
+            {context ? (
+              <>
+                <p className="whitespace-pre-line text-[13px] leading-[1.55] text-muted-foreground">
+                  {context.memorySummary || "No memory summary."}
+                </p>
+                <ul className="space-y-2">
+                  {context.memoryEntries.map((entry) => (
+                    <li key={entry.id} className="border-l border-rule pl-2.5">
+                      <p className="text-[13px] leading-snug text-foreground">{entry.insight}</p>
+                      <p className="num mt-0.5 text-[10.5px] uppercase tracking-[0.14em] text-muted-foreground">
+                        {entry.category} · {new Date(entry.createdAt).toLocaleDateString()}
+                      </p>
+                    </li>
+                  ))}
+                  {context.memoryEntries.length === 0 ? (
+                    <li className="text-[12px] text-muted-foreground">No memory yet.</li>
+                  ) : null}
+                </ul>
+              </>
+            ) : (
+              <p className="text-[12px] text-muted-foreground">Loading…</p>
+            )}
+          </div>
+        ) : null}
+      </div>
+    </section>
   )
 }

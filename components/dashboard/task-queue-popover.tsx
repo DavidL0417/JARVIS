@@ -1,13 +1,11 @@
 "use client"
 
 import { useMemo } from "react"
-import { Clock3, ListTodo } from "lucide-react"
+import { CalendarClock, Check, ListTodo } from "lucide-react"
 
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
-import { Checkbox } from "@/components/ui/checkbox"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import type { Task } from "@/types"
 
 interface TaskQueuePopoverProps {
@@ -17,7 +15,7 @@ interface TaskQueuePopoverProps {
 
 function formatDeadline(value: string | null) {
   if (!value) {
-    return "No deadline"
+    return null
   }
 
   return new Date(value).toLocaleString([], {
@@ -44,92 +42,88 @@ export function TaskQueuePopover({ tasks, onToggleComplete }: TaskQueuePopoverPr
 
   return (
     <Popover>
-      <PopoverTrigger asChild>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-8 rounded-full border border-white/10 bg-white/[0.06] px-3 text-xs font-semibold text-foreground hover:bg-white/[0.1]"
-        >
-          <ListTodo className="mr-1.5 h-3.5 w-3.5" />
-          Task Queue
-          <span className="ml-2 rounded-full bg-white/10 px-2 py-0.5 text-[10px] tracking-[0.18em] text-muted-foreground">
-            {sortedTasks.length}
-          </span>
-        </Button>
-      </PopoverTrigger>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <PopoverTrigger asChild>
+            <button
+              type="button"
+              aria-label="Task queue"
+              className="flex h-8 items-center gap-1.5 rounded-sm border border-rule px-2.5 text-[12px] text-foreground hover:bg-accent hover:border-rule-strong"
+            >
+              <ListTodo className="h-4 w-4 text-muted-foreground" strokeWidth={1.75} />
+              <span className="num text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
+                {sortedTasks.length}
+              </span>
+            </button>
+          </PopoverTrigger>
+        </TooltipTrigger>
+        <TooltipContent side="bottom" className="text-[11px]">Task queue</TooltipContent>
+      </Tooltip>
       <PopoverContent
         align="end"
-        sideOffset={10}
-        className="w-[min(30rem,calc(100vw-2rem))] rounded-[24px] border-white/10 bg-[linear-gradient(180deg,rgba(18,18,24,0.98),rgba(26,29,39,0.96))] p-0 text-foreground shadow-[0_24px_70px_rgba(0,0,0,0.4)]"
+        sideOffset={6}
+        className="w-[min(28rem,calc(100vw-2rem))] border-rule bg-popover p-0 text-popover-foreground"
       >
-        <div className="border-b border-white/10 px-4 py-4">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <p className="text-[10px] font-semibold uppercase tracking-[0.32em] text-muted-foreground">
-                Live Tasks
-              </p>
-              <h3 className="mt-1 text-base font-semibold text-foreground">
-                Task queue
-              </h3>
-            </div>
-            <div className="rounded-full border border-white/10 bg-white/[0.05] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-              {sortedTasks.length} items
-            </div>
+        <div className="border-b border-rule-strong px-3.5 py-2.5">
+          <div className="flex items-baseline justify-between gap-2">
+            <h3 className="eyebrow">Queue</h3>
+            <span className="num text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
+              {sortedTasks.length}
+            </span>
           </div>
         </div>
 
         {sortedTasks.length === 0 ? (
-          <div className="px-4 py-10 text-center text-sm font-medium text-muted-foreground">
-            No live tasks are loaded for the current dashboard session.
-          </div>
+          <p className="px-3 py-6 text-center text-[13px] text-muted-foreground">No live tasks.</p>
         ) : (
-          <ScrollArea className="h-[min(26rem,60vh)]">
-            <div className="space-y-2 p-3">
-              {sortedTasks.map((task) => (
-                <div
-                  key={task.id}
-                  className="rounded-[20px] border border-white/8 bg-white/[0.04] p-3 shadow-[0_10px_24px_rgba(0,0,0,0.14)]"
-                >
-                  <div className="flex items-start gap-3">
-                    <Checkbox
-                      checked={task.status === "completed"}
-                      onCheckedChange={() => void onToggleComplete?.(task)}
-                      aria-label={task.status === "completed" ? `Mark ${task.title} incomplete` : `Mark ${task.title} complete`}
-                      className="mt-1 border-2"
-                    />
-                    <div className="flex min-w-0 flex-1 items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-semibold text-foreground">{task.title}</p>
-                        <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                          <Badge variant="outline" className="border-white/10 bg-white/[0.04]">
-                            {task.status}
-                          </Badge>
-                          <Badge variant="outline" className="border-white/10 bg-white/[0.04]">
-                            {task.priority}
-                          </Badge>
-                          {task.tags.slice(0, 2).map((tag) => (
-                            <Badge key={tag} variant="outline" className="border-white/10 bg-white/[0.04]">
-                              {tag}
-                            </Badge>
-                          ))}
-                        </div>
-                      </div>
-
-                      <div className="flex shrink-0 items-center gap-1 rounded-full border border-white/10 bg-black/20 px-2.5 py-1 text-[11px] font-medium text-muted-foreground">
-                        <Clock3 className="h-3.5 w-3.5" />
-                        {formatDeadline(task.deadline)}
+          <ScrollArea className="h-[min(24rem,60vh)]">
+            <ul>
+              {sortedTasks.map((task, index) => {
+                const deadlineLabel = formatDeadline(task.deadline)
+                return (
+                  <li
+                    key={task.id}
+                    className="flex items-baseline gap-3 border-b border-rule px-3.5 py-2.5 last:border-b-0"
+                  >
+                    <span className="num w-6 shrink-0 text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+                      {String(index + 1).padStart(2, "0")}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => void onToggleComplete?.(task)}
+                      aria-label={task.status === "completed" ? `Mark ${task.title} todo` : `Mark ${task.title} done`}
+                      className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border transition-colors ${
+                        task.status === "completed"
+                          ? "border-copper bg-copper text-primary-foreground"
+                          : "border-rule-strong hover:border-foreground"
+                      }`}
+                    >
+                      {task.status === "completed" ? <Check className="h-3 w-3" strokeWidth={3} /> : null}
+                    </button>
+                    <div className="min-w-0 flex-1">
+                      <p
+                        className={`truncate text-[14px] ${
+                          task.status === "completed"
+                            ? "text-muted-foreground line-through"
+                            : "text-foreground"
+                        }`}
+                      >
+                        {task.title}
+                      </p>
+                      <div className="mt-0.5 flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-[11.5px] text-muted-foreground">
+                        <span className="num font-medium uppercase tracking-[0.12em]">{task.priority}</span>
+                        {deadlineLabel ? (
+                          <span className="num inline-flex items-center gap-1">
+                            <CalendarClock className="h-3 w-3" />
+                            {deadlineLabel}
+                          </span>
+                        ) : null}
                       </div>
                     </div>
-                  </div>
-
-                  {task.description ? (
-                    <p className="mt-2 line-clamp-2 pl-8 text-xs font-medium text-muted-foreground">
-                      {task.description}
-                    </p>
-                  ) : null}
-                </div>
-              ))}
-            </div>
+                  </li>
+                )
+              })}
+            </ul>
           </ScrollArea>
         )}
       </PopoverContent>

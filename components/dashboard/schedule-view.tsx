@@ -1,8 +1,6 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
 import {
   Dialog,
   DialogContent,
@@ -10,7 +8,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { MapPin, ChevronLeft, ChevronRight, RefreshCw, Loader2, X } from "lucide-react"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
+import { CalendarPlus, ChevronLeft, ChevronRight, Loader2, MapPin, RefreshCw, X } from "lucide-react"
 import { fetchGoogleEvents } from "@/lib/supabase/auth-actions"
 import {
   buildTaskReminderDescription,
@@ -24,19 +23,17 @@ import { TaskQueuePopover } from "./task-queue-popover"
 type ViewMode = "1day" | "3days" | "7days" | "1month"
 type SyncStatus = "idle" | "syncing" | "success" | "error"
 
-// Enhanced Event interface for Google Calendar integration
 export interface CalendarEvent {
   id: string
   title: string
-  start: string // ISO Date string
-  end: string // ISO Date string
+  start: string
+  end: string
   source: "google" | "local" | "task"
   isReadOnly: boolean
-  calendarId: string // Links to Calendar.id
+  calendarId: string
   allDay: boolean
   location?: string
   color: "mint" | "blue" | "yellow" | "orange" | "purple" | "cyan"
-  // Derived fields for rendering (calculated from start/end)
   day: number
   startHour: number
   duration: number
@@ -45,23 +42,34 @@ export interface CalendarEvent {
   dueTimeLabel?: string
 }
 
-const colorClasses: Record<CalendarEvent["color"], string> = {
-  mint: "bg-[#4ade80] text-[#052e16]",
-  blue: "bg-[#3b82f6] text-white",
-  yellow: "bg-[#fde047] text-[#422006]",
-  orange: "bg-[#fb923c] text-[#431407]",
-  purple: "bg-[#c084fc] text-[#3b0764]",
-  cyan: "bg-[#22d3ee] text-[#083344]",
+const fallbackHues: Record<CalendarEvent["color"], number> = {
+  mint: 165,
+  blue: 240,
+  yellow: 95,
+  orange: 50,
+  purple: 290,
+  cyan: 200,
 }
 
-// Full 24-hour time scale (00:00 - 23:00)
-const timeSlots = [
-  "12AM", "1AM", "2AM", "3AM", "4AM", "5AM", "6AM", "7AM", "8AM", "9AM", "10AM", "11AM",
-  "12PM", "1PM", "2PM", "3PM", "4PM", "5PM", "6PM", "7PM", "8PM", "9PM", "10PM", "11PM"
-]
+function fallbackEventStyle(color: CalendarEvent["color"]) {
+  const hue = fallbackHues[color]
+  return {
+    backgroundColor: `oklch(0.46 0.07 ${hue} / 0.55)`,
+    color: `oklch(0.95 0.01 ${hue})`,
+    borderTop: `1px solid oklch(0.66 0.10 ${hue})`,
+  }
+}
 
-const fallbackColors: CalendarEvent["color"][] = ["mint", "blue", "yellow", "orange", "purple", "cyan"]
+function isSameCalendarDay(left: Date, right: Date) {
+  return (
+    left.getFullYear() === right.getFullYear() &&
+    left.getMonth() === right.getMonth() &&
+    left.getDate() === right.getDate()
+  )
+}
+
 const DEFAULT_BACKEND_CALENDAR_ID = "calendar-main"
+const fallbackColors: CalendarEvent["color"][] = ["mint", "blue", "yellow", "orange", "purple", "cyan"]
 
 function getFallbackColor(calendarId: string | null) {
   const key = calendarId || "default"
@@ -72,31 +80,6 @@ function getFallbackColor(calendarId: string | null) {
   }
 
   return fallbackColors[hash % fallbackColors.length]
-}
-
-function getFallbackEventColorStyle(color: CalendarEvent["color"]) {
-  switch (color) {
-    case "mint":
-      return { backgroundColor: "#4ade80", color: "#052e16" }
-    case "blue":
-      return { backgroundColor: "#3b82f6", color: "#ffffff" }
-    case "yellow":
-      return { backgroundColor: "#fde047", color: "#422006" }
-    case "orange":
-      return { backgroundColor: "#fb923c", color: "#431407" }
-    case "purple":
-      return { backgroundColor: "#c084fc", color: "#3b0764" }
-    case "cyan":
-      return { backgroundColor: "#22d3ee", color: "#083344" }
-  }
-}
-
-function isSameCalendarDay(left: Date, right: Date) {
-  return (
-    left.getFullYear() === right.getFullYear() &&
-    left.getMonth() === right.getMonth() &&
-    left.getDate() === right.getDate()
-  )
 }
 
 function mapScheduleEventsToCalendarEvents(
@@ -118,7 +101,7 @@ function mapScheduleEventsToCalendarEvents(
         title: event.title,
         start: event.start,
         end: event.end,
-        source: event.lastSyncedFrom === "gcal" || Boolean(event.gcalEventId) ? "google" as const : "local" as const,
+        source: event.lastSyncedFrom === "gcal" || Boolean(event.gcalEventId) ? ("google" as const) : ("local" as const),
         isReadOnly: event.isImmutable,
         calendarId: event.calendarId || DEFAULT_BACKEND_CALENDAR_ID,
         allDay: event.allDay,
@@ -247,13 +230,40 @@ interface ScheduleViewProps {
   isScheduling?: boolean
 }
 
+const HOUR_PX = 48
+const VIEW_MODES: { value: ViewMode; label: string }[] = [
+  { value: "1day", label: "1D" },
+  { value: "3days", label: "3D" },
+  { value: "7days", label: "7D" },
+  { value: "1month", label: "MO" },
+]
+const dayNamesShort = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"]
+const monthNames = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+]
+
+function formatHour(hour24: number) {
+  return String(hour24).padStart(2, "0")
+}
+
 export function ScheduleView({
   visibleCalendarIds,
   calendars,
   events: scheduleEvents = [],
   tasks = [],
   onToggleTaskComplete,
-  plannerStatus = "Not scheduled",
+  plannerStatus = "Idle",
   plannerSummary = "",
   onSchedule,
   isScheduling = false,
@@ -268,6 +278,7 @@ export function ScheduleView({
   const [syncStatus, setSyncStatus] = useState<SyncStatus>("idle")
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null)
   const [selectedTaskReminder, setSelectedTaskReminder] = useState<CalendarEvent | null>(null)
+  const [now, setNow] = useState(() => new Date())
   const gridScrollRef = useRef<HTMLDivElement | null>(null)
   const hasAutoScrolledRef = useRef(false)
   const successResetTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -278,6 +289,11 @@ export function ScheduleView({
         clearTimeout(successResetTimeoutRef.current)
       }
     }
+  }, [])
+
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(new Date()), 60_000)
+    return () => window.clearInterval(id)
   }, [])
 
   const syncGoogleEvents = useCallback(async () => {
@@ -323,15 +339,13 @@ export function ScheduleView({
     if (syncStatus === "syncing" || isGoogleEventsLoading) {
       return
     }
-
     await syncGoogleEvents()
   }
 
   const formatLastSynced = () => {
     if (!lastSyncedAt) {
-      return isGoogleEventsLoading ? "Syncing..." : "Not yet"
+      return isGoogleEventsLoading ? "syncing" : "never"
     }
-
     return new Date(lastSyncedAt).toLocaleTimeString([], {
       hour: "numeric",
       minute: "2-digit",
@@ -344,36 +358,6 @@ export function ScheduleView({
     setMonthViewDate(new Date(today.getFullYear(), today.getMonth(), 1))
   }
 
-  const getEventStyle = (event: CalendarEvent) => {
-    const pixelsPerHour = 48
-    const top = event.startHour * pixelsPerHour
-    const height = event.duration * pixelsPerHour
-    return {
-      top: `${top}px`,
-      height: `${Math.max(height, 20)}px`,
-    }
-  }
-
-  // Get event background color from calendar
-  const getEventColorStyle = (event: CalendarEvent) => {
-    const calendar = calendars?.find(cal => cal.id === event.calendarId)
-    if (calendar) {
-      // Convert hex to rgba for background with good text contrast
-      const hex = calendar.color
-      const r = parseInt(hex.slice(1, 3), 16)
-      const g = parseInt(hex.slice(3, 5), 16)
-      const b = parseInt(hex.slice(5, 7), 16)
-      const brightness = (r * 299 + g * 587 + b * 114) / 1000
-      const textColor = brightness > 128 ? "#1a1a1a" : "#ffffff"
-      return {
-        backgroundColor: calendar.color,
-        color: textColor,
-      }
-    }
-    return getFallbackEventColorStyle(event.color)
-  }
-
-  // Navigation helpers
   const handlePrevPeriod = () => {
     if (viewMode === "1month") {
       setMonthViewDate(new Date(monthViewDate.getFullYear(), monthViewDate.getMonth() - 1, 1))
@@ -394,46 +378,17 @@ export function ScheduleView({
     }
   }
 
-  const navigatePrevious = () => {
-    handlePrevPeriod()
-  }
-
-
-
-  // Month view helpers
-  const getDaysInMonth = (date: Date) => {
-    return new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate()
-  }
-
-  const getFirstDayOfMonth = (date: Date) => {
-    return new Date(date.getFullYear(), date.getMonth(), 1).getDay()
-  }
-
+  const getDaysInMonth = (date: Date) =>
+    new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate()
+  const getFirstDayOfMonth = (date: Date) =>
+    new Date(date.getFullYear(), date.getMonth(), 1).getDay()
   const handleDateClick = (day: number) => {
     const newDate = new Date(monthViewDate.getFullYear(), monthViewDate.getMonth(), day)
     setSelectedDate(newDate)
     setViewMode("1day")
   }
 
-  const handlePrevMonth = () => {
-    setMonthViewDate(new Date(monthViewDate.getFullYear(), monthViewDate.getMonth() - 1, 1))
-  }
-
-  const handleNextMonth = () => {
-    setMonthViewDate(new Date(monthViewDate.getFullYear(), monthViewDate.getMonth() + 1, 1))
-  }
-
-  const monthNames = ["January", "February", "March", "April", "May", "June", 
-                      "July", "August", "September", "October", "November", "December"]
-  
-  const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
-
-  const isToday = (date: Date) => {
-    const today = new Date()
-    return date.getDate() === today.getDate() && 
-           date.getMonth() === today.getMonth() && 
-           date.getFullYear() === today.getFullYear()
-  }
+  const isToday = (date: Date) => isSameCalendarDay(date, now)
 
   const displayDates = useMemo(() => {
     const startDate = new Date(selectedDate)
@@ -459,15 +414,12 @@ export function ScheduleView({
           if (visibleCalendarIds.includes(event.calendarId)) {
             return true
           }
-
           return event.source === "google" && !knownCalendarIds.has(event.calendarId)
         })
       : mappedEvents
   }, [calendars, displayDates, scheduleEvents, tasks, visibleCalendarIds])
-  const allDayEvents = useMemo(
-    () => events.filter((event) => event.allDay),
-    [events],
-  )
+
+  const allDayEvents = useMemo(() => events.filter((event) => event.allDay), [events])
   const taskReminderEvents = useMemo(
     () => allDayEvents.filter((event) => event.renderVariant === "task-due"),
     [allDayEvents],
@@ -476,10 +428,7 @@ export function ScheduleView({
     () => allDayEvents.filter((event) => event.renderVariant !== "task-due"),
     [allDayEvents],
   )
-  const timedEvents = useMemo(
-    () => events.filter((event) => !event.allDay),
-    [events],
-  )
+  const timedEvents = useMemo(() => events.filter((event) => !event.allDay), [events])
   const hasVisibleEvents = events.length > 0
 
   useEffect(() => {
@@ -495,7 +444,6 @@ export function ScheduleView({
       return
     }
 
-    const now = new Date()
     const isCurrentWeekVisible = displayDates.some((date) => isSameCalendarDay(date, now))
     const earliestTimedHour =
       timedEvents.length > 0
@@ -506,458 +454,422 @@ export function ScheduleView({
       : earliestTimedHour ?? 7
 
     gridScrollRef.current.scrollTo({
-      top: targetHour * 48,
+      top: targetHour * HOUR_PX,
       behavior: "auto",
     })
     hasAutoScrolledRef.current = true
-  }, [displayDates, isGoogleEventsLoading, timedEvents, viewMode])
+  }, [displayDates, isGoogleEventsLoading, now, timedEvents, viewMode])
 
   const formatDateRange = () => {
     const start = new Date(selectedDate)
     if (viewMode === "1day") {
-      return `${monthNames[start.getMonth()]} ${start.getDate()}, ${start.getFullYear()}`
+      return `${monthNames[start.getMonth()]} ${start.getDate()}`
     }
-
     if (viewMode === "3days") {
       const end = new Date(start)
       end.setDate(start.getDate() + 2)
-      return `${monthNames[start.getMonth()]} ${start.getDate()} - ${end.getDate()}, ${start.getFullYear()}`
+      return `${monthNames[start.getMonth()]} ${start.getDate()}–${end.getDate()}`
     }
-
     const end = new Date(start)
     end.setDate(start.getDate() + 6)
-    return `${monthNames[start.getMonth()]} ${start.getDate()} - ${end.getDate()}, ${start.getFullYear()}`
+    if (start.getMonth() === end.getMonth()) {
+      return `${monthNames[start.getMonth()]} ${start.getDate()}–${end.getDate()}`
+    }
+    return `${monthNames[start.getMonth()]} ${start.getDate()} – ${monthNames[end.getMonth()]} ${end.getDate()}`
+  }
+
+  const getEventStyle = (event: CalendarEvent) => {
+    const top = event.startHour * HOUR_PX
+    const height = event.duration * HOUR_PX
+    return {
+      top: `${top}px`,
+      height: `${Math.max(height, 20)}px`,
+    }
+  }
+
+  const getEventColorStyle = (event: CalendarEvent) => {
+    const calendar = calendars?.find((cal) => cal.id === event.calendarId)
+    if (calendar) {
+      const hex = calendar.color
+      const r = parseInt(hex.slice(1, 3), 16)
+      const g = parseInt(hex.slice(3, 5), 16)
+      const b = parseInt(hex.slice(5, 7), 16)
+      const brightness = (r * 299 + g * 587 + b * 114) / 1000
+      const textColor = brightness > 128 ? "oklch(0.18 0.01 60)" : "oklch(0.96 0.01 80)"
+      return {
+        backgroundColor: `${hex}45`,
+        color: textColor,
+        borderTop: `1px solid ${hex}`,
+      }
+    }
+    return fallbackEventStyle(event.color)
   }
 
   const renderMonthView = () => {
     const daysInMonth = getDaysInMonth(monthViewDate)
     const firstDay = getFirstDayOfMonth(monthViewDate)
-    const days = []
-    
-    // Empty cells for days before the first day of the month
+    const cells: React.ReactNode[] = []
+
     for (let i = 0; i < firstDay; i++) {
-      days.push(<div key={`empty-${i}`} className="h-10 md:h-12" />)
+      cells.push(<div key={`empty-${i}`} className="h-12" />)
     }
-    
-    // Days of the month
-    const today = new Date()
+
     for (let day = 1; day <= daysInMonth; day++) {
-      const isTodayDate = day === today.getDate() && 
-                          monthViewDate.getMonth() === today.getMonth() && 
-                          monthViewDate.getFullYear() === today.getFullYear()
-      const isSelected = selectedDate.getDate() === day && 
-                         selectedDate.getMonth() === monthViewDate.getMonth() &&
-                         selectedDate.getFullYear() === monthViewDate.getFullYear()
-      
-      days.push(
+      const cellDate = new Date(monthViewDate.getFullYear(), monthViewDate.getMonth(), day)
+      const todayCell = isSameCalendarDay(cellDate, now)
+      const selected = isSameCalendarDay(cellDate, selectedDate)
+
+      cells.push(
         <button
           key={day}
           onClick={() => handleDateClick(day)}
-          className={`h-10 md:h-12 rounded-lg text-sm font-semibold transition-colors flex items-center justify-center
-            ${isTodayDate ? "bg-[#3b82f6] text-white ring-2 ring-[#3b82f6] ring-offset-2 ring-offset-background" : ""}
-            ${isSelected && !isTodayDate ? "bg-secondary text-foreground" : ""}
-            ${!isTodayDate && !isSelected ? "hover:bg-secondary text-foreground" : ""}
-          `}
+          className={`num flex h-12 items-start justify-end rounded-sm p-1.5 text-[13px] tabular-nums transition-colors ${
+            todayCell
+              ? "bg-copper-soft text-foreground ring-1 ring-copper"
+              : selected
+                ? "bg-accent text-foreground"
+                : "text-foreground hover:bg-accent"
+          }`}
         >
           {day}
-        </button>
+        </button>,
       )
     }
-    
-    return days
+
+    return cells
   }
 
+  const dayColumnTemplate =
+    viewMode === "1day"
+      ? "grid-cols-[56px_1fr]"
+      : viewMode === "3days"
+        ? "grid-cols-[56px_repeat(3,1fr)]"
+        : "grid-cols-[56px_repeat(7,1fr)]"
+
+  const showNowLine =
+    viewMode !== "1month" && displayDates.some((date) => isSameCalendarDay(date, now))
+  const nowTopPx = (now.getHours() + now.getMinutes() / 60) * HOUR_PX
+  const nowDayIndex = displayDates.findIndex((date) => isSameCalendarDay(date, now))
+
   return (
-    <Card className="bg-card border-border h-full flex flex-col">
+    <section className="flex h-full flex-col">
       <Dialog open={selectedTaskReminder !== null} onOpenChange={(open) => !open && setSelectedTaskReminder(null)}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>{selectedTaskReminder?.title ?? "Task Reminder"}</DialogTitle>
-            <DialogDescription>
-              Due time: {selectedTaskReminder?.dueTimeLabel ?? "No due time set"}
+            <DialogTitle className="text-xl font-semibold tracking-tight">
+              {selectedTaskReminder?.title ?? "Task"}
+            </DialogTitle>
+            <DialogDescription className="num text-[12px]">
+              Due {selectedTaskReminder?.dueTimeLabel ?? "—"}
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-3 text-sm">
-            <div className="rounded-xl border border-border bg-secondary/30 p-3">
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                Reminder Details
-              </p>
-              <p className="mt-2 font-medium text-foreground">
-                {selectedTaskReminder?.detail ?? "No additional detail available."}
-              </p>
-            </div>
+          <div className="border-t border-rule pt-3 text-[13px] leading-[1.55] text-foreground">
+            {selectedTaskReminder?.detail ?? "No additional detail."}
           </div>
         </DialogContent>
       </Dialog>
+
       {syncStatus === "success" ? (
-        <div className="fixed left-1/2 top-4 z-[200] -translate-x-1/2 rounded-full bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-lg">
-          Successfully synced
+        <div className="num fixed right-6 top-20 z-[200] flex items-center gap-2 rounded-sm border border-rule-strong bg-popover px-2.5 py-1.5 text-[11px] uppercase tracking-[0.14em] text-foreground shadow-lg">
+          <span className="h-1.5 w-1.5 rounded-full bg-copper" aria-hidden="true" />
+          Synced
         </div>
       ) : null}
       {syncStatus === "error" ? (
-        <div className="fixed left-1/2 bottom-4 z-[200] flex -translate-x-1/2 items-center gap-3 rounded-xl bg-red-600 px-4 py-3 text-sm font-semibold text-white shadow-xl">
-          <span>Sync failed: Please check your GCal Cloud connection</span>
+        <div className="num fixed right-6 top-20 z-[200] flex max-w-xs items-center gap-2.5 rounded-sm border border-destructive/50 bg-popover px-2.5 py-1.5 text-[11px] tracking-[0.04em] text-destructive shadow-lg">
+          <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-destructive" aria-hidden="true" />
+          <span className="leading-tight">Sync failed. Check Google Calendar.</span>
           <button
             type="button"
             onClick={() => setSyncStatus("idle")}
-            className="rounded-full p-1 transition-colors hover:bg-white/15"
-            aria-label="Dismiss sync error"
+            aria-label="Dismiss"
+            className="ml-1 shrink-0 text-destructive/70 hover:text-destructive"
           >
-            <X className="h-4 w-4" />
+            <X className="h-3.5 w-3.5" />
           </button>
         </div>
       ) : null}
-      <CardHeader className="p-3 pb-2 flex-shrink-0">
-        <div className="flex items-center justify-between">
-          <div>
-            <CardTitle className="text-base font-bold text-foreground">Schedule</CardTitle>
-            <CardDescription className="text-xs text-muted-foreground font-semibold">
-              {viewMode === "1month" 
-                ? `${monthNames[monthViewDate.getMonth()]} ${monthViewDate.getFullYear()}`
-                : formatDateRange()}
-            </CardDescription>
-          </div>
-          <div className="flex items-center gap-3">
-            {/* Sync Status */}
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-muted-foreground font-semibold">
-                Last synced: {formatLastSynced()}
-              </span>
-              <Button
-                variant="outline"
-                size="sm"
+
+      <header className="mb-4 flex flex-wrap items-baseline gap-x-4 gap-y-1.5">
+        <h1 className="text-[28px] font-semibold leading-none tracking-tight text-foreground">
+          {viewMode === "1month"
+            ? `${monthNames[monthViewDate.getMonth()]} ${monthViewDate.getFullYear()}`
+            : formatDateRange()}
+        </h1>
+        <span className="num inline-flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
+          <span
+            className={`h-1.5 w-1.5 rounded-full ${
+              plannerStatus === "Ready"
+                ? "bg-copper"
+                : plannerStatus === "Scheduling"
+                  ? "bg-copper/60 animate-pulse"
+                  : plannerStatus === "Error"
+                    ? "bg-destructive"
+                    : "bg-muted-foreground/50"
+            }`}
+            aria-hidden="true"
+          />
+          {plannerStatus}
+        </span>
+        {plannerSummary ? (
+          <span
+            className={`text-[12px] leading-tight ${
+              plannerStatus === "Error" ? "text-destructive" : "text-muted-foreground"
+            }`}
+          >
+            {plannerSummary}
+          </span>
+        ) : null}
+      </header>
+
+      <div className="mb-4 flex flex-wrap items-center gap-2 border-y border-rule-strong py-2.5">
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              onClick={() => onSchedule?.()}
+              disabled={isScheduling || !onSchedule}
+              aria-label="Run scheduler"
+              className="flex h-8 items-center gap-1.5 rounded-sm bg-copper px-3 text-[12px] font-medium uppercase tracking-[0.12em] text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
+            >
+              {isScheduling ? (
+                <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2} />
+              ) : (
+                <CalendarPlus className="h-4 w-4" strokeWidth={2} />
+              )}
+              <span className="num">Plan</span>
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom" className="text-[11px]">
+            Schedule open tasks
+          </TooltipContent>
+        </Tooltip>
+
+        <TaskQueuePopover tasks={tasks} onToggleComplete={onToggleTaskComplete} />
+
+        <div className="ml-auto flex items-center gap-1">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
                 onClick={handleSyncWithGoogle}
                 disabled={syncStatus === "syncing" || isGoogleEventsLoading}
-                className="text-xs h-7 px-2 font-semibold"
+                aria-label="Sync Google"
+                className="flex h-8 items-center gap-1.5 rounded-sm border border-rule px-2.5 text-[12px] text-foreground hover:bg-accent hover:border-rule-strong disabled:opacity-50"
               >
                 {syncStatus === "syncing" || isGoogleEventsLoading ? (
-                  <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
                 ) : (
-                  <RefreshCw className="w-3 h-3 mr-1" />
+                  <RefreshCw className="h-3.5 w-3.5" />
                 )}
-                Sync
-              </Button>
-            </div>
-            <span className="text-xs text-muted-foreground font-semibold">Planner: {plannerStatus}</span>
-          </div>
-        </div>
-        <p className="text-[11px] text-muted-foreground leading-tight font-medium">
-          Schedule runs only when you click Schedule/Replan. Dragging a block pins it by default.
-        </p>
-        {!isGoogleEventsLoading && scheduleEvents.length === 0 && tasks.length === 0 ? (
-          <p className="text-[11px] leading-tight font-medium mt-1 text-muted-foreground">
-            No events found.
-          </p>
-        ) : null}
-        {plannerSummary ? (
-          <p className={`text-[11px] leading-tight font-medium mt-1 ${
-            plannerStatus === "Error" ? "text-red-400" : "text-muted-foreground"
-          }`}>
-            {plannerSummary}
-          </p>
-        ) : null}
-      </CardHeader>
-      <CardContent className="p-3 pt-0 flex-1 flex flex-col overflow-hidden">
-        {/* Controls - hidden on mobile, shown on tablet+ */}
-        <div className="hidden md:flex items-center justify-between mb-3 flex-wrap gap-2">
-          <div className="flex gap-1 flex-wrap">
-            <Button
-              size="sm"
-              onClick={() => onSchedule?.()}
-              disabled={isScheduling || !onSchedule}
-              className="bg-[#3b82f6] hover:bg-[#2563eb] text-white text-xs h-7 px-3 font-semibold disabled:opacity-70"
-            >
-              {isScheduling ? (
-                <Loader2 className="w-3 h-3 mr-1 animate-spin" />
-              ) : null}
-              Schedule
-            </Button>
-                <TaskQueuePopover tasks={tasks} onToggleComplete={onToggleTaskComplete} />
-          </div>
-
-          {/* Center - Navigation */}
-          <div className="flex items-center gap-2">
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={navigatePrevious}
-              className="h-8 w-8"
-            >
-              <ChevronLeft className="w-5 h-5" />
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleGoToToday}
-              className="text-muted-foreground hover:text-foreground hover:bg-secondary text-xs h-7 px-3 font-semibold"
-            >
-              Today
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={handleNextPeriod}
-              className="h-8 w-8"
-            >
-              <ChevronRight className="w-5 h-5" />
-            </Button>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground font-semibold">Days:</span>
-            <div className="flex gap-0.5 bg-secondary/50 rounded-lg p-0.5">
-              {(["1day", "3days", "7days", "1month"] as ViewMode[]).map((mode) => (
-                <Button
-                  key={mode}
-                  variant={viewMode === mode ? "default" : "ghost"}
-                  size="sm"
-                  onClick={() => setViewMode(mode)}
-                  className={
-                    viewMode === mode
-                      ? "bg-[#3b82f6] text-white text-xs h-7 px-3 font-semibold"
-                      : "text-muted-foreground hover:text-foreground text-xs h-7 px-3 font-semibold"
-                  }
-                >
-                  {mode === "1day" ? "1 Day" : mode === "3days" ? "3 Days" : mode === "7days" ? "7 Days" : "1 Month"}
-                </Button>
-              ))}
-            </div>
-          </div>
+                <span className="num text-[10.5px] uppercase tracking-[0.14em] text-muted-foreground">
+                  {formatLastSynced()}
+                </span>
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" className="text-[11px]">
+              Sync Google
+            </TooltipContent>
+          </Tooltip>
         </div>
 
-        {/* Mobile Controls */}
-        <div className="flex md:hidden items-center justify-between mb-2 gap-2">
-          <div className="flex items-center gap-1.5">
-            <Button
-              size="sm"
-              onClick={() => onSchedule?.()}
-              disabled={isScheduling || !onSchedule}
-              className="bg-[#3b82f6] hover:bg-[#2563eb] text-white text-[10px] h-6 px-2 font-semibold disabled:opacity-70"
-            >
-              {isScheduling ? (
-                <Loader2 className="w-3 h-3 mr-1 animate-spin" />
-              ) : null}
-              Schedule
-            </Button>
-            <TaskQueuePopover tasks={tasks} onToggleComplete={onToggleTaskComplete} />
-          </div>
-          <div className="flex items-center gap-2 ml-auto">
-            <span className="text-xs text-muted-foreground font-semibold">Days:</span>
-            <div className="flex gap-0.5 bg-secondary/50 rounded-lg p-0.5">
-            {(["1day", "3days", "7days", "1month"] as ViewMode[]).map((mode) => (
-              <Button
-                key={mode}
-                variant={viewMode === mode ? "default" : "ghost"}
-                size="sm"
-                onClick={() => setViewMode(mode)}
-                className={
-                  viewMode === mode
-                    ? "bg-[#3b82f6] text-white text-[10px] h-6 px-2 font-semibold"
-                    : "text-muted-foreground hover:text-foreground text-[10px] h-6 px-2 font-semibold"
-                }
+        <div className="flex items-center gap-0.5">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                onClick={handlePrevPeriod}
+                aria-label="Previous"
+                className="flex h-8 w-8 items-center justify-center rounded-sm text-muted-foreground hover:bg-accent hover:text-foreground"
               >
-                {mode === "1day" ? "1D" : mode === "3days" ? "3D" : mode === "7days" ? "7D" : "Mo"}
-              </Button>
+                <ChevronLeft className="h-[18px] w-[18px]" strokeWidth={1.75} />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" className="text-[11px]">Previous</TooltipContent>
+          </Tooltip>
+          <button
+            type="button"
+            onClick={handleGoToToday}
+            className="num flex h-8 items-center rounded-sm px-2.5 text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground hover:bg-accent hover:text-foreground"
+          >
+            Today
+          </button>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                onClick={handleNextPeriod}
+                aria-label="Next"
+                className="flex h-8 w-8 items-center justify-center rounded-sm text-muted-foreground hover:bg-accent hover:text-foreground"
+              >
+                <ChevronRight className="h-[18px] w-[18px]" strokeWidth={1.75} />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" className="text-[11px]">Next</TooltipContent>
+          </Tooltip>
+        </div>
+
+        <div className="flex items-center gap-0.5 border-l border-rule pl-2">
+          {VIEW_MODES.map((mode) => {
+            const active = viewMode === mode.value
+            return (
+              <button
+                key={mode.value}
+                type="button"
+                onClick={() => setViewMode(mode.value)}
+                aria-pressed={active}
+                className={`num flex h-8 items-center rounded-sm px-2.5 text-[11px] font-medium uppercase tracking-[0.14em] transition-colors ${
+                  active ? "bg-copper-soft text-copper" : "text-muted-foreground hover:bg-accent hover:text-foreground"
+                }`}
+              >
+                {mode.label}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      {viewMode === "1month" ? (
+        <div className="flex flex-1 flex-col">
+          <div className="mb-2 grid grid-cols-7 gap-1">
+            {dayNamesShort.map((day) => (
+              <div key={day} className="num text-center text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+                {day}
+              </div>
             ))}
-            </div>
           </div>
+          <div className="grid flex-1 grid-cols-7 gap-1">{renderMonthView()}</div>
         </div>
-
-        {/* Month View */}
-        {viewMode === "1month" ? (
-          <div className="flex-1 flex flex-col">
-            {/* Month navigation */}
-            <div className="flex items-center justify-center gap-2 mb-4">
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={handlePrevMonth}
-                className="h-8 w-8"
-              >
-                <ChevronLeft className="w-5 h-5" />
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleGoToToday}
-                className="text-muted-foreground hover:text-foreground hover:bg-secondary text-xs h-7 px-3 font-semibold"
-              >
-                Today
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={handleNextMonth}
-                className="h-8 w-8"
-              >
-                <ChevronRight className="w-5 h-5" />
-              </Button>
-              <span className="text-base font-bold text-foreground ml-2">
-                {monthNames[monthViewDate.getMonth()]} {monthViewDate.getFullYear()}
-              </span>
-            </div>
-            
-            {/* Day headers */}
-            <div className="grid grid-cols-7 gap-1 mb-2">
-              {dayNames.map((day) => (
-                <div key={day} className="text-center text-xs text-muted-foreground font-semibold">
-                  {day}
-                </div>
-              ))}
-            </div>
-            
-            {/* Calendar grid */}
-            <div className="grid grid-cols-7 gap-1 flex-1">
-              {renderMonthView()}
-            </div>
-            
-            <p className="text-xs text-muted-foreground text-center mt-3 font-medium">
-              Click a date to view that day
-            </p>
-          </div>
-        ) : (
-          /* Calendar Grid - Day Views (1, 3, 7 days) */
-          <div ref={gridScrollRef} className="flex-1 overflow-auto relative">
-            {isGoogleEventsLoading && !hasVisibleEvents ? (
-              <div className="absolute inset-0 z-20 flex items-center justify-center bg-card/80 backdrop-blur-sm">
-                <div className="flex items-center gap-3 rounded-full border border-border bg-card px-4 py-2 text-sm font-semibold text-foreground shadow-sm">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Loading calendar events...
-                </div>
+      ) : (
+        <div ref={gridScrollRef} className="relative flex-1 overflow-auto">
+          {isGoogleEventsLoading && !hasVisibleEvents ? (
+            <div className="absolute inset-0 z-20 flex items-center justify-center bg-background/80 backdrop-blur-sm">
+              <div className="num flex items-center gap-2 rounded-sm border border-rule bg-popover px-3 py-1.5 text-[11px] uppercase tracking-[0.12em] text-foreground">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                Loading
               </div>
-            ) : null}
-            {/* Day Headers */}
-            <div 
-              className={`grid gap-px sticky top-0 z-10 bg-card dark:bg-[#141414] ${
-                viewMode === "1day" 
-                  ? "grid-cols-[60px_1fr]" 
-                  : viewMode === "3days" 
-                  ? "grid-cols-[60px_repeat(3,1fr)]" 
-                  : "grid-cols-[60px_repeat(7,1fr)]"
-              }`}
-            >
-              <div className="h-12" /> {/* Empty corner cell */}
-              {displayDates.map((date, i) => (
-                <div 
-                  key={i} 
-                  className="h-12 flex flex-col items-center justify-center border-l border-border dark:border-[#2a2a2a] bg-card dark:bg-[#1a1a1a]"
+            </div>
+          ) : null}
+
+          {/* Day headers */}
+          <div
+            className={`sticky top-0 z-10 grid bg-background ${dayColumnTemplate} border-b border-rule-strong`}
+          >
+            <div className="h-14" />
+            {displayDates.map((date, i) => (
+              <div
+                key={i}
+                className="flex h-14 flex-col items-start justify-center gap-1 border-l border-rule px-2.5"
+              >
+                <span className="num text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
+                  {dayNamesShort[date.getDay()]}
+                </span>
+                <span
+                  className={`num text-[22px] font-semibold leading-none tabular-nums ${
+                    isToday(date) ? "copper" : "text-foreground"
+                  }`}
                 >
-                  <span className="text-xs font-semibold text-muted-foreground">
-                    {dayNames[date.getDay()]}
-                  </span>
-                  <span className={`text-base font-bold flex items-center justify-center w-8 h-8 rounded-full ${
-                    isToday(date)
-                      ? "bg-primary text-primary-foreground"
-                      : "text-foreground"
-                  }`}>
-                    {date.getDate()}
-                  </span>
+                  {date.getDate()}
+                </span>
+              </div>
+            ))}
+          </div>
+
+          {/* All-day lane */}
+          <div
+            className={`sticky top-14 z-[9] grid bg-background ${dayColumnTemplate} border-b border-rule`}
+          >
+            <div className="num flex min-h-9 items-start justify-end px-2 py-1.5 text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
+              All
+            </div>
+            {displayDates.map((_, dayIndex) => {
+              const dayReminderEvents = taskReminderEvents.filter((event) => event.day === dayIndex)
+              const dayAllDayEvents = regularAllDayEvents.filter((event) => event.day === dayIndex)
+
+              return (
+                <div
+                  key={`all-day-${dayIndex}`}
+                  className="min-h-9 border-l border-rule px-1 py-1"
+                >
+                  <div className="space-y-0.5">
+                    {dayReminderEvents.map((event) => (
+                      <button
+                        type="button"
+                        key={event.id}
+                        onClick={() => setSelectedTaskReminder(event)}
+                        className="num flex w-full items-center gap-1 rounded-sm bg-copper-soft px-1.5 py-0.5 text-left text-[10px] uppercase tracking-[0.1em] text-foreground hover:bg-copper-soft hover:brightness-110"
+                      >
+                        <span className="copper">●</span>
+                        <span className="truncate">{event.title}</span>
+                      </button>
+                    ))}
+                    {dayAllDayEvents.map((event) => (
+                      <div
+                        key={event.id}
+                        className="overflow-hidden rounded-sm px-1.5 py-0.5 text-[10px] font-medium leading-tight"
+                        style={getEventColorStyle(event)}
+                      >
+                        <p className="truncate">{event.title}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+
+          {/* Time grid */}
+          <div className={`grid ${dayColumnTemplate}`} style={{ minHeight: `${24 * HOUR_PX}px` }}>
+            {/* Time gutter */}
+            <div className="relative">
+              {Array.from({ length: 24 }).map((_, i) => (
+                <div
+                  key={i}
+                  className="num h-[48px] pr-2.5 pt-1 text-right text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground tabular-nums"
+                >
+                  {i === 0 ? "" : formatHour(i)}
                 </div>
               ))}
             </div>
 
-            {/* All-day lane */}
-            <div
-              className={`grid gap-px sticky top-12 z-[9] bg-card dark:bg-[#141414] ${
-                viewMode === "1day"
-                  ? "grid-cols-[60px_1fr]"
-                  : viewMode === "3days"
-                  ? "grid-cols-[60px_repeat(3,1fr)]"
-                  : "grid-cols-[60px_repeat(7,1fr)]"
-              }`}
-            >
-              <div className="min-h-9 px-2 py-2 text-[10px] font-semibold text-muted-foreground text-right">
-                All day
-              </div>
-              {displayDates.map((_, dayIndex) => {
-                const dayReminderEvents = taskReminderEvents.filter((event) => event.day === dayIndex)
-                const dayAllDayEvents = regularAllDayEvents.filter((event) => event.day === dayIndex)
-                const hasAnyAllDayContent = dayReminderEvents.length > 0 || dayAllDayEvents.length > 0
-
-                return (
-                  <div
-                    key={`all-day-${dayIndex}`}
-                    className="min-h-9 border-l border-border dark:border-[#2a2a2a] bg-card dark:bg-[#181818] px-1 py-1"
-                  >
-                    {!hasAnyAllDayContent ? (
-                      <div className="h-6 rounded border border-dashed border-border/50" />
-                    ) : (
-                      <div className="space-y-1">
-                        {dayReminderEvents.map((event) => (
-                          <button
-                            type="button"
-                            key={event.id}
-                            onClick={() => setSelectedTaskReminder(event)}
-                            className="flex w-full items-center justify-between rounded-full border border-[#f9a8d4]/70 bg-[#fce7f3] px-2 py-1 text-left text-[10px] font-semibold text-slate-800 shadow-sm transition-transform hover:-translate-y-0.5 dark:border-[#51324b] dark:bg-[#3d2234] dark:text-[#fce7f3]"
-                          >
-                            <span className="truncate">{event.title}</span>
-                            <span className="ml-2 shrink-0 text-[9px] uppercase tracking-wide opacity-70">
-                              Due
-                            </span>
-                          </button>
-                        ))}
-                        {dayAllDayEvents.map((event) => (
-                          <div
-                            key={event.id}
-                            className={`rounded px-2 py-1 overflow-hidden ${
-                              calendars ? "" : colorClasses[event.color]
-                            } ${event.isReadOnly ? "opacity-90" : ""}`}
-                            style={calendars ? getEventColorStyle(event) : {}}
-                          >
-                            <p className="text-[10px] font-semibold truncate leading-tight">
-                              {event.title}
-                            </p>
-                            {event.location ? (
-                              <p className="text-[9px] truncate opacity-80 font-medium">
-                                {event.location}
-                              </p>
-                            ) : null}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )
-              })}
-            </div>
-            
-            {/* Time Grid */}
-            <div 
-              className={`grid gap-px ${
-                viewMode === "1day" 
-                  ? "grid-cols-[60px_1fr]" 
-                  : viewMode === "3days" 
-                  ? "grid-cols-[60px_repeat(3,1fr)]" 
-                  : "grid-cols-[60px_repeat(7,1fr)]"
-              }`}
-              style={{ minHeight: `${24 * 48}px` }}
-            >
-              {/* Time column */}
-              <div className="flex flex-col">
-                {timeSlots.map((time, i) => (
-                  <div 
-                    key={i} 
-                    className="h-[48px] text-xs font-semibold text-muted-foreground pr-2 text-right flex items-start pt-0.5"
-                  >
-                    {time}
-                  </div>
-                ))}
-              </div>
-
-              {/* Day columns */}
-              {Array.from({ length: viewMode === "1day" ? 1 : viewMode === "3days" ? 3 : 7 }).map((_, dayIndex) => (
+            {/* Day columns */}
+            {Array.from({ length: viewMode === "1day" ? 1 : viewMode === "3days" ? 3 : 7 }).map(
+              (_, dayIndex) => (
                 <div
                   key={dayIndex}
-                  className="relative bg-secondary/30 border-l border-border flex-1"
-                  style={{ height: `${24 * 48}px` }}
+                  className="relative border-l border-rule"
+                  style={{ height: `${24 * HOUR_PX}px` }}
                 >
-                  {/* Hour lines */}
-                  {timeSlots.map((_, i) => (
+                  {/* Hour ticks */}
+                  {Array.from({ length: 24 }).map((_, i) => (
                     <div
                       key={i}
-                      className="absolute w-full border-t border-border/50"
-                      style={{ top: `${i * 48}px` }}
+                      className="absolute left-0 right-0 border-t border-rule/70"
+                      style={{ top: `${i * HOUR_PX}px` }}
                     />
                   ))}
+                  {/* Half-hour ticks */}
+                  {Array.from({ length: 24 }).map((_, i) => (
+                    <div
+                      key={`half-${i}`}
+                      className="pointer-events-none absolute left-0 w-2 border-t border-rule/40"
+                      style={{ top: `${i * HOUR_PX + HOUR_PX / 2}px` }}
+                    />
+                  ))}
+
+                  {/* Now line */}
+                  {showNowLine && nowDayIndex === dayIndex ? (
+                    <>
+                      <div
+                        className="pointer-events-none absolute left-0 right-0 z-[5] h-px bg-copper"
+                        style={{ top: `${nowTopPx}px` }}
+                      />
+                      <div
+                        className="pointer-events-none absolute z-[5] h-1.5 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-copper"
+                        style={{ top: `${nowTopPx}px`, left: 0 }}
+                      />
+                    </>
+                  ) : null}
 
                   {/* Events */}
                   {timedEvents
@@ -965,34 +877,35 @@ export function ScheduleView({
                     .map((event) => (
                       <div
                         key={event.id}
-                        className={`absolute left-0.5 right-0.5 rounded px-1 py-0.5 overflow-hidden ${
-                          calendars ? "" : colorClasses[event.color]
-                        } ${event.isReadOnly ? "opacity-90" : ""}`}
+                        className="absolute left-px right-px overflow-hidden px-1.5 py-1"
                         style={{
                           ...getEventStyle(event),
-                          ...(calendars ? getEventColorStyle(event) : {}),
+                          ...(calendars ? getEventColorStyle(event) : fallbackEventStyle(event.color)),
+                          opacity: event.isReadOnly ? 0.85 : 1,
                         }}
                       >
-                        <p className="text-[9px] font-semibold truncate leading-tight pr-3">{event.title}</p>
-                        {event.location && event.duration >= 0.75 && (
-                          <div className="flex items-center gap-0.5">
-                            <MapPin className="w-2 h-2 flex-shrink-0" />
-                            <p className="text-[8px] truncate opacity-80 font-medium">{event.location}</p>
+                        <p className="truncate text-[11px] font-medium leading-tight">{event.title}</p>
+                        {event.location && event.duration >= 0.75 ? (
+                          <div className="mt-0.5 flex items-center gap-0.5 text-[10px] opacity-80">
+                            <MapPin className="h-2.5 w-2.5 shrink-0" />
+                            <span className="truncate">{event.location}</span>
                           </div>
-                        )}
+                        ) : null}
                       </div>
                     ))}
                 </div>
-              ))}
-            </div>
-            {!isGoogleEventsLoading && !hasVisibleEvents ? (
-              <div className="flex h-full min-h-[320px] items-center justify-center px-4 text-center">
-                <p className="text-sm font-medium text-muted-foreground">No events found</p>
-              </div>
-            ) : null}
+              ),
+            )}
           </div>
-        )}
-      </CardContent>
-    </Card>
+          {!isGoogleEventsLoading && !hasVisibleEvents ? (
+            <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+              <p className="num text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
+                No events
+              </p>
+            </div>
+          ) : null}
+        </div>
+      )}
+    </section>
   )
 }

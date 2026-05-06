@@ -27,6 +27,7 @@ import { CheckInSidebar } from "@/components/dashboard/checkin-sidebar"
 import { MasterInput } from "@/components/dashboard/master-input"
 import { TaskManager } from "@/components/dashboard/task-manager"
 import { Button } from "@/components/ui/button"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import type {
   CalendarListResponse,
   CheckInApprovalItem,
@@ -108,7 +109,7 @@ function toScheduleEventInput(event: ScheduleEvent): ScheduleEventInput {
   }
 }
 
-function StatPill({
+function StatGlyph({
   icon: Icon,
   label,
   value,
@@ -118,11 +119,18 @@ function StatPill({
   value: string | number
 }) {
   return (
-    <div className="flex h-10 min-w-0 items-center gap-2 rounded-md border border-border bg-card px-3">
-      <Icon className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-      <span className="truncate text-xs font-medium text-muted-foreground">{label}</span>
-      <span className="ml-auto text-sm font-semibold text-foreground">{value}</span>
-    </div>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className="inline-flex items-center gap-2 rounded-sm px-1.5 py-1 text-foreground transition-colors hover:bg-accent/60">
+          <Icon className="h-4 w-4 text-muted-foreground" aria-hidden="true" strokeWidth={1.75} />
+          <span className="num text-[14px] font-medium tabular-nums leading-none">{value}</span>
+          <span className="hidden text-[10.5px] uppercase tracking-[0.14em] text-muted-foreground lg:inline">
+            {label}
+          </span>
+        </span>
+      </TooltipTrigger>
+      <TooltipContent sideOffset={6} className="text-[11px]">{label}</TooltipContent>
+    </Tooltip>
   )
 }
 
@@ -138,20 +146,77 @@ function ShellMessage({
   action?: ReactNode
 }) {
   return (
-    <div className="flex min-h-[60vh] items-center justify-center px-4">
-      <div className="w-full max-w-md rounded-lg border border-border bg-card p-5">
-        <div className="flex items-start gap-3">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-border bg-background">
-            <Icon className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
-          </div>
-          <div className="min-w-0 space-y-2">
-            <h1 className="text-base font-semibold text-foreground">{title}</h1>
-            <p className="text-sm leading-6 text-muted-foreground">{detail}</p>
-            {action ? <div className="pt-2">{action}</div> : null}
-          </div>
+    <div className="flex min-h-[60vh] items-center justify-center px-6">
+      <div className="w-full max-w-md">
+        <div className="mb-6 flex h-10 w-10 items-center justify-center rounded-sm border border-rule">
+          <Icon className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
         </div>
+        <h1 className="text-2xl font-semibold leading-[1.15] tracking-tight text-foreground">{title}</h1>
+        <p className="mt-3 max-w-[52ch] text-[13px] leading-6 text-muted-foreground">{detail}</p>
+        {action ? <div className="mt-6">{action}</div> : null}
       </div>
     </div>
+  )
+}
+
+function LiveClock() {
+  const [now, setNow] = useState<Date | null>(null)
+
+  useEffect(() => {
+    setNow(new Date())
+    const id = window.setInterval(() => setNow(new Date()), 30_000)
+    return () => window.clearInterval(id)
+  }, [])
+
+  if (!now) {
+    return <span className="num text-[13px] tabular-nums text-muted-foreground">—:—</span>
+  }
+
+  return (
+    <span className="num text-[13px] font-medium tabular-nums leading-none text-foreground">
+      {now.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
+    </span>
+  )
+}
+
+function RailButton({
+  label,
+  icon: Icon,
+  onClick,
+  disabled,
+  active,
+  spinning,
+}: {
+  label: string
+  icon: LucideIcon
+  onClick: () => void
+  disabled?: boolean
+  active?: boolean
+  spinning?: boolean
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          aria-label={label}
+          onClick={onClick}
+          disabled={disabled}
+          className={`group flex h-10 w-10 items-center justify-center rounded-sm transition-colors disabled:opacity-40 ${
+            active
+              ? "bg-copper-soft text-copper"
+              : "text-muted-foreground hover:bg-accent hover:text-foreground"
+          }`}
+        >
+          {spinning ? (
+            <Loader2 className="h-[18px] w-[18px] animate-spin" aria-hidden="true" strokeWidth={1.75} />
+          ) : (
+            <Icon className="h-[18px] w-[18px]" aria-hidden="true" strokeWidth={1.75} />
+          )}
+        </button>
+      </TooltipTrigger>
+      <TooltipContent side="right" sideOffset={6} className="text-[11px]">{label}</TooltipContent>
+    </Tooltip>
   )
 }
 
@@ -329,7 +394,7 @@ export default function DashboardPage() {
         <ShellMessage
           icon={Loader2}
           title="Loading"
-          detail="Connecting to Supabase and reading your scheduler state."
+          detail="Reading scheduler state from Supabase."
         />
       )
     }
@@ -339,7 +404,7 @@ export default function DashboardPage() {
         <ShellMessage
           icon={Sparkles}
           title="Sign in"
-          detail="JARVIS needs an authenticated Supabase user before it can read tasks, calendars, or memory."
+          detail="JARVIS needs an authenticated user before reading tasks, calendars, or memory."
           action={<AuthControls />}
         />
       )
@@ -353,7 +418,7 @@ export default function DashboardPage() {
           detail={viewState.message}
           action={
             <Button size="sm" variant="outline" onClick={() => loadDashboard()} className="gap-2">
-              <RefreshCw className="h-4 w-4" aria-hidden="true" />
+              <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
               Retry
             </Button>
           }
@@ -362,25 +427,11 @@ export default function DashboardPage() {
     }
 
     const dashboardData = viewState.dashboard
-    const isEmpty = dashboardData.tasks.length === 0 && dashboardData.events.length === 0
 
     return (
-      <div className="flex min-h-0 flex-1 flex-col gap-3">
-        <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
-          <StatPill icon={ListTodo} label="Tasks" value={dashboardData.stats.tasks} />
-          <StatPill icon={CalendarDays} label="Loose" value={dashboardData.stats.unscheduled} />
-          <StatPill icon={Brain} label="Memory" value={dashboardData.stats.memories} />
-          <StatPill icon={Database} label="Sources" value={dashboardData.stats.sources} />
-        </div>
-
-        {isEmpty ? (
-          <div className="rounded-md border border-border bg-card px-3 py-2 text-xs text-muted-foreground">
-            Empty account. Add a task or sync Google to start.
-          </div>
-        ) : null}
-
-        <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_390px]">
-          <div className="min-h-[560px] xl:min-h-0">
+      <div className="flex min-h-0 flex-1 flex-col">
+        <div className="grid min-h-0 flex-1 grid-cols-1 gap-0 xl:grid-cols-[minmax(0,1fr)_380px] xl:divide-x xl:divide-rule">
+          <div className="min-h-[560px] xl:min-h-0 xl:pr-6">
             <ScheduleView
               calendars={calendars}
               visibleCalendarIds={visibleCalendarIds}
@@ -394,7 +445,7 @@ export default function DashboardPage() {
             />
           </div>
 
-          <div className="flex min-h-0 flex-col gap-3">
+          <div className="flex min-h-0 flex-col gap-6 pt-6 xl:pl-6 xl:pt-0">
             <MasterInput tasks={dashboardData.tasks} />
             {pendingCheckInEvents.length > 0 ? (
               <CheckInSidebar
@@ -420,85 +471,81 @@ export default function DashboardPage() {
     )
   }
 
+  const stats = dashboard?.stats
+
   return (
-    <main className="h-screen overflow-hidden bg-background text-foreground">
-      <div className="mx-auto flex h-full max-w-[1680px] gap-3 p-3">
-        <aside className="hidden w-12 shrink-0 flex-col items-center gap-2 rounded-lg border border-border bg-card p-2 md:flex">
-          <Button
-            size="icon"
-            variant="ghost"
-            aria-label="Calendars"
-            title="Calendars"
-            onClick={() => setCalendarsSidebarOpen(true)}
-          >
-            <PanelLeft className="h-4 w-4" aria-hidden="true" />
-          </Button>
-          <Button
-            size="icon"
-            variant="ghost"
-            aria-label="Refresh"
-            title="Refresh"
-            onClick={() => loadDashboard(true)}
-            disabled={isRefreshing}
-          >
-            {isRefreshing ? (
-              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-            ) : (
-              <RefreshCw className="h-4 w-4" aria-hidden="true" />
-            )}
-          </Button>
-          <Button
-            size="icon"
-            variant="ghost"
-            aria-label="Schedule"
-            title="Schedule"
-            onClick={() => handleSchedule()}
-            disabled={isScheduling || !dashboard}
-          >
-            {isScheduling ? (
-              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-            ) : (
-              <CalendarDays className="h-4 w-4" aria-hidden="true" />
-            )}
-          </Button>
-        </aside>
+    <TooltipProvider delayDuration={250} skipDelayDuration={400}>
+      <main className="h-screen overflow-hidden bg-background text-foreground">
+        <div className="flex h-full">
+          <aside className="hidden w-14 shrink-0 flex-col items-center gap-1.5 border-r border-rule py-4 md:flex">
+            <RailButton
+              label="Calendars"
+              icon={PanelLeft}
+              onClick={() => setCalendarsSidebarOpen(true)}
+              active={calendarsSidebarOpen}
+            />
+            <RailButton
+              label="Refresh"
+              icon={RefreshCw}
+              onClick={() => loadDashboard(true)}
+              disabled={isRefreshing}
+              spinning={isRefreshing}
+            />
+            <RailButton
+              label="Schedule"
+              icon={CalendarDays}
+              onClick={() => handleSchedule()}
+              disabled={isScheduling || !dashboard}
+              spinning={isScheduling}
+            />
+          </aside>
 
-        <section className="flex min-w-0 flex-1 flex-col gap-3">
-          <header className="flex h-auto shrink-0 flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-card px-3 py-2">
-            <div className="flex min-w-0 items-center gap-2">
-              <div className="flex h-8 w-8 items-center justify-center rounded-md border border-border bg-background">
-                <Sparkles className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+          <section className="flex min-w-0 flex-1 flex-col">
+            <header className="flex h-16 shrink-0 items-center gap-5 border-b border-rule-strong px-6">
+              <div className="flex min-w-0 items-center gap-3">
+                <span className="text-[19px] font-semibold leading-none tracking-tight text-foreground">
+                  JARVIS
+                </span>
+                <span className="hidden h-4 w-px bg-rule-strong sm:block" />
+                <span className="hidden text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground sm:block">
+                  Secretary
+                </span>
               </div>
-              <div className="min-w-0">
-                <h1 className="truncate text-sm font-semibold text-foreground">JARVIS</h1>
-                <p className="truncate text-[11px] text-muted-foreground">Secretary scheduler</p>
+
+              <div className="ml-auto flex items-center gap-3">
+                {stats ? (
+                  <div className="hidden items-center gap-1 md:flex">
+                    <StatGlyph icon={ListTodo} label="Tasks" value={stats.tasks} />
+                    <StatGlyph icon={CalendarDays} label="Loose" value={stats.unscheduled} />
+                    <StatGlyph icon={Brain} label="Memory" value={stats.memories} />
+                    <StatGlyph icon={Database} label="Sources" value={stats.sources} />
+                  </div>
+                ) : null}
+                <span className="hidden h-5 w-px bg-rule md:block" />
+                <LiveClock />
+                <button
+                  type="button"
+                  aria-label="Calendars"
+                  onClick={() => setCalendarsSidebarOpen(true)}
+                  className="flex h-9 w-9 items-center justify-center rounded-sm text-muted-foreground hover:bg-accent hover:text-foreground md:hidden"
+                >
+                  <PanelLeft className="h-[18px] w-[18px]" aria-hidden="true" />
+                </button>
+                <AuthControls />
               </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <Button
-                size="icon"
-                variant="ghost"
-                aria-label="Calendars"
-                title="Calendars"
-                onClick={() => setCalendarsSidebarOpen(true)}
-                className="md:hidden"
-              >
-                <PanelLeft className="h-4 w-4" aria-hidden="true" />
-              </Button>
-              <AuthControls />
-            </div>
-          </header>
+            </header>
 
-          {renderContent()}
-        </section>
-      </div>
+            <div className="flex min-h-0 flex-1 flex-col px-6 py-6">{renderContent()}</div>
+          </section>
+        </div>
 
-      <CalendarsSidebar
-        isOpen={calendarsSidebarOpen}
-        onClose={() => setCalendarsSidebarOpen(false)}
-        calendars={calendars}
-        onCalendarsChange={setCalendars}
-      />
-    </main>
+        <CalendarsSidebar
+          isOpen={calendarsSidebarOpen}
+          onClose={() => setCalendarsSidebarOpen(false)}
+          calendars={calendars}
+          onCalendarsChange={setCalendars}
+        />
+      </main>
+    </TooltipProvider>
   )
 }
