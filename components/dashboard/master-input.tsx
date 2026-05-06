@@ -350,8 +350,8 @@ export function MasterInput({ tasks = [] }: MasterInputProps) {
   }
 
   return (
-    <section className="flex min-h-0 flex-col">
-      <header className="mb-5 flex items-center justify-between gap-2">
+    <section className="flex flex-col">
+      <header className="mb-4 flex items-center justify-between gap-2">
         <h2 className="eyebrow">Secretary</h2>
         <span className="num flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
           <span
@@ -370,9 +370,9 @@ export function MasterInput({ tasks = [] }: MasterInputProps) {
 
       <div
         ref={transcriptRef}
-        className="h-[270px] overflow-y-auto pr-1"
+        className="max-h-[260px] min-h-[3rem] overflow-y-auto pr-1"
       >
-        <div className="space-y-6">
+        <div className="space-y-5">
           {transcript.map((entry) => (
             <article
               key={entry.id}
@@ -416,8 +416,8 @@ export function MasterInput({ tasks = [] }: MasterInputProps) {
         <p className="mt-2 text-[12px] text-destructive">{errorMessage}</p>
       )}
 
-      <div className="mt-7">
-        <div className="group/composer flex min-h-11 items-end gap-2 py-2">
+      <div className="mt-5 border-t border-rule pt-3">
+        <div className="group/composer flex min-h-11 items-end gap-2">
           <Textarea
             placeholder="Message JARVIS…"
             value={message}
@@ -452,7 +452,7 @@ export function MasterInput({ tasks = [] }: MasterInputProps) {
       </div>
 
       <div className="mt-4">
-        <div className="flex h-8 items-center gap-4">
+        <div className="flex h-8 items-center gap-5">
           {(["availability", "memory"] as const).map((key) => {
             const open = openContext === key
             return (

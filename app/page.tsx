@@ -445,7 +445,7 @@ export default function DashboardPage() {
             />
           </div>
 
-          <div className="flex min-h-0 flex-col gap-6 pt-6 xl:pl-6 xl:pt-0">
+          <div className="rail-scroll flex min-h-0 min-w-0 flex-col overflow-y-auto pb-2 pt-6 xl:pb-2 xl:pl-6 xl:pr-1 xl:pt-0">
             <MasterInput tasks={dashboardData.tasks} />
             {pendingCheckInEvents.length > 0 ? (
               <CheckInSidebar
