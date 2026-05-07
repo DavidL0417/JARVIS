@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 
-import { buildMemorySummaryMarkdown, deriveAvailabilityWindowsFromScheduleContext } from "@/lib/ai/claude"
+import { buildMemorySummaryMarkdown, deriveAvailabilityWindowsFromScheduleContext } from "@/lib/ai/openai"
 import {
   mapMemoryItemRowToSummary,
   mapPreferencesRowToPreferences,
@@ -53,33 +53,6 @@ export interface AssistantRuntimeContext {
   memoryEntries: MemoryEntrySummary[]
   sourceSnapshots: SourceSnapshotSummary[]
   context: AssistantContextData
-}
-
-export function buildFallbackAssistantContextData(userId = "00000000-0000-4000-8000-000000000000"): AssistantContextData {
-  const preferences = {
-    ...DEFAULT_PREFERENCES,
-    userId,
-  }
-
-  return {
-    availability: {
-      timezone: preferences.timezone,
-      workdayStart: preferences.workdayStart,
-      workdayEnd: preferences.workdayEnd,
-      peakEnergyWindow: preferences.peakEnergyWindow,
-      sleepPattern: preferences.sleepPattern,
-      procrastinationPattern: preferences.procrastinationPattern,
-      preferredCheckInMode: preferences.preferredCheckInMode,
-      defaultTaskDurationMinutes: preferences.defaultTaskDurationMinutes,
-      breakDurationMinutes: preferences.breakDurationMinutes,
-      preferredFocusBlockMinutes: preferences.preferredFocusBlockMinutes,
-      availabilitySummary: "Availability context is unavailable because the backend request failed.",
-    },
-    availabilityWindows: [],
-    memoryEntries: [],
-    sourceSnapshots: [],
-    memorySummary: "No saved memory notes are available.",
-  }
 }
 
 function buildAvailabilitySummary(

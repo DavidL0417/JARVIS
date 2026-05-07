@@ -39,4 +39,4 @@ Spare. Precise. Honest about limits. The tone of a competent assistant who sends
 
 ## Technical Context
 
-Next.js App Router, TypeScript, Tailwind v4, shadcn/ui as the component baseline. IBM Plex Sans + IBM Plex Mono. Supabase for auth/state, Anthropic for scheduling, Google Calendar mirrored into Supabase. Dashboard is a single authenticated page with three live regions: schedule, task/queue, and contextual sidebars (calendars, check-in approvals).
+Next.js App Router, TypeScript, Tailwind v4, shadcn/ui as the component baseline. Geist Sans + Geist Mono. Supabase for auth/state, OpenAI for secretary dialogue and scheduling, Google Calendar mirrored into Supabase. Dashboard is a single authenticated page with three live regions: schedule, task/queue, and contextual sidebars (calendars, check-in approvals).

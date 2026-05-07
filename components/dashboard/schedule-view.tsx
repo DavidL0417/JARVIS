@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from "react"
 import {
   Dialog,
   DialogContent,
@@ -8,6 +8,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import {
+  ContextMenu,
+  ContextMenuCheckboxItem,
+  ContextMenuContent,
+  ContextMenuLabel,
+  ContextMenuRadioGroup,
+  ContextMenuRadioItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { CalendarPlus, ChevronLeft, ChevronRight, KeyRound, Loader2, MapPin, RefreshCw, X } from "lucide-react"
 import {
@@ -20,12 +30,18 @@ import {
   getTaskDueTimeLabel,
   TASKS_CALENDAR_ID,
 } from "@/lib/task-calendar-constants"
-import type { ScheduleEvent, Task } from "@/types"
+import type { Priority, ScheduleEvent, ScheduleEventUpdateRequest, ScheduleEventUpdateResponse, Task } from "@/types"
 import type { Calendar } from "./calendars-sidebar"
 import { TaskQueuePopover } from "./task-queue-popover"
 
 type ViewMode = "1day" | "3days" | "7days" | "1month"
 type SyncStatus = "idle" | "syncing" | "success" | "error"
+
+type TimedEventLayout = {
+  leftPct: number
+  widthPct: number
+  zIndex: number
+}
 
 export interface CalendarEvent {
   id: string
@@ -38,9 +54,11 @@ export interface CalendarEvent {
   allDay: boolean
   location?: string
   color: "mint" | "blue" | "yellow" | "orange" | "purple" | "cyan"
+  priority: Priority
   day: number
   startHour: number
   duration: number
+  canEdit: boolean
   renderVariant?: "default" | "task-due"
   detail?: string
   dueTimeLabel?: string
@@ -111,9 +129,11 @@ function mapScheduleEventsToCalendarEvents(
         allDay: event.allDay,
         location: event.location || undefined,
         color: getFallbackColor(event.calendarId),
+        priority: event.priority,
         day,
         startHour: start.getHours() + start.getMinutes() / 60,
         duration: Math.max((end.getTime() - start.getTime()) / 3_600_000, 0.25),
+        canEdit: true,
       },
     ]
   })
@@ -159,9 +179,11 @@ function mapTaskReminderEvents(
         allDay: true,
         location: undefined,
         color: "purple",
+        priority: task.priority,
         day,
         startHour: 0,
         duration: 0.25,
+        canEdit: false,
         renderVariant: "task-due",
         detail: buildTaskReminderDescription(task),
         dueTimeLabel: getTaskDueTimeLabel(task),
@@ -214,9 +236,11 @@ function mapTasksToCalendarEvents(
         allDay: false,
         location: undefined,
         color: getFallbackColor(task.calendarId || "cal-tasks"),
+        priority: task.priority,
         day,
         startHour,
         duration: durationHours,
+        canEdit: false,
       },
     ]
   })
@@ -241,6 +265,11 @@ const VIEW_MODES: { value: ViewMode; label: string }[] = [
   { value: "7days", label: "7D" },
   { value: "1month", label: "MO" },
 ]
+const PRIORITY_OPTIONS: Array<{ value: Priority; label: string }> = [
+  { value: "high", label: "High priority" },
+  { value: "medium", label: "Medium priority" },
+  { value: "low", label: "Low priority" },
+]
 const dayNamesShort = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"]
 const monthNames = [
   "January",
@@ -259,6 +288,93 @@ const monthNames = [
 
 function formatHour(hour24: number) {
   return String(hour24).padStart(2, "0")
+}
+
+function getApiErrorMessage(payload: unknown, fallback: string) {
+  if (payload && typeof payload === "object") {
+    const details = "details" in payload && typeof payload.details === "string" ? payload.details : null
+    const error = "error" in payload && typeof payload.error === "string" ? payload.error : null
+    return details || error || fallback
+  }
+
+  return fallback
+}
+
+function getTimedEventBounds(event: CalendarEvent) {
+  const start = event.startHour * 60
+  const end = start + Math.max(event.duration * 60, 1)
+
+  return { start, end }
+}
+
+function buildTimedEventLayoutMap(events: CalendarEvent[]) {
+  const layouts = new Map<string, TimedEventLayout>()
+  const eventsByDay = new Map<number, CalendarEvent[]>()
+
+  for (const event of events) {
+    const current = eventsByDay.get(event.day) ?? []
+    current.push(event)
+    eventsByDay.set(event.day, current)
+  }
+
+  for (const dayEvents of eventsByDay.values()) {
+    const sortedEvents = [...dayEvents].sort((left, right) => {
+      const leftBounds = getTimedEventBounds(left)
+      const rightBounds = getTimedEventBounds(right)
+      return leftBounds.start - rightBounds.start || leftBounds.end - rightBounds.end || left.title.localeCompare(right.title)
+    })
+    const groups: CalendarEvent[][] = []
+    let currentGroup: CalendarEvent[] = []
+    let currentGroupEnd = -Infinity
+
+    for (const event of sortedEvents) {
+      const { start, end } = getTimedEventBounds(event)
+
+      if (currentGroup.length === 0 || start < currentGroupEnd) {
+        currentGroup.push(event)
+        currentGroupEnd = Math.max(currentGroupEnd, end)
+      } else {
+        groups.push(currentGroup)
+        currentGroup = [event]
+        currentGroupEnd = end
+      }
+    }
+
+    if (currentGroup.length > 0) {
+      groups.push(currentGroup)
+    }
+
+    for (const group of groups) {
+      const columns: number[] = []
+      const assignments: Array<{ event: CalendarEvent; column: number }> = []
+
+      for (const event of group) {
+        const { start, end } = getTimedEventBounds(event)
+        let column = columns.findIndex((columnEnd) => columnEnd <= start)
+
+        if (column === -1) {
+          column = columns.length
+          columns.push(end)
+        } else {
+          columns[column] = end
+        }
+
+        assignments.push({ event, column })
+      }
+
+      const columnCount = Math.max(columns.length, 1)
+
+      for (const assignment of assignments) {
+        layouts.set(assignment.event.id, {
+          leftPct: (assignment.column / columnCount) * 100,
+          widthPct: 100 / columnCount,
+          zIndex: 10 + assignment.column,
+        })
+      }
+    }
+  }
+
+  return layouts
 }
 
 export function ScheduleView({
@@ -283,6 +399,7 @@ export function ScheduleView({
   const [syncStatus, setSyncStatus] = useState<SyncStatus>("idle")
   const [syncErrorMessage, setSyncErrorMessage] = useState<string | null>(null)
   const [syncNeedsAuthorization, setSyncNeedsAuthorization] = useState(false)
+  const [eventEditError, setEventEditError] = useState<string | null>(null)
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null)
   const [selectedTaskReminder, setSelectedTaskReminder] = useState<CalendarEvent | null>(null)
   const [now, setNow] = useState(() => new Date())
@@ -386,6 +503,39 @@ export function ScheduleView({
     await syncGoogleEvents()
   }
 
+  const updateEventSettings = useCallback(async (event: CalendarEvent, patch: ScheduleEventUpdateRequest) => {
+    if (!event.canEdit) {
+      return
+    }
+
+    setEventEditError(null)
+
+    const response = await fetch(`/api/events/${event.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(patch),
+      cache: "no-store",
+    })
+    const payload = (await response.json().catch(() => null)) as ScheduleEventUpdateResponse | { error?: string; details?: string } | null
+
+    if (!response.ok || !payload || !("success" in payload)) {
+      throw new Error(getApiErrorMessage(payload, "Failed to update event."))
+    }
+
+    window.dispatchEvent(new CustomEvent("jarvis-dashboard-refresh"))
+  }, [])
+
+  const handleEventSettingsChange = useCallback(
+    async (event: CalendarEvent, patch: ScheduleEventUpdateRequest) => {
+      try {
+        await updateEventSettings(event, patch)
+      } catch (error) {
+        setEventEditError(error instanceof Error ? error.message : "Failed to update event.")
+      }
+    },
+    [updateEventSettings],
+  )
+
   const formatLastSynced = () => {
     if (syncNeedsAuthorization) {
       return isAuthorizingGoogle ? "opening" : "authorize"
@@ -476,6 +626,7 @@ export function ScheduleView({
     [allDayEvents],
   )
   const timedEvents = useMemo(() => events.filter((event) => !event.allDay), [events])
+  const timedEventLayouts = useMemo(() => buildTimedEventLayoutMap(timedEvents), [timedEvents])
   const hasVisibleEvents = events.length > 0
 
   useEffect(() => {
@@ -538,18 +689,62 @@ export function ScheduleView({
     const calendar = calendars?.find((cal) => cal.id === event.calendarId)
     if (calendar) {
       const hex = calendar.color
-      const r = parseInt(hex.slice(1, 3), 16)
-      const g = parseInt(hex.slice(3, 5), 16)
-      const b = parseInt(hex.slice(5, 7), 16)
-      const brightness = (r * 299 + g * 587 + b * 114) / 1000
-      const textColor = brightness > 128 ? "oklch(0.18 0.01 60)" : "oklch(0.96 0.01 80)"
       return {
         backgroundColor: `${hex}45`,
-        color: textColor,
+        color: "oklch(0.96 0.01 80)",
         borderTop: `1px solid ${hex}`,
+        textShadow: "0 1px 1px oklch(0.10 0.01 60 / 0.55)",
       }
     }
     return fallbackEventStyle(event.color)
+  }
+
+  const renderEventContextMenu = (event: CalendarEvent, trigger: ReactElement) => {
+    if (!event.canEdit) {
+      return trigger
+    }
+
+    return (
+      <ContextMenu>
+        <ContextMenuTrigger asChild>{trigger}</ContextMenuTrigger>
+        <ContextMenuContent className="min-w-48 border-rule-strong bg-popover text-popover-foreground">
+          <ContextMenuLabel className="num px-2 py-1 text-[10px] uppercase text-muted-foreground">
+            Calendar event
+          </ContextMenuLabel>
+          <ContextMenuLabel className="truncate px-2 pb-1 pt-0 text-[13px] font-medium text-foreground">
+            {event.title}
+          </ContextMenuLabel>
+          <ContextMenuSeparator />
+          <ContextMenuLabel className="num px-2 py-1 text-[10px] uppercase text-muted-foreground">
+            Priority
+          </ContextMenuLabel>
+          <ContextMenuRadioGroup
+            value={event.priority}
+            onValueChange={(value) => {
+              if (value !== event.priority) {
+                void handleEventSettingsChange(event, { priority: value as Priority })
+              }
+            }}
+          >
+            {PRIORITY_OPTIONS.map((priority) => (
+              <ContextMenuRadioItem key={priority.value} value={priority.value} className="text-[13px]">
+                {priority.label}
+              </ContextMenuRadioItem>
+            ))}
+          </ContextMenuRadioGroup>
+          <ContextMenuSeparator />
+          <ContextMenuCheckboxItem
+            checked={event.isReadOnly}
+            onCheckedChange={(checked) => {
+              void handleEventSettingsChange(event, { isImmutable: checked === true })
+            }}
+            className="text-[13px]"
+          >
+            Fixed in place
+          </ContextMenuCheckboxItem>
+        </ContextMenuContent>
+      </ContextMenu>
+    )
   }
 
   const renderMonthView = () => {
@@ -646,6 +841,20 @@ export function ScheduleView({
               setSyncNeedsAuthorization(false)
             }}
             aria-label="Dismiss"
+            className="ml-1 shrink-0 text-destructive/70 hover:text-destructive"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      ) : null}
+      {eventEditError ? (
+        <div className="num fixed right-6 top-32 z-[200] flex max-w-sm items-center gap-2.5 rounded-sm border border-destructive/50 bg-popover px-2.5 py-1.5 text-[11px] text-destructive shadow-lg">
+          <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-destructive" aria-hidden="true" />
+          <span className="leading-tight">{eventEditError}</span>
+          <button
+            type="button"
+            onClick={() => setEventEditError(null)}
+            aria-label="Dismiss event update error"
             className="ml-1 shrink-0 text-destructive/70 hover:text-destructive"
           >
             <X className="h-3.5 w-3.5" />
@@ -860,13 +1069,17 @@ export function ScheduleView({
                       </button>
                     ))}
                     {dayAllDayEvents.map((event) => (
-                      <div
-                        key={event.id}
-                        className="overflow-hidden rounded-sm px-1.5 py-0.5 text-[10px] font-medium leading-tight"
-                        style={getEventColorStyle(event)}
-                      >
-                        <p className="truncate">{event.title}</p>
-                      </div>
+                      <Fragment key={event.id}>
+                        {renderEventContextMenu(
+                          event,
+                          <div
+                            className="overflow-hidden rounded-sm px-1.5 py-0.5 text-[10px] font-medium leading-tight"
+                            style={getEventColorStyle(event)}
+                          >
+                            <p className="truncate">{event.title}</p>
+                          </div>,
+                        )}
+                      </Fragment>
                     ))}
                   </div>
                 </div>
@@ -930,25 +1143,40 @@ export function ScheduleView({
                   {/* Events */}
                   {timedEvents
                     .filter((event) => event.day === dayIndex)
-                    .map((event) => (
-                      <div
-                        key={event.id}
-                        className="absolute left-px right-px overflow-hidden px-1.5 py-1"
-                        style={{
-                          ...getEventStyle(event),
-                          ...(calendars ? getEventColorStyle(event) : fallbackEventStyle(event.color)),
-                          opacity: event.isReadOnly ? 0.85 : 1,
-                        }}
-                      >
-                        <p className="truncate text-[11px] font-medium leading-tight">{event.title}</p>
-                        {event.location && event.duration >= 0.75 ? (
-                          <div className="mt-0.5 flex items-center gap-0.5 text-[10px] opacity-80">
-                            <MapPin className="h-2.5 w-2.5 shrink-0" />
-                            <span className="truncate">{event.location}</span>
-                          </div>
-                        ) : null}
-                      </div>
-                    ))}
+                    .map((event) => {
+                      const layout = timedEventLayouts.get(event.id) ?? {
+                        leftPct: 0,
+                        widthPct: 100,
+                        zIndex: 10,
+                      }
+
+                      return (
+                        <Fragment key={event.id}>
+                          {renderEventContextMenu(
+                            event,
+                            <div
+                              className="absolute overflow-hidden px-1.5 py-1"
+                              style={{
+                                ...getEventStyle(event),
+                                left: `calc(${layout.leftPct}% + 1px)`,
+                                width: `calc(${layout.widthPct}% - 2px)`,
+                                zIndex: layout.zIndex,
+                                ...(calendars ? getEventColorStyle(event) : fallbackEventStyle(event.color)),
+                                opacity: event.isReadOnly ? 0.85 : 1,
+                              }}
+                            >
+                              <p className="truncate text-[11px] font-medium leading-tight">{event.title}</p>
+                              {event.location && event.duration >= 0.75 ? (
+                                <div className="mt-0.5 flex items-center gap-0.5 text-[10px] opacity-80">
+                                  <MapPin className="h-2.5 w-2.5 shrink-0" />
+                                  <span className="truncate">{event.location}</span>
+                                </div>
+                              ) : null}
+                            </div>,
+                          )}
+                        </Fragment>
+                      )
+                    })}
                 </div>
               ),
             )}

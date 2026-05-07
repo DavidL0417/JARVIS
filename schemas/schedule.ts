@@ -5,6 +5,7 @@ import { z } from "zod"
 
 import {
   memoryEntrySummarySchema,
+  prioritySchema,
   scheduleEventInputSchema,
   scheduleEventSchema,
   sourceSnapshotSummarySchema,
@@ -45,9 +46,25 @@ export const scheduleResponseSchema = z.object({
   schedule: schedulePlanResultSchema,
 })
 
+export const scheduleEventUpdateRequestSchema = z
+  .object({
+    priority: prioritySchema.optional(),
+    isImmutable: z.boolean().optional(),
+  })
+  .refine((value) => value.priority !== undefined || value.isImmutable !== undefined, {
+    message: "At least one event setting must be provided.",
+  })
+
+export const scheduleEventUpdateResponseSchema = z.object({
+  success: z.literal(true),
+  event: scheduleEventSchema,
+})
+
 export type ScheduleRequest = z.infer<typeof scheduleRequestSchema>
 export type SchedulePreparationContext = z.infer<typeof schedulePreparationContextSchema>
 export type SchedulePlanResult = z.infer<typeof schedulePlanResultSchema>
 export type ScheduleResponse = z.infer<typeof scheduleResponseSchema>
+export type ScheduleEventUpdateRequest = z.infer<typeof scheduleEventUpdateRequestSchema>
+export type ScheduleEventUpdateResponse = z.infer<typeof scheduleEventUpdateResponseSchema>
 
 // ##### END BACKEND #####

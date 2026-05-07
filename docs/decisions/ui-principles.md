@@ -7,7 +7,7 @@
 - Icon-first.
 - Very little visible instructional text.
 - Restrained dark neutral palette with a few semantic accents.
-- Typography uses IBM Plex Sans for the interface and reserves IBM Plex Mono for true code/technical contexts. Tabular numerals should not make labels feel like a terminal.
+- Typography uses Geist Sans for the interface and reserves Geist Mono for true code/technical contexts. Tabular numerals should not make labels feel like a terminal.
 
 ## Interaction Rules
 
@@ -18,6 +18,7 @@
 - Avoid nested cards and marketing-style sections.
 - Treat the secretary panel as a transcript plus command line. Avoid filled chat boxes, decorative composer rules, and separators that do not map to a real region change.
 - In the right rail, prefer spacing and muted surfaces for local grouping. Reserve strong rules for major region breaks so the panel does not become a stack of equal dividers.
+- Imported Google events default to medium priority and fixed in place. Do not expose the full backlog as a review queue; event-level changes belong on the calendar event context menu.
 
 ## Layout Rules
 

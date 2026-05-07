@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 
-import { generateSchedule } from "@/lib/ai/claude"
+import { generateSchedule } from "@/lib/ai/openai"
 import {
   mapMemoryItemRowToSummary,
   mapPreferencesRowToPreferences,

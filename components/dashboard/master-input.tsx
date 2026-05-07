@@ -96,7 +96,7 @@ function ToolCallReceipt({ toolCalls }: { toolCalls: AssistantMessageResponse["t
 
 function MarkdownMessage({ text }: { text: string }) {
   return (
-    <div className="text-[13.5px] leading-[1.55] text-foreground">
+    <div className="text-[13px] leading-[1.48] text-foreground">
       <ReactMarkdown
         remarkPlugins={[remarkGfm, remarkBreaks]}
         components={{
@@ -121,8 +121,8 @@ function MarkdownMessage({ text }: { text: string }) {
 
 function ThinkingBubble() {
   return (
-    <div className="grid grid-cols-[4.25rem_minmax(0,1fr)] gap-3">
-      <span className="num pt-0.5 text-[10.5px] font-medium uppercase copper">JARVIS</span>
+    <div className="grid grid-cols-[3.85rem_minmax(0,1fr)] gap-3">
+      <span className="num pt-0.5 text-[10px] font-medium uppercase copper">JARVIS</span>
       <span className="flex h-5 items-center gap-1">
         <span className="h-1 w-1 animate-pulse rounded-full bg-copper [animation-delay:-0.3s]" />
         <span className="h-1 w-1 animate-pulse rounded-full bg-copper [animation-delay:-0.15s]" />
@@ -294,7 +294,9 @@ export function MasterInput({ tasks = [] }: MasterInputProps) {
         throw new Error("The secretary returned an invalid response.")
       }
 
-      setContext(result.context)
+      if (result.context) {
+        setContext(result.context)
+      }
       setTranscript((current) => [
         ...current,
         {
@@ -351,107 +353,112 @@ export function MasterInput({ tasks = [] }: MasterInputProps) {
 
   return (
     <section className="flex flex-col">
-      <header className="mb-4 flex items-center justify-between gap-2">
-        <h2 className="eyebrow">Secretary</h2>
-        <span className="num flex items-center gap-1.5 text-[11px] font-medium uppercase text-muted-foreground">
-          <span
-            className={`h-1.5 w-1.5 rounded-full ${
-              status === "submitting"
-                ? "animate-pulse bg-copper"
-                : status === "error"
-                  ? "bg-destructive"
-                  : "bg-copper"
-            }`}
-            aria-hidden="true"
-          />
-          {status === "submitting" ? "Thinking" : status === "error" ? "Error" : "Ready"}
-        </span>
-      </header>
+      <div className="border border-rule/80 bg-panel/45 px-3 py-3">
+        <header className="mb-3 flex items-center justify-between gap-2">
+          <h2 className="eyebrow">Secretary</h2>
+          <span className="num flex items-center gap-1.5 text-[10.5px] font-medium uppercase text-muted-foreground">
+            <span
+              className={`h-1.5 w-1.5 rounded-full ${
+                status === "submitting"
+                  ? "animate-pulse bg-copper"
+                  : status === "error"
+                    ? "bg-destructive"
+                    : "bg-copper"
+              }`}
+              aria-hidden="true"
+            />
+            {status === "submitting" ? "Thinking" : status === "error" ? "Error" : "Ready"}
+          </span>
+        </header>
 
-      <div
-        ref={transcriptRef}
-        className="max-h-[260px] min-h-[3rem] overflow-y-auto pr-1"
-      >
-        <div className="space-y-5">
-          {transcript.map((entry) => (
-            <article
-              key={entry.id}
-              className="grid grid-cols-[4.25rem_minmax(0,1fr)] gap-3"
-            >
-              <span
-                className={`num pt-0.5 text-[10.5px] font-medium uppercase ${
-                  entry.role === "user" ? "text-muted-foreground" : "copper"
-                }`}
+        <div
+          ref={transcriptRef}
+          className="max-h-[220px] min-h-[2.5rem] overflow-y-auto pr-1"
+        >
+          <div className="space-y-4">
+            {transcript.map((entry) => (
+              <article
+                key={entry.id}
+                className="grid grid-cols-[3.85rem_minmax(0,1fr)] gap-3"
               >
-                {entry.role === "user" ? "You" : "JARVIS"}
-              </span>
-              <div className="min-w-0">
-                {entry.role === "assistant" ? (
-                  <MarkdownMessage text={entry.text} />
-                ) : (
-                  <p className="whitespace-pre-wrap text-[13.5px] leading-[1.55] text-foreground">
-                    {entry.text}
-                  </p>
-                )}
-                {entry.error && (
-                  <p className="mt-1 text-[12px] text-destructive">{entry.error}</p>
-                )}
-                {entry.clarification && (
-                  <p className="mt-1 text-[12px] copper">{entry.clarification}</p>
-                )}
-                {entry.toolCalls && <ToolCallReceipt toolCalls={entry.toolCalls} />}
+                <span
+                  className={`num pt-0.5 text-[10px] font-medium uppercase ${
+                    entry.role === "user" ? "text-muted-foreground" : "copper"
+                  }`}
+                >
+                  {entry.role === "user" ? "You" : "JARVIS"}
+                </span>
+                <div className="min-w-0">
+                  {entry.role === "assistant" ? (
+                    <MarkdownMessage text={entry.text} />
+                  ) : (
+                    <p className="whitespace-pre-wrap text-[13px] leading-[1.48] text-foreground">
+                      {entry.text}
+                    </p>
+                  )}
+                  {entry.error && (
+                    <p className="mt-1 text-[12px] text-destructive">{entry.error}</p>
+                  )}
+                  {entry.clarification && (
+                    <p className="mt-1 text-[12px] copper">{entry.clarification}</p>
+                  )}
+                  {entry.toolCalls && <ToolCallReceipt toolCalls={entry.toolCalls} />}
+                </div>
+              </article>
+            ))}
+            {status === "submitting" ? (
+              <div>
+                <ThinkingBubble />
               </div>
-            </article>
-          ))}
-          {status === "submitting" ? (
-            <div>
-              <ThinkingBubble />
-            </div>
-          ) : null}
+            ) : null}
+          </div>
+          <div ref={transcriptBottomRef} />
         </div>
-        <div ref={transcriptBottomRef} />
-      </div>
 
-      {errorMessage && (
-        <p className="mt-2 text-[12px] text-destructive">{errorMessage}</p>
-      )}
+        {errorMessage && (
+          <p className="mt-2 text-[12px] text-destructive">{errorMessage}</p>
+        )}
 
-      <div className="mt-5 border-t border-rule pt-3">
-        <div className="group/composer flex min-h-11 items-end gap-2">
-          <Textarea
-            placeholder="Message JARVIS…"
-            value={message}
-            onChange={(event) => setMessage(event.target.value)}
-            onKeyDown={handleKeyDown}
-            aria-label="Secretary input"
-            className="max-h-[118px] min-h-[32px] resize-none rounded-none border-0 bg-transparent p-0 pt-1 text-[14px] leading-[1.55] text-foreground shadow-none outline-none placeholder:text-muted-foreground/65 focus-visible:ring-0 dark:bg-transparent"
-          />
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                type="button"
-                onClick={handleSubmit}
-                disabled={status === "submitting" || !message.trim()}
-                aria-label="Send (Enter)"
-                className={`mb-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-sm transition-colors disabled:opacity-30 ${
-                  message.trim() && status !== "submitting"
-                    ? "text-copper hover:bg-copper-soft"
-                    : "text-muted-foreground"
-                }`}
-              >
-                {status === "submitting" ? (
-                  <Loader2 className="h-4 w-4 animate-spin" strokeWidth={1.75} />
-                ) : (
-                  <ArrowUp className="h-4 w-4" strokeWidth={1.85} />
-                )}
-              </button>
-            </TooltipTrigger>
-            <TooltipContent side="top" className="text-[11px]">Send · Enter</TooltipContent>
-          </Tooltip>
+        <div className="mt-3 grid grid-cols-[3.85rem_minmax(0,1fr)] gap-3">
+          <span className="num pt-1 text-[10px] font-medium uppercase text-muted-foreground">
+            You
+          </span>
+          <div className="group/composer flex min-h-9 items-end gap-2">
+            <Textarea
+              placeholder="Message JARVIS…"
+              value={message}
+              onChange={(event) => setMessage(event.target.value)}
+              onKeyDown={handleKeyDown}
+              aria-label="Secretary input"
+              className="max-h-[104px] min-h-[28px] resize-none rounded-none border-0 bg-transparent p-0 pt-0.5 text-[13.5px] leading-[1.48] text-foreground shadow-none outline-none placeholder:text-muted-foreground/65 focus-visible:ring-0 dark:bg-transparent"
+            />
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  onClick={handleSubmit}
+                  disabled={status === "submitting" || !message.trim()}
+                  aria-label="Send (Enter)"
+                  className={`mb-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-sm transition-colors disabled:opacity-30 ${
+                    message.trim() && status !== "submitting"
+                      ? "text-copper hover:bg-copper-soft"
+                      : "text-muted-foreground"
+                  }`}
+                >
+                  {status === "submitting" ? (
+                    <Loader2 className="h-4 w-4 animate-spin" strokeWidth={1.75} />
+                  ) : (
+                    <ArrowUp className="h-4 w-4" strokeWidth={1.85} />
+                  )}
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="top" className="text-[11px]">Send · Enter</TooltipContent>
+            </Tooltip>
+          </div>
         </div>
       </div>
 
-      <div className="mt-4">
+      <div className="mt-3 border-t border-rule-strong/70 pt-3">
         <div className="flex h-8 items-center gap-5">
           {(["availability", "memory"] as const).map((key) => {
             const open = openContext === key

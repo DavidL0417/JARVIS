@@ -382,7 +382,7 @@ export interface AssistantMessageResponse {
   toolCalls: AssistantToolCallResult[]
   needsRefresh: boolean
   clarification: string | null
-  context: AssistantContextData
+  context?: AssistantContextData
   error?: string
 }
 
@@ -409,6 +409,8 @@ export interface CheckInApprovalItem {
 export interface CheckInApprovalListResponse {
   success: true
   items: CheckInApprovalItem[]
+  totalPending: number
+  visibleLimit: number
 }
 
 export interface SaveCheckInApprovalRequest {
@@ -621,6 +623,16 @@ export interface ScheduleResponse {
     hasPreferences: boolean
   }
   schedule: SchedulePlanResult
+}
+
+export interface ScheduleEventUpdateRequest {
+  priority?: Priority
+  isImmutable?: boolean
+}
+
+export interface ScheduleEventUpdateResponse {
+  success: true
+  event: ScheduleEvent
 }
 
 export interface ReplanRequest {

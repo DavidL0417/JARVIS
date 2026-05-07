@@ -1,0 +1,88 @@
+             Timeline, forces diagram
+             Timeline
+             First Thought — Middle school. WangShan first started thinking about time management using
+             paper notebooks. The instinct that her time/tasks needed structure was there from very early on,
+             well before any app.
+             Passive Looking — Second year of college, around 2016. Workload picked up: lots of courses
+             and homework, plus juggling a course-schedule app and Apple Notes/memos for birthdays and
+             miscellaneous tasks. She noticed Apple Notes was getting visually disorganized but kept using it
+             out of inertia — too many existing records to walk away from. Idea of "a better system" was
+             floating around, but no real search yet.
+             Event #1 — Forgot a friend's birthday — Missed a friend's birthday and didn't buy a gift. That
+             single failure crystallized the problem: her scattered setup (course app + Notes + memos) wasn't
+             actually holding her life together. This is what flipped her from passively noticing to actively
+             looking for a comprehensive life-management tool.
+             Active Looking (2016–2023) — A long, intermittent search.
+                       2016–2017: Tried Di Da Clock (滴答时钟) and other apps friends recommended. Each one
+                       was either too complicated or too single-function. As a college student with no budget for
+                       paid apps, she defaulted back to Apple Notes + Calendar.
+                       2017–2023: Kept periodically looking but never found anything satisfying. Started
+                       working, initially used work apps for time management. Began watching efficiency/self-
+                       growth creators on YouTube and Bilibili, which kept the search alive in the background.
+             Event #2 — Bilibili creator's life-story video (2023) — While still arguably in active looking, she
+             saw a video where a creator shared her personal life story and mentioned using 指尖时光 to
+             manage her own time. The combination of a trusted creator + a concrete app name + a real use
+             case (personal time, not just work) is what flipped her from "still looking" to "go search this on
+             Bilibili now." By this point she also had income, so paying was no longer a blocker.
+             Deciding — Searched Bilibili for time-management tools, compared several apps recommended
+             in that creator's circle. Picked 指尖时光 because it was the only one that bundled check-in,
+             scheduling, to-do list, and birthday/memorial-day tracking in a single app — directly solving the
+             original "forgot a friend's birthday" problem and the long-standing "too many separate apps"
+             problem.
+             Buying — Started with the free trial, but it was too limited. Within a few days she purchased the
+             full membership because it met all her needs.
+             Consuming — Still actively uses the app, mainly the calendar and Daka functions.
+
+
+
+
+Timeline, forces diagram                                                                                            1
+             Satisfaction — Overall satisfied with the core functionality. Main criticism: poor MacBook/laptop
+             integration. She understands the business reason (most users are on mobile) but thinks the
+             desktop experience could be much better.
+
+             4 Forces of Progress
+             Push (of the present) — what made her say           Pull (of the new solution) — what made her
+             "I need to make it better":                         wonder "Can this help me make progress?":
+                       Heavy course/homework load in                    One app that consolidates Daka,
+                       second year of college outgrew Apple             scheduling, to-do, and
+                       Notes                                            birthday/memorial-day tracking
+                       Scattered setup: course-schedule app             Trusted Bilibili creator using it for
+                       + Notes + memos for birthdays —                  personal time management, not just
+                       nothing tied together                            work
+                       Forgot a friend's birthday and didn't            Years of watching efficiency/self-
+                       buy a gift — concrete failure of the             growth content primed her to take a
+                       existing system                                  recommendation seriously
+                       Years of low-grade dissatisfaction               By 2023 she had income — paid apps
+                       with Apple Notes looking visually                were finally on the table
+                       disorganized
+             Habit (of the present) — "What I do now isn't       Anxiety (of the new solution) — "Will it
+             so bad":                                            work? Can I figure it out?":
+                       Apple Notes + Calendar had been her              Long history of trying apps that didn't
+                       default since middle-school                      stick — reasonable fear this would be
+                       notebooks days                                   another one
+                       Inertia from years of existing records           Free trial felt too limited to fully
+                       made switching feel costly                       evaluate before committing
+                       After starting work, she leaned on               Paying for an app was a new behavior
+                       work-provided apps for time                      — in college she'd never paid for one
+                       management                                       Worry about migrating years of
+                       Every previous app she'd tried (Di Da            existing records out of the Apple
+                       Clock, etc.) was either too                      ecosystem
+                       complicated or too single-function,
+                       reinforcing "nothing is better than
+                       what I have"
+
+             JTBD Statement
+
+
+Timeline, forces diagram                                                                                          2
+             When her scattered mix of Apple Notes, calendar, and a course-schedule app started letting
+             things slip — like forgetting a friend's birthday — she wants one consolidated app that handles
+             check-ins, scheduling, to-dos, and important dates so she can manage her whole personal life in
+             a single place and stop dropping the things that matter to her.
+
+
+
+
+Timeline, forces diagram                                                                                       3
+

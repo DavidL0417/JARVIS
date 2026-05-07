@@ -3,7 +3,7 @@
 
 import { NextResponse } from "next/server"
 
-import { replanSchedule } from "@/lib/ai/claude"
+import { replanSchedule } from "@/lib/ai/openai"
 import { replanRequestSchema } from "@/schemas/replan"
 
 export async function POST(request: Request) {

@@ -14,7 +14,7 @@ Production v1 secretary scheduler: authenticated Supabase state, migration-backe
 - Next.js App Router
 - TypeScript
 - Supabase Auth and Postgres
-- Claude API for scheduling
+- OpenAI API for secretary dialogue and scheduling
 - Google Calendar sync into the Supabase mirror
 
 ## Environment
@@ -26,7 +26,8 @@ NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
 SUPABASE_SERVICE_ROLE_KEY=
 
-ANTHROPIC_API_KEY=
+OPENAI_API_KEY=
+OPENAI_MODEL=gpt-4.1
 
 GOOGLE_CLIENT_ID=
 GOOGLE_CLIENT_SECRET=

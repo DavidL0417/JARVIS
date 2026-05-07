@@ -1,0 +1,248 @@
+             Midterm cluster synthesis
+             Standardized synthesis of all three JTBD clusters ahead of the midterm deck. Cluster 3 is the
+             focus segment for the deep dive. Clusters 1 and 2 are kept briefer but follow the same structure
+             for consistency: interviewees, JTBD statement, anchor quote, 4 Forces, Motivations,
+             Competitors.
+                 Midterm Presentation Instructions
+                 DUE MONDAY 4/27 by 5pm CST before class. You must upload your presentations to your
+                 team’s docs and files as pdfs by this time to avoid a late penalty.After conducting your JTBD
+                 interviews, your team will synthesize and present the key insights you've uncovered about
+                 your interviewees' struggles and goals.
+                 Your objective is to identify 2–3 clear JTBD statements based on the common patterns
+                 across your interviews. These are called clusters. These should reflect the progress your
+                 interviewees are trying to make in their lives, not just tasks or features they mentioned.
+                 For each JTBD cluster you identify, your team must present:
+                       4 Forces Summary: Explain the Push (the problem prompting change), Pull (the attraction
+                       to a new solution), Habits (what they’re used to), and Anxieties (fears or doubts holding
+                       them back).
+                       Motivations: Break down the motivation behind the job into three dimensions—Functional,
+                       Emotional, and Social.
+                       Competitors: Describe what your interviewees are currently doing to solve this struggle.
+                       These are their real-life “competitors”—not just direct products, but also workarounds or
+                       alternatives.
+                       Quotes: This is crucial. Every JTBD statement must be grounded in actual quotes from
+                       your interviews. Use these to vividly bring the problem to life and show how you arrived at
+                       your insights.
+                       You should be able to list the names of the interviewees in each of your clusters
+                 In the live presentations, you should be prepared to briefly touch on each cluster, then go
+                 deep on the one you’ve chosen.
+                       Your deck should contain a full analysis of each cluster according to the above outline
+                       Briefly explain the above points for each cluster
+                       Tell us which cluster you’ve chosen to target as your initial customer segment, and why.
+                       You should consider the following when making this decision:
+                            Feasibility
+                            Customer pain
+
+
+Midterm cluster synthesis                                                                                            1
+                            Team passion
+                 Propose your solution!
+                       What's your solution to this problem? (Max 1 slide)
+                            Don't worry about this being fully formed, it's more important that this solution
+                            matches what you found in interviews.
+                       Who is the solution for? Who's the customer segment you’re going after (explained in
+                       terms of their struggling moment)?
+                 Preliminary Competitive Analysis
+                       What's already on the market? Who are your competitors?
+                       How do you plan to differentiate yourselves (UVP) from competitors? This should be
+                       grounded in customer insights.
+                 Refer back to Demand-Side Sales 101 to guide your thinking. Let your customer’s language
+                 and context shape your conclusions—not what you think they need.All group members are
+                 expected to present in the midterms. It is up to you how you would like to split the time, it
+                 need not be equally split amongst team members.Presentations will be 8-10 min long. The
+                 minimum requirement is 8 min, with a hard stop at 10 min. There will be a brief feedback
+                 period in which the professors may ask follow up questions and/or provide any thoughts. The
+                 remainder of your feedback will be given via Basecamp afterward.Each group should pick
+                 one member to submit your presentation decks here on Basecamp in your group project's
+                 Docs and Files. PLEASE SUBMIT THE DECK AS A PDF.
+                  Cluster 1 — I Need to Be a Better Student for College
+                 Interviewees: Jose, Jeremy
+                 JTBD statement
+                 When I am starting college and realizing my high school habits will not cut it anymore, I want
+                 to finally become the organized, prepared student I have always told myself I would be, so I
+                 do not maintain complacency and fall behind in a new environment.
+                 Anchor quote
+                 “I thought to myself, like, I’m going to be locked in, I’m going to be focused in college.” —
+                 Jose
+
+                 4 Forces
+                 Push
+                       College material is harder and the workload less predictable, with no built-in structure to
+                       keep them on track.
+                       High school autopilot — coasting and relying on memory — is no longer a viable strategy.
+
+
+
+Midterm cluster synthesis                                                                                            2
+                       Already lived through the pattern of falling off with planners and do not want to repeat it in
+                       a higher-stakes environment.
+                       Fear of falling behind academically before even getting started.
+                 Pull
+                       A physical planner on the desk, with deadlines and exam dates always visible.
+                       Color-coded markers for clear separation between exams, events, and reminders.
+                       Family members already use planners, which makes it feel like the responsible college
+                       tool.
+                       The promise of finally feeling organized and on top of their workload.
+                 Habit
+                       Passive tracking through Google Classroom and Canvas — never had to seek information
+                       out themselves.
+                       Memory was enough in high school, so no real system was ever required.
+                       Established cycle of buying a planner, using it briefly, and dropping it without
+                       consequence.
+                 Anxiety
+                       Already abandoned planners before — low confidence this time will be different.
+                       No clear plan for how to integrate a planner into a college routine they have not started
+                       yet.
+                       Even after buying one, no guarantee the habit will form and stick.
+
+                 Motivations
+                       Functional: Track exams, deadlines, and assignments without leaning on memory or
+                       passive school platforms.
+                       Emotional: Feel prepared and in control going into an unfamiliar environment.
+                       Social: Being organized is what serious college students do, reinforced by family
+                       members modeling that behavior.
+
+                 Competitors
+                       Memory and mental tracking — the path of least resistance, carried over from high
+                       school.
+                       Google Classroom and Canvas — passive, school-controlled, required no initiative.
+                       Free school-issued planners — familiar but never sustained.
+                       High school autopilot — no system at all, just coasting on easier material.
+
+
+Midterm cluster synthesis                                                                                               3
+                  Cluster 2 — Failure-Triggered Need to Stop Being Reactive
+                 Interviewees: Advik, Caleb
+                 JTBD statement
+                 When a preventable academic failure or unproductive work session shows me that my
+                 reactive habits are costing me, I want a system that makes important work visible earlier, so I
+                 can stop cramming, use my time better, and feel back in control.
+                 Anchor quote
+                 “I felt like I messed it up myself and it was completely avoidable.” — Advik
+
+                 4 Forces
+                 Push
+                       Poor exam performance that felt avoidable. Advik: “I felt like I messed it up myself and it
+                       was completely avoidable.”
+                       Unproductive sessions despite having time and energy. Caleb: “I felt like I wasn’t being
+                       that productive studying in Mudd, even though I had things to do.”
+                       Procrastination cycles compounding into deadline crunch. Caleb: “Those hours wasted —
+                       even though I don’t feel them now, two weeks after I will feel them and I will have to
+                       crunch.”
+                 Pull
+                       Everything visible in one place before it becomes urgent.
+                       Targeted reminders that actually prompt action. Caleb: “The reminders — not the useless
+                       reminders. For this it was more targeted, to the point where I actually went back and
+                       actually did something about it.”
+                       Structure that reduces mental load and creates the feeling of being on the right track.
+                 Habit
+                       Canvas plus memory plus last-minute cramming.
+                       Switching to easier tasks when stuck.
+                       Motivation talks from friends or family in place of a real system.
+                       Reactive, urgency-driven workflow.
+                 Anxiety
+                       Doubt about staying disciplined enough.
+                       Paying for something then abandoning it.
+
+
+
+
+Midterm cluster synthesis                                                                                            4
+                       Tools that require the organization they do not yet have. Advik on Notion: “I wasn’t
+                       organized — but then it needed me to already be organized to use it properly.”
+                       Maintaining two systems at once feels exhausting.
+
+                 Motivations
+                       Functional: See upcoming work before it becomes urgent. Stop last-minute cramming.
+                       Organize tasks across school, clubs, and recruiting. Reduce manual tracking overhead.
+                       Emotional: Escape regret over avoidable failure. Feel in control rather than reactive.
+                       Reduce pre-deadline stress.
+                       Social: Keep pace with organized peers and roommates. Be the student who has it
+                       together. Trust and act on peer recommendations.
+
+                 Competitors
+                       Memory and mental tracking until it failed at exam time.
+                       Canvas as a passive deadline repository.
+                       Google Calendar — multiple separate calendars felt cumbersome.
+                       Sticky notes and the Notes app — lists made and forgotten.
+                       Last-minute cramming as a coping behavior.
+                       Friend and family motivation talks in place of a system.
+                       Notion — Advik tried and abandoned because the tool required organization he did not
+                       yet have.
+                Cluster 3 — Consolidating a Fragmented Productivity Stack
+             (focus cluster)
+                 Interviewees: Yoyo, WangShan, May, Michelle
+                 JTBD statement
+                 When I am running my schedule, notes, to-dos, and time tracking across multiple apps and
+                 something keeps falling through the cracks, I want a single tool that holds all of it together
+                 across my devices, so I can stop maintaining parallel systems and actually trust my setup.
+                 Anchor quote
+                 “I want to keep everything in record and everything in single one app.” — WangShan
+
+                 4 Forces
+                 Push
+                       Juggling separate systems. WangShan: “I had to like switch between my cross schedule
+                       and like between my other memos.”
+
+
+Midterm cluster synthesis                                                                                         5
+                       Concrete failure moment. WangShan: “I forgot some, I think it’s a friend’s birthday… forget
+                       to buy him a gift.”
+                       Notes stopped working under the workload. May: “It looks like a lot of words, so it’s not
+                       really clear.”
+                 Pull
+                       One place for everything. WangShan: “I want to keep everything in record and everything
+                       in single one app.”
+                       Calendar integration. May: “It gets access to your email account and also your like Google
+                       Calendar so it like compress all your schedules or appointments.”
+                       See where the time actually went. Michelle: “when I look at the recaps, I can see, okay, I
+                       was spending 50% of my time studying this, 25% studying something else.”
+                 Habit
+                       Defaulting back to Apple. WangShan: “basically I just did to the Apple apps.”
+                       Heavy upkeep on Notion. Yoyo: “I spent a lot of time like organizing my notion, like trying
+                       to make it look pretty.”
+                       Discovering apps through social media. Michelle: “I think it was also social media
+                       probably.”
+                 Anxiety
+                       Setup cost. Yoyo: “it takes so long to set it up.”
+                       Subscription cost. May: “the subscription was a little bit too expensive so I didn’t
+                       subscribe to it like the second year.”
+                       Loss of control. Yoyo: “I like to still have the control over what I’m doing each day.”
+
+                 Motivations
+                 Functional
+                       One unified system across devices. Michelle: “I just wanted a way so that I could sink all
+                       of my logs onto a single account so that I could use across all of my devices.”
+                       Track time by category, not generic blocks. Michelle: “I want to be able to label them like
+                       studying for English or studying for math instead of just one block thing… productive
+                       time.”
+                 Emotional
+                       Less scattered, more in control. Yoyo: “it was kind of like all over the place.”
+                       Wanting one tool that finally holds. Yoyo: “if there’s one app that could just like handle
+                       everything, that would be great.”
+
+
+
+Midterm cluster synthesis                                                                                            6
+                 Social
+                       Influenced by trusted peers. Yoyo: “my roommate… she was like obsessed with notion
+                       so… I was like, okay, I want to like try [it] out.”
+                       Following creators who model the lifestyle. WangShan: “I was always focused on
+                       efficiency and self growth. Basically, I just follow some YouTubers.”
+
+                 Competitors
+                       Direct products: Notion, Todoist, TickTick, Motion, Focus Pomo, Forest, 嘀嗒清单, 指尖时
+                       光.
+
+                       Default tools: Apple Calendar, Apple Notes, Google Calendar, Outlook, course apps,
+                       phone reminders.
+                       Physical and informal: Planners, sticky notes, journaling. May on laptop notes: “not very
+                       aesthetically pleasing.”
+                       Workarounds: Free tiers and short subscriptions. May: “the subscription was a little bit
+                       too expensive.”
+
+
+
+
+Midterm cluster synthesis                                                                                          7
+

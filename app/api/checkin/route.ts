@@ -25,6 +25,8 @@ import type {
   ScheduleEventRow,
 } from "@/types"
 
+const CHECK_IN_APPROVAL_LIMIT = 5
+
 function isApprovalPayload(value: unknown): value is { eventId: string } {
   return Boolean(
     value &&
@@ -46,9 +48,23 @@ export async function GET() {
       .not("gcal_event_id", "is", null)
       .gte("ends_at", new Date().toISOString())
       .order("starts_at", { ascending: true })
+      .limit(CHECK_IN_APPROVAL_LIMIT)
 
     if (error) {
       throw new Error(error.message)
+    }
+
+    const { count, error: countError } = await adminClient
+      .from("schedule_events")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", user.id)
+      .eq("last_synced_from", "gcal")
+      .eq("is_checked_in", false)
+      .not("gcal_event_id", "is", null)
+      .gte("ends_at", new Date().toISOString())
+
+    if (countError) {
+      throw new Error(countError.message)
     }
 
     const items: CheckInApprovalItem[] = (data ?? []).map((row) => ({
@@ -58,6 +74,8 @@ export async function GET() {
     const payload: CheckInApprovalListResponse = {
       success: true,
       items,
+      totalPending: count ?? items.length,
+      visibleLimit: CHECK_IN_APPROVAL_LIMIT,
     }
     const parsed = checkInApprovalListResponseSchema.safeParse(payload)
 

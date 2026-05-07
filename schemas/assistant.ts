@@ -62,7 +62,7 @@ export const assistantMessageResponseSchema = z.object({
   toolCalls: z.array(assistantToolCallResultSchema),
   needsRefresh: z.boolean(),
   clarification: z.string().nullable(),
-  context: assistantContextDataSchema,
+  context: assistantContextDataSchema.optional(),
   error: z.string().optional(),
   debug: z
     .object({

@@ -35,6 +35,8 @@ export const checkInApprovalItemSchema = z.object({
 export const checkInApprovalListResponseSchema = z.object({
   success: z.literal(true),
   items: z.array(checkInApprovalItemSchema),
+  totalPending: z.number().int().nonnegative(),
+  visibleLimit: z.number().int().positive(),
 })
 
 export const saveCheckInApprovalResponseSchema = z.object({

@@ -1,0 +1,76 @@
+             Timeline, forces diagram
+             Timeline
+             First Thought — Start of junior year (late 2022 / early 2023). SAT prep, homework, college
+             counselor meetings, and club activities all started stacking up. She began sensing her laptop
+             notes weren't cutting it. Freshman and sophomore year had been light enough that she'd never
+             needed a real system.
+             Passive Looking — For about three weeks, she kept using her laptop notes. Nothing was actively
+             broken — she was still getting her work done. She vaguely noticed it looked messy and ugly, but
+             wasn't researching alternatives yet. Junior-year workload kept building quietly in the
+             background.
+             Event #1 — The desk moment — One February afternoon, sitting at her desk in her George
+             School dorm with her laptop open, trying to schedule when to do each assignment. Nothing
+             external changed that day — no missed deadline, no crisis, her system still worked. She simply
+             decided she couldn't keep working off ugly notes and needed to actually go find something
+             better. This is what flipped her from tolerating to searching.
+             Active Looking — Searched Red Note (小红书) first, but the results felt like ads and weren't
+             useful. Then asked a friend what she actually used, and her friend recommended TickTick.
+             Event #2 — Friend's recommendation landed — When her friend named TickTick and
+             specifically called out the calendar integration pulling in Google + Outlook, she suddenly had a
+             concrete, trusted option in hand. No reason to keep shopping. This is what flipped her from "I
+             should get an app" to "I'm downloading this one, today."
+             Deciding — Friend surfaced two options: TickTick and another simpler app (name forgotten).
+             Picked TickTick because it had more varied functions — calendar integration, countdown,
+             Pomodoro, etc.
+             Buying — Downloaded TickTick the same day. Used the free version for about a week, then
+             bought the annual premium subscription, mostly to unlock the calendar integration that pulls in
+             Google Calendar and Outlook events.
+             Consuming — Used it throughout 11th grade. Leaned on the unified calendar view, the
+             countdown for deadline pressure, the Pomodoro timer (番茄钟), drag-and-drop scheduling, and
+             the white noise feature.
+             Satisfaction — Genuinely helpful. Gave her a comprehensive view of everything she had to do
+             and pushed her productivity up. But she didn't renew after year one — the subscription felt too
+             expensive to justify — and she hasn't used TickTick since.
+
+             4 Forces of Progress
+
+
+Timeline, forces diagram                                                                                        1
+             Push (of the present) — what made her say          Pull (of the new solution) — what made her
+             "I need to make it better":                        wonder "Can this help me make progress?":
+                       Laptop notes were visually messy and            One unified view combining Google
+                       hard to scan — too many words,                  Calendar + Outlook + in-app tasks
+                       unclear what was actually due                   Countdown feature creating
+                       Kept procrastinating and leaving tasks          psychological urgency to hit deadlines
+                       incomplete                                      Pomodoro timer for focused work
+                       Junior-year workload (SAT,                      Drag-and-drop scheduling directly on
+                       homework, counselor meetings,                   the calendar
+                       clubs) outgrew the notes method
+                                                                       White noise for studying
+                       Real anxiety about missing an
+                       important appointment                           Trusted friend recommendation added
+                                                                       credibility
+             Habit (of the present) — "What I do now isn't      Anxiety (of the new solution) — "Will it
+             so bad":                                           work? Can I figure it out?":
+                       Laptop notes had been her default               Premium cost felt steep enough that
+                       since freshman and sophomore year               she questioned the value (ultimately
+                       when workload was lighter                       why she didn't renew)
+                       Kept using notes for ~3 weeks after             Two friend-suggested apps made the
+                       realizing it wasn't working before              choice non-obvious
+                       actually buying                                 Earlier Red Note search returned ad-
+                       Hadn't previously heard of or                   like results, making it hard to trust
+                       researched scheduling apps — no                 recommendations
+                       prior mental model for switching                Uncertainty about which paid features
+                                                                       she'd actually use beyond the
+                                                                       calendar
+
+             JTBD Statement
+             When her workload started to outgrow scattered laptop notes, she wants a single place to track
+             assignments and calendar events so she could see everything due, schedule her time, and avoid
+             missing deadlines.
+
+
+
+
+Timeline, forces diagram                                                                                        2
+

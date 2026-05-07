@@ -16,8 +16,8 @@ Dark, restrained. OKLCH neutrals tinted toward cool indigo (hue ~282). Single ru
 
 ## Typography (current)
 
-- Sans: IBM Plex Sans
-- Mono: IBM Plex Mono, reserved for true technical/code contexts.
+- Sans: Geist Sans
+- Mono: Geist Mono, reserved for true technical/code contexts.
 - Numerals use tabular settings without forcing operational labels into monospaced type.
 - Hierarchy is still compact, but the interface should read as legible operational software rather than terminal cosplay.
 

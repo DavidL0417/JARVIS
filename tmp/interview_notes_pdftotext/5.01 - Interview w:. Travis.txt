@@ -1,0 +1,359 @@
+            @May 1, 2026 Interview w/. Travis
+            Timeline, forces diagram
+
+            Summary
+
+            Action Items
+                  David to send $20 payment to Travis at 925-436-9570 ‣
+                  Team may follow up with Travis via Instagram or IM for future questions ‣
+
+            Interview Context
+                  Research project for David's first-year class to understand software purchasing behavior
+                  Focused on understanding how and why Travis purchased Notion
+                  Recording consent obtained for internal research purposes only
+
+            Purchase Journey & Timeline
+                  January (last year): Started using Notion free plan as replacement for Google Tasks and
+                  Calendar
+                  April-May: Purchased paid Notion plan for approximately 2 months ‣
+                  June: Transitioned to free student plan after receiving student email ‣
+                  Student plan provided same features as paid Plus plan at no cost ‣
+
+            Initial Motivation & Use Cases
+            Team Collaboration (Primary trigger for adoption)
+                  Working on short film project with a friend
+                  Needed to upload large image files for shot lists and other project materials ‣
+                  Wanted to add multiple people to collaborative projects
+            Personal Productivity (Extensive ongoing use)
+                  Language learning: Used AI to generate Korean study spreadsheets with custom parameters
+                  Income tracking: Managed two jobs including self-managed tutoring business, tracked
+                  billable hours and client schedules
+                  Calendar integration: Synced with existing Google Calendar for seamless scheduling
+                  Travel planning: Used AI features for expense tracking and itinerary organization
+
+
+
+@Today Interview w/. Travis                                                                                  1
+                  Budgeting: Initially used Notion, later switched to Google Sheets for simplicity
+
+            Decision Factors
+            Why Notion over alternatives
+                  Considered Obsidian but found it too complex and difficult to set up ‣
+                  Notion offered seamless Google Calendar integration without requiring migration of existing
+                  calendar data ‣
+                  Familiar interface similar to Google Docs and Sheets made learning curve minimal ‣
+                  Visual appeal and aesthetic design compared to Google's "boring" interface ‣
+                  Influenced by YouTube content creators using Notion ‣
+                  Needed something quick to implement during second semester of high school without time
+                  to "restart whole planning design" ‣
+            Trigger for paid purchase
+                  Hit file upload limitations on free plan when trying to upload images for film project ‣
+                  Had already invested time learning the platform and felt comfortable with it ‣
+                  Didn't want to switch software after becoming familiar with Notion ‣
+
+            Product Limitations & Challenges
+                  Interface can become cluttered and difficult to navigate with extensive use
+                  Requires being "very organized and on top of things" to use effectively
+                  No built-in templates - users must create custom systems (e.g., spreadsheets with custom
+                  code for to-do lists)
+                  Adding entries to custom spreadsheets is cumbersome
+                  Sometimes created multiple spreadsheets tracking same information, leading to inefficiency
+                  Switched back to Google Sheets for budget tracking due to complexity
+
+            Feature Discovery
+                  AI features were discovered after purchase, not part of initial decision ‣
+                  AI capabilities proved valuable for generating spreadsheet structures and planning
+                  frameworks
+                  Travis noted they "wouldn't have set up the planning for language learning or travel in the
+                  same way" without AI assistance to define parameters ‣
+                  AI doesn't auto-fill content but helps create structure - users still need to input their own data
+
+
+
+
+@Today Interview w/. Travis                                                                                            2
+            Platform Comparison
+                  Google Tasks: Too simple, limited to task name and due date only ‣
+                  Google Calendar: Difficult to edit offline, less smooth interface, limited customization ‣
+                  Obsidian: Required local installation, steep learning curve, seemed hard to get into ‣
+                  Notion: Better balance of functionality, ease of use, and visual design ‣
+            Notes
+
+
+            Transcript
+            Okay, so... Two things.
+            First, is it fine if I record this conversation? No one else will hear it? Purely for internal research.
+            Alright. And also, since we're trying to understand really in depth how you've purchased
+            something, we might have to ask really specific questions. Like, imagine we're shooting a
+            documentary. Is that fine? Right. Since we're trying to understand how you bought something,
+            when you bought it, we might have to ask really specific questions. Kind of, is that fine?
+            Yeah, yeah, sure. Okay, great. Oh, thank you. So, uh, I'm David, uh, first year, um, just part of,
+            like, a class thing, so, yeah. Anyways... Okay, let's get started. So probably let's start off with
+            what software, what physical thing did you buy and why did you buy it? Okay.
+            Yeah, and then the main reason was like I had used notion a long time for just like general like
+            finding stuff, you know, just like to do this and I just use the calendar. But the reason I bought it is
+            because I was working with my friend on like a short film. Of course, I never got finished, but it's
+            just something that I wanted to add to the portfolio. But, um, we introduced it because we'd be
+            able to upload largely image files to the collaborative projects and add more people to the
+            collaborative projects, things like that. Okay.
+            Did you... and when was this?
+            Okay.
+            Around this time last year, basically, a little before that. Okay, are you a second year or a third?
+            Oh, you're first. Oh, okay, yeah, that makes sense. Yeah, that makes sense. Okay, so... You
+            bought it. You got the free student version. Oh, was it free?
+            Well, I got the free version after I got my student email, but I had been using the paid version
+            before, but they were essentially equivalent.
+            Okay, cool.
+            You used the paid version, they're equivalent. When did you pay for it? Um.
+            Like, just a friendly thing, like, we started, like, shortly before summer, so I came in around now,
+            like, April, May. stuff like that.
+            Okay cool and you did it mainly because you wanted to collaborate with your teammates so...
+            Yeah.
+            Okay, so then let's focus on When you purchased the actual Membership like when the first time
+            you spent money for yourself not like a team. Yeah, do You know when that was? It's gonna be
+            April. Okay. So... Sorry if I don't really understand the notion of pricing structure but You first got
+
+
+@Today Interview w/. Travis                                                                                            3
+            a month free and then you paid for it because everything is like in April Okay.
+            Okay So...
+            Was there a situation in which you wanted to use it to make yourself like a more productive
+            student or through like anyways Make yourself more organized or is it only for team
+            collaboration?
+            Oh yeah, definitely for personal use. I mean, I took advantage of like the notion of AI stuff When I
+            was like, so like basically, I spent a lot of time learning languages because I was like, you know, I
+            have the whole summer. I spend this time on improving my Korean, so I use the AI database
+            spreadsheet basically. I don't know if you're familiar or not with that, but it was just like set up a
+            spreadsheet, help me generate a plan.
+            And then I see that notion is like within each value of the spreadsheet, you can have a lot of
+            information because each row is essentially like its own page. And then... What else did I use it
+            for? I used it just for planning, like budgeting. So like I was working like two jobs at the time. So it
+            was just important for me to like keep track of where my money was coming from. And one of
+            them was like a self-managed tutoring job. So it was really important for me to use that to...
+            I keep track of how much money I was making, who I was tutoring every day of the week, and
+            obviously I was integrating it with my calendar.
+            And then I mean, that's basically the main things. Planning for travel, I used it to plan for travel
+            and the AI was kind of helpful for that. You know, just with all the expenses of like, where am I
+            going to go? How much things cost? So that's been like personally very extensive usage.
+            Yeah. Okay. And this was also in like April, May-ish.
+            Well, this was like throughout, I mean, eventually I switched to the free plan and I still used
+            Ocean, but I don't know if you want to meet, I mean, it's basically the same thing. So I guess I'll
+            just talk about the whole. Okay, yeah, that's cool.
+            Um, okay, so you did that? Uh, and... Was there like a situation in which Okay, maybe after you
+            bought Notion Or during the first few days of using it, or just in general in life, was there a
+            situation in which you thought, Something went wrong. that you wanted to fix some part of your
+            life. So for example, maybe you missed a deadline. Maybe your previous project management
+            software couldn't collaborate.
+            Maybe like, you know, you missed like a client's billable hours or something. Yeah, yeah, yeah.
+            Yeah, I think, I mean, The thing with Notion is it does get kind of cluttered. Like, you do have to
+            be, like, a very organized and, like, on top of things type of person to use it. Like, I don't use it as
+            much anymore for tracking my budgets. I just use, like, a spreadsheet just on Google Sheets. And
+            I think the main thing is it's, like, really annoying to navigate through such, like, an expansive,
+            like...
+            Set up links, basically, that you set up for yourself. Like, it is nice because it's all centralized, but
+            it's annoying because you have to filter through so many things. And the way I set it up, like, I
+            have multiple spreadsheets tracking the same thing because I was trying to, like, be more in-
+            depth about it, but it ended up just being more inefficient and too tiring to keep up with. I think
+            that's the main thing.
+            Another thing is, like, you have to set up yourself the way you want the system to be. So, for
+            example, like, if I want to make a to-do list, there's not just, like, a to-do list, like, built in software.
+
+
+@Today Interview w/. Travis                                                                                                 4
+            Like, I have to, like, build a spreadsheet and add, like, a custom, like, you Like code to set it up so
+            it tells me when the days are coming up or stuff like that. So every time I add an entry to this
+            spreadsheet, it's like really annoying because it's like adding a new one to this spreadsheet.
+            Um. So I'm just clicking a button and like stuff auto fills and I just like sayOh, if I could do this
+            thing.
+            I think that's the main thing I'm annoyed about. I mean obviously the customizability is obviously
+            kind of the upside of that downside, but yeah, that's kind of the main thing.
+            Okay, so the AI feature can like autofill the spreadsheets and even create them.
+            It like auto-seals all you're making them. So I would tell it like, okay, I'm trying to make a
+            spreadsheet, for example, to help me learn Korean. I want you to set up columns that say, What I
+            need to do, what priority it is, and stuff like that. But like obviously I'll still have to go in and edit
+            my own like I already called it up to New Pingeoneer because I'm obviously just being very
+            general and stretchy.
+            From my experience, it doesn't actually auto-fill all the things, but you still have to input your to-
+            do list and all your custom attributes of that to-do list.
+            Okay, that makes sense.
+            Um, okay. So...
+            Then, okay, let's go forward a little bit. Let's go even before kind of your team meeting thing. You
+            didn't choose Notion out of random. You had a thought. Yeah, yeah, yeah. Like, you know, and
+            then you thought about it. Maybe you weren't looking for notion. Maybe you were looking for,
+            you were looking for like project management. Yeah.
+            Like, I looked at Obsidian and I had used Google's general tasks in the past.
+            Things like that. Okay, so what kind of was that first thought? Was it that team collaboration? Or
+            was it I wanted to do my personal life first and team collaboration is just a convenient secondary
+            feature?
+            So like January, whatever. And then April comes around and my friend's like, yo, you want to
+            work on this? And then I've done some like camera stuff. I was like, oh, sure. And then I was like,
+            you know, like I've been using Notion. I feel pretty comfortable with it now. I think it'd be worth it
+            to... Try using that as a software for it. So I did that and then you know, I kind of got used to the
+            aid AI features with like generating spreadsheets and stuff like that for organizing my daily life.
+            outside of the project.
+            And then obviously once, you know, I, um... Got in here and got my email and all that. Just
+            transition to the scene of that.
+            Okay, so that's cool.
+            So that was kind of your first thought. And you were looking at project management, Obsidian,
+            Notion, you're just using Google Calendar before.
+            Yes. I mean, I think I looked Other options are like the two last ones though.
+            Okay, that makes sense.
+            So you want it to upload big files? And that didn't work? Like I wanted to upload files? Yeah,
+            because you mentioned that at the beginning.
+            Oh yeah, yeah, yeah. shot list, so like, just like, Okay, that makes sense.
+            So...
+
+
+@Today Interview w/. Travis                                                                                              5
+            So, sorry to interrupt, but like, to do this too. So then I'll upload the PDF. I don't know if they're
+            over the cap or if there's even a cap, 'cause I kind of forget what the limitations are for the pre-
+            plan, but I also often, Okay, that makes sense.
+            And that's capped by the free plan. Yes, that's it. And that is one of the main reasons you bought
+            the student plan. Initially.
+            AI setting up like the--Okay.
+            Okay, so...
+            Walk me through that. Walk me through that. So you mentioned January and then you got your
+            email in April, May. You bought it in April, May. So what happened in between? Were you still
+            using Notion?
+            Oh. Yeah. So you just, sorry like if I'm confused here. So you get paid for two months in propane.
+            Okay, okay, okay, perfect.
+            Okay, yeah. Sorry, I was just gonna clarify that. Make sense? Oh, yeah, no, no, no.
+            Okay, so...
+            Did you use like so you used the free version obviously or or you wouldn't have found out about
+            the limit like threeFor three months until April, or like take a week every March, yeah, a few
+            months.
+            Okay. So...
+            Okay, let me just... Explain everything, so... I understand. So the first thought in January-ish,
+            something you wanted like a... Um... Just like a... Group work platform you checked out a lot of
+            software amongst them. There's notion an obsidian narrow those down to those two you
+            Decided on notionYeah. Why?
+            I think it's because of the video, like, it seemed too, like, hard to get into. It seemed very, like, I
+            mean, I don't even know if there's a website for it. Like it's something that I think you have to like
+            build into your computer. And I just like that. First of all, I know that it's really easy with Google
+            calendars. I didn't have to migrate over like all of my previous calendar stuff. And I still make
+            Notion with my Google Calendar.
+            So, you know, like for example, a lot of meetings are set up through Google Calendar invites. So
+            those automatically sync to my Notion and I think that's really, really handy. And it just seemed
+            more intuitive to learn. It seemed very... Easy coming over from, like I use a lot of Google
+            software, like Google Docs, and stuff like that. And it's basically integrated in a very similar way.
+            Like you just make a new page and it's essentially just a new Google Doc with more like
+            formatting features.
+            And you can then make a spreadsheet and kind of like work with that very similar to Google. So
+            it's really just, I think the main thing is that it just seems so much easier to move the notion from
+            being like experienced with Google stuff rather than going to a whole new like, different type of
+            software.
+            Okay, so convenience and integration was like Like a deal breaker for you. If not, you would not
+            use it.
+            I was like also in school at the time and I mean it was like Second semester of my high school
+            year, so it was in super, like, high stakes, but I didn't have time to, like, you know, kind of restart
+            my whole, like, planning design. I would take like a whole week or something and I was just like, I
+
+
+@Today Interview w/. Travis                                                                                           6
+            mean, I just want something that's very similar to what I'm already doing.
+            Yeah.
+            When you were using it, did you encounter any limitations of the free plan? Except... Like when I
+            was using the first few months? Um, like yeah, basically like the first time you wanted to upload a
+            photo or video or you bumped into a limit and you were like, "Fuck this." Right?
+            I mean, I don't remember the exact moment. I don't have a core memory of that. I know it was
+            seven.
+            Yeah, that makes sense.
+            Okay, that makes sense that makes sense so You...
+            Just in general, remember having like vague difficulties with the app. Wanted to do this, do that,
+            limitations.
+            Yeah, yeah, at least, like, Okay, yeah, that makes sense.
+            So but you still ended up buying it out of your own money soOh, that? Yeah. Was it the same type
+            of situation? Did something boil over eventually?
+            I mean, I was just like, I want to use this, get used to this app more. Like, I mean, well, I already
+            explained what I was like for the film project. And I was like, you know, I've been using Ocean
+            these past few months. I want to, I think it would be a good idea to, you know, use it for this
+            project. And like I saw that there was like the file. So I guess the file, the file thing was pretty big.
+            Because I knew like, or I could use like Google Sheets.
+            Is that a good one? Kind of weird with like how you like input images and like input images.
+            Okay, that's in okay.
+            Yeah, that's fair So just eventually you ran to the libertarian like fuck this so you just bought it.
+            Um, I You liked it. You weren't looking for the AI features until you got them, but you're like, wow,
+            really cool.
+            So...
+            I'm like setting up like I wouldn't have set up the like the planning for like language learning or
+            travel in the same way because it would have just taken too much time to do it myself if I were to
+            likeEspecially myself, I mean, Figure out all the parameters I'd want to pay attention to.
+            Okay, cool.
+            Um... I guess the final question is, how long did you use the paid plan for? I know you still use the
+            free. How long was the paid?
+            I mean, well, I use the pay-as-you-play virtual buds from April to May and then I Started using the
+            student version in June.
+            Okay, so help me understand.
+            So the student version is free to you? But it still has the same features as the Plus. It's the same
+            features as like the plus plan but it's free to youYeah, pretty much.
+            Oh. Okay.
+            Well, okay, that's really cool, really cool.
+            Okay, what's your phone number so I can... You know, send you the 20 bucks.
+            Oh, yeah, yeah.
+            I mean, can you see it from here? It's just the one I'm calling you on. Oh, right, okay. Um...
+            Can you just say it? Yeah. Yeah, 925. Hang on. 925. 436 9570 9570 925-436-9570 Travis Kim
+
+
+@Today Interview w/. Travis                                                                                             7
+            Alright.
+            Well, um...
+            Okay, let me just walk through everything again. So... Initially, you wanted to You wanted a place
+            to work with your team effectively and efficiently. So you looked for software There's a lot. You
+            narrowed it to Notion and Obsidian.
+            For one-Oh, you're just talking about Google Calendar? Yeah, but this was in January. This was
+            in January. Okay. So the reason, so I switched, I started using Notion StreetPan because it was
+            easy to integrate on Google. And then I use that for about three months. And then, well, I took,
+            and then came out there, Okay, okay that makes sense.
+            So at the beginning you wanted a replacement for Google. What did Google mess up?
+            Is it like youGoogle task, it was too simple. Like you just write something and you put a due date
+            and that's it.
+            Yeah, that's kind of stupid.
+            Kind of like the plan that goes like all white kind of boring also like it was hard to edit offline
+            because it was like an online like website that you had to add the tasks on and then like calendar
+            itself is just like Notion is easier because you can just like Like it just feels smoother like you can
+            copy a page up and like move it around I don't know if you can do that in Google but it just feels
+            smoother in Notion also like Google's like just colors just kind of boring I was just like I want to try
+            something more advanced And also I kept seeing like Like, share, and subscribe to my YouTube
+            channel.
+            No shit, like what do the aesthetic I wanted to like I'll make it more organized, like a planned
+            event at any time.
+            Okay, yeah, that makes complete sense.
+            So Okay, so So you went from Google, there's a lot of things that didn't work, you weren't
+            comfortable with it, so you started looking for alternative options. You landed on Notion. Then
+            you used the app and Through time and time again you became frustrated After bumping into the
+            free plan limitations, So Okay, one last question.
+            Did you...
+            Only think about buying the paid version or where you're like, "Well, free plan sucks. I might use
+            a different software now." Or was your only option like... Buy or not buy?
+            I invested in Notion because like I said, it looked kind of cool. Like a lot of people I was like
+            watching on YouTube and stuff were using it. It felt pretty comfortable for me at the time, so. I
+            don't want to go to the effort of like fightingif there wasn't any real problems You know, I was just
+            paid to get the file up, but I feel like that was justIt's not you here.
+            Okay, um, yeah, that makes sense. Cool, so, um...
+            That basically only notion, then you, there was one day you were with your team, you wanted to
+            upload like a big file for a shot list and you ran to the limitation and you're like, this sucks, I must
+            buy it. So you bought it, you like it and you still use it.
+            Yeah, and I think once I bought it, I also realized that some of the other features were also going
+            to be like AI features, which I didn't even know were a thing when I was So you're pleasantly
+            surprised?
+            Yeah. Okay.
+
+
+@Today Interview w/. Travis                                                                                            8
+            That's cool. Okay. Okay, that makes a lot of sense.
+            Um, that's all my...
+            That's everything. So, thank you. Thank you for helping with this.
+            Yeah, of course, it's definitely a cool project that I hope you guys do well. Yeah, and just a little
+            last question. In the future, if we have any more opportunities, questions, is it fine if we ask you?
+            Yeah, just message me on Instagram or on IM.
+            I've never seen this message made, whatever. Alright. Okay, well thank you, thank you.
+            Have a great day, Travis. Yeah, you do. Yeah.
+            Yeah, just messaged me on Instagram or on, on, on IG. Like, management software.
+            if there wasn't a negative. Nothing to do at all. Okay, that makes a lot of sense. Um, that's all
+            I'm... That's everything. So thank you. Thank you for helping with this.
+
+
+
+
+@Today Interview w/. Travis                                                                                         9
+

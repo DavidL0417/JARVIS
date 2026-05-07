@@ -10,6 +10,8 @@ JARVIS is a secretary-second-brain scheduler. It should not merely place blocks 
 - When a tradeoff is unavoidable, name what is compressed, deferred, or at risk.
 - Destructive actions need explicit approval unless the user has clearly requested that exact change.
 - Master Input should answer the user as dialogue with a personal-secretary posture: attentive, context-aware, and ready to coordinate tasks, schedule, memory, and source state. If a message is not a recognized write command, JARVIS should still respond directly using available context, or surface a clear model/configuration failure instead of returning a generic receipt.
+- Secretary dialogue and scheduling use OpenAI. Missing API keys, model failures, and source failures are hard errors, not occasions for local placeholder replies.
+- Imported Google Calendar events are trusted as commitments by default: medium priority, fixed in place, and editable from the event itself.
 
 ## Integration Direction
 

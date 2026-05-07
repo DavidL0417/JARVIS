@@ -3,7 +3,6 @@
 
 import { NextResponse } from "next/server"
 
-import { buildFallbackAssistantContextData } from "@/lib/assistant/context"
 import { runSecretaryTurn } from "@/lib/assistant/secretary"
 import { createSupabaseAdminClient } from "@/lib/supabase/server"
 import {
@@ -25,7 +24,6 @@ export async function POST(request: Request) {
         toolCalls: [],
         needsRefresh: false,
         clarification: "Please resend the request in plain language.",
-        context: buildFallbackAssistantContextData(),
       },
       { status: 400 },
     )
@@ -56,7 +54,6 @@ export async function POST(request: Request) {
           toolCalls: [],
           needsRefresh: false,
           clarification: null,
-          context: buildFallbackAssistantContextData(),
         },
         { status: 401 },
       )
@@ -69,7 +66,6 @@ export async function POST(request: Request) {
         toolCalls: [],
         needsRefresh: false,
         clarification: null,
-        context: buildFallbackAssistantContextData(),
         error: error instanceof Error ? error.message : "Failed to handle assistant input.",
       },
       { status: 500 },

@@ -1,24 +1,56 @@
-import { describe, expect, it } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 
-import { buildLocalDialogueFallback } from "../lib/assistant/dialogue"
+import { generateSecretaryDialogueReply } from "../lib/assistant/dialogue"
 import type { AssistantRuntimeContext } from "../lib/assistant/context"
 
 const runtime = {
+  userId: "user-1",
+  preferences: null,
+  preferencesRow: null,
   tasks: [],
   events: [],
+  memoryEntries: [],
   sourceSnapshots: [],
-} satisfies Pick<AssistantRuntimeContext, "tasks" | "events" | "sourceSnapshots">
+  context: {
+    availability: {
+      timezone: "America/Chicago",
+      workdayStart: "09:00",
+      workdayEnd: "17:00",
+      peakEnergyWindow: null,
+      sleepPattern: null,
+      procrastinationPattern: null,
+      preferredCheckInMode: "quiet",
+      defaultTaskDurationMinutes: 50,
+      breakDurationMinutes: 10,
+      preferredFocusBlockMinutes: null,
+      availabilitySummary: "No availability loaded.",
+    },
+    availabilityWindows: [],
+    memoryEntries: [],
+    sourceSnapshots: [],
+    memorySummary: "No memory loaded.",
+  },
+} as unknown as AssistantRuntimeContext
 
-describe("secretary dialogue fallback", () => {
-  it("responds to lightweight dialogue instead of returning a generic receipt", () => {
-    const reply = buildLocalDialogueFallback("How are you?", runtime)
-
-    expect(reply).toBeTruthy()
-    expect(reply).not.toBe("I captured that, but I did not make a data change.")
-    expect(reply).toContain("day in view")
+describe("secretary dialogue", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs()
   })
 
-  it("does not fake substantive planning when the dialogue model is unavailable", () => {
-    expect(buildLocalDialogueFallback("What should I do with my whole afternoon?", runtime)).toBeNull()
+  it("fails clearly when OpenAI is not configured instead of using a local dialogue fallback", async () => {
+    vi.stubEnv("OPENAI_API_KEY", "")
+
+    const result = await generateSecretaryDialogueReply({
+      message: "How are you?",
+      history: [],
+      now: "2026-05-06T16:00:00.000Z",
+      timezone: "America/Chicago",
+      runtime,
+    })
+
+    expect(result.ok).toBe(false)
+    expect(result.reply).toBe("The secretary model is not configured.")
+    expect(result.error).toContain("OPENAI_API_KEY")
+    expect(result.reply).not.toContain("schedule, tasks, and memory in front of me")
   })
 })

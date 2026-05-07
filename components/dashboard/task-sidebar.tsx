@@ -194,7 +194,7 @@ export function TaskSidebar({
             <div>
               <CardTitle className="text-sm font-bold text-foreground">Calendar Tasks</CardTitle>
               <p className="mt-1 text-[11px] font-medium text-muted-foreground">
-                {TASKS_CALENDAR_NAME} keeps a narrow due-date strip until Claude places a work block.
+                {TASKS_CALENDAR_NAME} keeps a narrow due-date strip until OpenAI places a work block.
               </p>
             </div>
             <Button

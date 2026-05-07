@@ -11,7 +11,7 @@ import { ensureTaskCalendarForUser } from "@/lib/tasks-calendar"
 
 function getSafeRedirectPath(candidate: string | null) {
   if (!candidate || !candidate.startsWith("/")) {
-    return "/"
+    return "/dashboard"
   }
 
   return candidate
@@ -73,7 +73,7 @@ export async function GET(request: Request) {
     }
   }
 
-  return NextResponse.redirect(new URL("/?authError=callback", getRedirectOrigin(request, requestUrl.origin)))
+  return NextResponse.redirect(new URL("/dashboard?authError=callback", getRedirectOrigin(request, requestUrl.origin)))
 }
 
 // ##### END BACKEND #####

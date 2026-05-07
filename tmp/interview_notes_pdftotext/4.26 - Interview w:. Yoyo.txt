@@ -1,0 +1,100 @@
+             Timeline, forces diagram
+             Timeline
+             First Thought — Middle school. Yoyo was naturally organized and was drawn to physical
+             planners and notebooks while shopping for school supplies. This was a self-driven extension of
+             her journaling habit, not something her parents pushed. The instinct that her life needed
+             structure came from her, very early.
+             Passive Looking — Early high school. Physical planners started becoming a friction point. She
+             would forget to bring the planner from her room, and carrying paper alongside laptop and iPad
+             felt redundant. She still preferred paper, but the inconvenience accumulated. Extracurriculars
+             and college-application pressure added complexity, and she began noticing she needed a better
+             system without yet acting on it.
+             Event #1 — Workload tipping point (freshman year of HS) — Sitting in her room or the library,
+             the pressure of homework and college-prep work compounded until she finally opened the App
+             Store and Google to look for a digital task manager. There was no single dramatic moment; the
+             load simply crossed a threshold. Therefore, this is what flipped her from passively tolerating
+             paper friction to actively shopping for software.
+             Active Looking → Todoist (freshman HS) — Searched the App Store, picked Todoist, and paid
+             for premium. It worked for the basic to-do function, however she found it underpowered: she
+             wanted calendar integration, file linking, richer categorization, and more interactive features. She
+             would have stayed on Todoist if nothing better had appeared.
+             Event #2 — Notion trend plus roommate influence (sophomore HS) — Notion entered the
+             cultural moment, and her roommate became obsessed with it. The combination of a trusted
+             close-proximity user and the aesthetic appeal of databases-plus-notes made Notion feel
+             revolutionary. Consequently, this is what flipped her from "Todoist is fine" to "I have to try this."
+             Deciding and Buying (Notion, sophomore HS) — Adopted Notion, spent significant time
+             customizing it and making it look good, and eventually paid because student free accounts were
+             not available and her database load had outgrown the free tier. For a while, this felt like the
+             answer.
+             Event #3 — Notion fatigue plus Motion ad (senior HS / early freshman year of college) — Two
+             things happened in parallel. Notion's setup cost began feeling punishing every time her life
+             structure shifted (high school to college, summer to school year), and her customization habit
+             turned into a time sink rather than a productivity gain. Around the same time, an Instagram ad
+             surfaced Motion with the promise of AI-generated daily schedules. The pull of "no more manual
+             restructuring" combined with the push of Notion fatigue moved her to try something new.
+             Active Looking → Motion (free trial) — Used Motion during the free trial. The AI scheduling was
+             not accurate enough, and more importantly, she did not want to surrender control of her day to
+             an agent. Therefore, she did not convert to paid.
+
+
+Timeline, forces diagram                                                                                             1
+             Consuming (current state) — Back to a fragmented stack: Apple Calendar, the Notes app on
+             phone and computer for daily to-dos, plus a physical planner and sticky notes. She herself
+             describes the setup as "all over the place." Notion still exists in her life, but no longer as the to-
+             do hub.
+             Satisfaction — Unsatisfied. She is still actively looking for one app that can hold everything
+             together. Furthermore, she is skeptical that a fully agentic planner is the right shape of that
+             answer.
+
+             4 Forces of Progress
+             Push (of the present) — what made her say              Pull (of the new solution) — what made her
+             "I need to make it better":                            wonder "Can this help me make progress?":
+                       Compounding workload from                            One consolidated app that combines
+                       extracurriculars and college                         to-dos with calendar in the same
+                       applications outgrew paper planners                  place
+                       Paper alone created friction                         Hierarchical structure that ties yearly
+                       (forgetting the planner, carrying it                 goals down to daily actions
+                       alongside laptop and iPad)                           automatically
+                       Each successive system hit its own                   Strong aesthetics and customization
+                       ceiling: Todoist felt underpowered and               (the original draw of Notion)
+                       Notion demanded too much                             Trusted social proof (her roommate
+                       maintenance                                          for Notion, productivity creators in
+                       Her current Apple Calendar plus                      general)
+                       Notes plus sticky-note setup feels                   An interactive to-do experience rather
+                       scattered across too many surfaces                   than a full day-planning agent
+                       Life-stage shifts (HS to college,
+                       summer to school year) repeatedly
+                       broke whatever structure she had built
+             Habit (of the present) — "What I do now is             Anxiety (of the new solution) — "Will it
+             not so bad":                                           work? Can I figure it out?":
+                       Physical planners and journaling have                Setup cost: she has lost time before to
+                       been part of her identity since middle               over-customizing Notion and does not
+                       school                                               want to repeat that
+                       The current Apple Calendar plus                      Skepticism that an AI agent can
+                       Notes plus sticky-note setup, while                  actually understand her changing
+                       messy, still works well enough day to                schedule
+                       day                                                  Unwillingness to spend time
+                                                                            explaining her needs to an agent
+
+
+
+Timeline, forces diagram                                                                                              2
+                       Notion is still partially in use for non-        Risk that yet another app will hit the
+                       to-do purposes, which reduces                    same ceiling within a year, especially
+                       urgency to fully migrate                         across life-stage shifts
+                       A history of trying and abandoning
+                       apps reinforces the belief that nothing
+                       new will truly stick
+
+             JTBD Statement
+             When her productivity setup keeps fragmenting across paper, calendar, notes, and a half-used
+             Notion every time her life structure shifts, she wants one consolidated, interactive system that
+             hierarchically organizes her goals and automatically breaks them into daily actions, so she can
+             stop manually restructuring her life every few months and trust that nothing important is slipping
+             through.
+
+
+
+
+Timeline, forces diagram                                                                                          3
+

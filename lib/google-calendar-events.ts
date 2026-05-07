@@ -117,7 +117,7 @@ function mapGoogleEventToScheduleEvent(
     gcalEventId: `${googleCalendarId}:${item.id}`,
     lastSyncedFrom: "gcal",
     isImmutable: true,
-    isCheckedIn: false,
+    isCheckedIn: true,
     allDay: isAllDay,
     calendarId: toCalendarKey(googleCalendarId),
   }
@@ -247,11 +247,45 @@ async function persistGoogleEvents(userId: string, events: ScheduleEvent[]) {
     return
   }
 
+  const { data: existingEvents, error: existingEventsError } = await adminClient
+    .from("schedule_events")
+    .select("gcal_event_id, priority, is_immutable")
+    .eq("user_id", userId)
+    .eq("last_synced_from", "gcal")
+    .not("gcal_event_id", "is", null)
+
+  if (existingEventsError) {
+    throw new Error(existingEventsError.message)
+  }
+
+  const existingByGcalId = new Map(
+    (existingEvents ?? [])
+      .filter((event): event is { gcal_event_id: string; priority: ScheduleEvent["priority"]; is_immutable: boolean } =>
+        typeof event.gcal_event_id === "string",
+      )
+      .map((event) => [event.gcal_event_id, event]),
+  )
+
   const { error } = await adminClient
     .from("schedule_events")
-    .upsert(events.map((event) => mapScheduleEventToInsert(event, userId)), {
-      onConflict: "user_id,gcal_event_id",
-    })
+    .upsert(
+      events.map((event) => {
+        const existing = event.gcalEventId ? existingByGcalId.get(event.gcalEventId) : null
+
+        return mapScheduleEventToInsert(
+          {
+            ...event,
+            priority: existing?.priority ?? event.priority,
+            isImmutable: existing?.is_immutable ?? event.isImmutable,
+            isCheckedIn: true,
+          },
+          userId,
+        )
+      }),
+      {
+        onConflict: "user_id,gcal_event_id",
+      },
+    )
 
   if (error) {
     throw new Error(error.message)

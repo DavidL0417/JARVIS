@@ -1,0 +1,74 @@
+             Timeline, forces diagram
+             Timeline
+             First Thought — COVID, middle school. People around her were getting sick and dying. That
+             pushed her toward wanting to help in a future crisis through medicine, pharmacy, or research. To
+             get there she had to get into a good university, which meant becoming a serious student. This
+             ambition created a need for better productivity.
+             Passive Looking — Her primary goal was to "be a better student so I can help people." She
+             wasn't shopping for productivity tools, but she was just generally aware that her phone and
+             social media kept pulling her off schoolwork and that she needed to study more seriously.
+             Event #1 — Social media surfaced an app for her — Productivity-app content showed up in her
+             feed and she clicked through to download her first one, 嘀嗒清单 (free version), around 7th-8th
+             grade. She found the app through her feed rather than active searching. This prompted her to
+             start trying productivity tools.
+             Active Looking — She actively tested various apps to help her become a better student. The
+             pattern: see a productivity app on social media, download it immediately, use it briefly, uninstall
+             because something was always wrong. 嘀嗒清单 free capped her labels so she could only mark
+             generic "productive time" instead of separating English from math. Forest left a dead tree on the
+             screen forever if a session was interrupted, which broke the whole point of the app for her. Each
+             one had a specific dealbreaker.
+             Event #2 — Focus Pomo came through the same channel — Around 10th grade, Focus Pomo
+             appeared on her social media feed the same way every other app had. She downloaded it and
+             used the free version for about a weekend.
+             Deciding — free vs. paid, and what was finally not wrong — She evaluated Focus Pomo based
+             on whether it avoided the specific dealbreakers of her previous apps. It met this criteria. 嘀嗒清
+             单's label cap was solved by Focus Pomo's premium tier, which allowed unlimited categories and
+             gave her percentage breakdowns by subject in the recap. Forest's dead-tree failure mode had no
+             equivalent here — sessions resolved cleanly with a tomato. App-blocking and cross-device sync
+             were both present. The free Focus Pomo tier still capped her at three categories, which was the
+             same problem she had hit before, so the choice was effectively paid or move on.
+             Buying — By 10th grade her allowance was larger and the price felt fair for unlimited labels and
+             the recap view. She had already tested the workflow on the free version over the weekend, so
+             the upgrade carried very little risk. She paid.
+             Satisfaction and Usage — Still actively using it as a UCLA first-year. The only app from years of
+             cycling that has actually stuck.
+
+             4 Forces of Progress
+
+
+Timeline, forces diagram                                                                                           1
+             Push (of the present) — what made her say          Pull (of the new solution) — what made her
+             "I need to make it better":                        wonder "Can this help me make progress?":
+                       COVID-era ambition to become a                  Focus Pomo lacked the specific failure
+                       doctor or pharmacist raised the bar on          modes of the previous apps
+                       her academic performance                        Premium tier offered unlimited
+                       Phone and social media were                     subject-level labels
+                       constantly pulling her off schoolwork           Recap view broke time down by
+                       Every free app she had tried so far             category in percentages
+                       had a specific dealbreaker she could            App-blocking handled the distraction
+                       not get past                                    problem during sessions
+                       Generic "productive time" tracking did          Sync across laptop and phone so the
+                       not tell her where her study hours              system followed her
+                       actually went
+             Habit (of the present) — "What I do now isn't      Anxiety (of the new solution) — "Will it
+             so bad":                                           work? Can I figure it out?":
+                       The download-try-uninstall loop on              Premium prices had felt prohibitive
+                       social-media-discovered apps already            when she was younger and that
+                       felt normal                                     framing lingered
+                       Free Focus Pomo (three categories)              Multiple prior apps had disappointed
+                       was technically usable, which lowered           her, so paying upfront felt risky
+                       urgency to upgrade                              Unclear whether unlimited labels
+                       Paper notebooks or doing nothing                alone justified an annual subscription
+                       were always available as fallbacks
+
+             JTBD Statement
+             When I'm trying to become a more serious student so I can eventually help people through
+             medicine or research, I want a tool that blocks distractions across all my devices and shows me
+             exactly where my study time went by subject, so I can hold myself accountable and see whether
+             I'm actually spending my time on what matters.
+
+
+
+
+Timeline, forces diagram                                                                                        2
+

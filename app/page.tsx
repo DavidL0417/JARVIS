@@ -1,551 +1,254 @@
-"use client"
+import type { Metadata } from "next"
 
-import { useCallback, useEffect, useMemo, useState } from "react"
-import type { ReactNode } from "react"
-import dynamic from "next/dynamic"
-import {
-  AlertTriangle,
-  Brain,
-  CalendarDays,
-  Database,
-  Loader2,
-  PanelLeft,
-  RefreshCw,
-  Sparkles,
-  ListTodo,
-  type LucideIcon,
-} from "lucide-react"
+import { CursorAmbient } from "@/components/landing/cursor-ambient"
+import { DashboardPreview } from "@/components/landing/dashboard-preview"
+import { LandingFooter } from "@/components/landing/landing-footer"
+import { LandingHero } from "@/components/landing/landing-hero"
+import { LandingNav } from "@/components/landing/landing-nav"
+import { SectionReveal } from "@/components/landing/section-reveal"
+import { TimeSpine } from "@/components/landing/time-spine"
+import { WaitlistForm } from "@/components/landing/waitlist-form"
 
-import { AuthControls } from "@/components/auth/auth-controls"
-import {
-  CalendarsSidebar,
-  sortCalendars,
-  toSidebarCalendar,
-  type Calendar,
-} from "@/components/dashboard/calendars-sidebar"
-import { CheckInSidebar } from "@/components/dashboard/checkin-sidebar"
-import { MasterInput } from "@/components/dashboard/master-input"
-import { TaskManager } from "@/components/dashboard/task-manager"
-import { Button } from "@/components/ui/button"
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import type {
-  CalendarListResponse,
-  CheckInApprovalItem,
-  CheckInApprovalListResponse,
-  CreateTaskRequest,
-  DashboardResponse,
-  DeleteTaskResponse,
-  ScheduleEvent,
-  ScheduleEventInput,
-  ScheduleResponse,
-  TaskMutationResponse,
-  UpdateTaskRequest,
-} from "@/types"
-
-const ScheduleView = dynamic(
-  () => import("@/components/dashboard/schedule-view").then((module) => module.ScheduleView),
-  { ssr: false },
-)
-
-const DASHBOARD_REFRESH_EVENT = "jarvis-dashboard-refresh"
-const DEFAULT_TASK_CALENDAR_ID = "cal-tasks"
-
-type DashboardViewState =
-  | { status: "loading" }
-  | { status: "signed-out" }
-  | { status: "error"; message: string }
-  | { status: "ready"; dashboard: DashboardResponse }
-
-type PlannerUiStatus = "Idle" | "Scheduling" | "Ready" | "Error"
-
-class AuthRequiredError extends Error {}
-
-function getApiErrorMessage(payload: unknown, fallback: string) {
-  if (payload && typeof payload === "object") {
-    const details = "details" in payload && typeof payload.details === "string" ? payload.details : null
-    const error = "error" in payload && typeof payload.error === "string" ? payload.error : null
-    return details || error || fallback
-  }
-
-  return fallback
+export const metadata: Metadata = {
+  title: "Jarvis — Sit down and know exactly what to start",
+  description:
+    "Jarvis pulls deadlines from your Canvas and syllabi, breaks them into the next concrete action, and surfaces them two weeks before crunch. No system to build, no AI hijacking your day.",
+  openGraph: {
+    title: "Jarvis — Sit down and know exactly what to start",
+    description:
+      "Pulled from your Canvas and syllabi, broken into the next concrete action, surfaced two weeks before crunch.",
+    type: "website",
+  },
 }
 
-async function fetchJson<T>(url: string, fallback: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(url, {
-    cache: "no-store",
-    ...init,
-  })
-  const payload = await response.json().catch(() => null)
+const steps = [
+  {
+    number: "01",
+    title: "Connect Canvas and your syllabi.",
+    detail:
+      "Drop in the syllabus PDFs you already have. Jarvis pulls deadlines, weights, and quiet expectations the LMS won't show you.",
+  },
+  {
+    number: "02",
+    title: "Jarvis surfaces what's coming, two weeks early.",
+    detail:
+      "Every deadline is broken into a concrete next action and dropped onto a real schedule, not a list of vague intentions.",
+  },
+  {
+    number: "03",
+    title: "Sit down knowing what to start.",
+    detail:
+      "Open Jarvis and the first thing on screen is the next 30-90 minutes. Approve, revise, or skip. No ceremony.",
+  },
+]
 
-  if (response.status === 401) {
-    throw new AuthRequiredError("Authentication required.")
-  }
+const refrains = [
+  "Not a system to build like Notion.",
+  "Not an AI hijacking your day like Motion.",
+  "Not a chatbot pretending to be your therapist.",
+  "A schedule, surfaced honestly.",
+]
 
-  if (!response.ok || !payload) {
-    throw new Error(getApiErrorMessage(payload, fallback))
-  }
-
-  return payload as T
-}
-
-function toScheduleEventInput(event: ScheduleEvent): ScheduleEventInput {
-  return {
-    id: event.id,
-    title: event.title,
-    start: event.start,
-    end: event.end,
-    source: event.source,
-    priority: event.priority,
-    taskId: event.taskId,
-    status: event.status,
-    location: event.location,
-    externalEventId: event.externalEventId,
-    gcalEventId: event.gcalEventId,
-    lastSyncedFrom: event.lastSyncedFrom,
-    isImmutable: event.isImmutable,
-    isCheckedIn: event.isCheckedIn,
-    allDay: event.allDay,
-    calendarId: event.calendarId,
-  }
-}
-
-function StatGlyph({
-  icon: Icon,
-  label,
-  value,
-}: {
-  icon: LucideIcon
-  label: string
-  value: string | number
-}) {
+function SectionEyebrow({ index, label }: { index: string; label: string }) {
   return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <span className="inline-flex items-center gap-2 rounded-sm px-1.5 py-1 text-foreground transition-colors hover:bg-accent/60">
-          <Icon className="h-4 w-4 text-muted-foreground" aria-hidden="true" strokeWidth={1.75} />
-          <span className="num text-[13px] font-medium tabular-nums leading-none">{value}</span>
-          <span className="hidden text-[10.5px] uppercase text-muted-foreground lg:inline">
-            {label}
-          </span>
-        </span>
-      </TooltipTrigger>
-      <TooltipContent sideOffset={6} className="text-[11px]">{label}</TooltipContent>
-    </Tooltip>
+    <p className="landing-mark flex items-center gap-2 text-[10.5px] text-muted-foreground">
+      <span aria-hidden="true" className="landing-eyebrow-mark">
+        <svg width="9" height="9" viewBox="0 0 9 9" fill="none">
+          <path d="M4.5 0v9M0 4.5h9" stroke="currentColor" strokeWidth="0.8" />
+        </svg>
+      </span>
+      <span className="text-[var(--copper)]">{index}</span>
+      <span aria-hidden="true">·</span>
+      <span>{label}</span>
+    </p>
   )
 }
 
-function ShellMessage({
-  icon: Icon,
-  title,
-  detail,
-  action,
-}: {
-  icon: LucideIcon
-  title: string
-  detail: string
-  action?: ReactNode
-}) {
+export default function LandingPage() {
   return (
-    <div className="flex min-h-[60vh] items-center justify-center px-6">
-      <div className="w-full max-w-md">
-        <div className="mb-6 flex h-10 w-10 items-center justify-center rounded-sm border border-rule">
-          <Icon className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
-        </div>
-        <h1 className="text-2xl font-semibold leading-[1.15] text-foreground">{title}</h1>
-        <p className="mt-3 max-w-[52ch] text-[13px] leading-6 text-muted-foreground">{detail}</p>
-        {action ? <div className="mt-6">{action}</div> : null}
-      </div>
-    </div>
-  )
-}
-
-function LiveClock() {
-  const [now, setNow] = useState<Date | null>(null)
-
-  useEffect(() => {
-    setNow(new Date())
-    const id = window.setInterval(() => setNow(new Date()), 30_000)
-    return () => window.clearInterval(id)
-  }, [])
-
-  if (!now) {
-    return <span className="num text-[13px] tabular-nums text-muted-foreground">—:—</span>
-  }
-
-  return (
-    <span className="num text-[13px] font-medium tabular-nums leading-none text-foreground">
-      {now.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
-    </span>
-  )
-}
-
-function RailButton({
-  label,
-  icon: Icon,
-  onClick,
-  disabled,
-  active,
-  spinning,
-}: {
-  label: string
-  icon: LucideIcon
-  onClick: () => void
-  disabled?: boolean
-  active?: boolean
-  spinning?: boolean
-}) {
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <button
-          type="button"
-          aria-label={label}
-          onClick={onClick}
-          disabled={disabled}
-          className={`group flex h-10 w-10 items-center justify-center rounded-sm transition-colors disabled:opacity-40 ${
-            active
-              ? "bg-copper-soft text-copper"
-              : "text-muted-foreground hover:bg-accent hover:text-foreground"
-          }`}
-        >
-          {spinning ? (
-            <Loader2 className="h-[18px] w-[18px] animate-spin" aria-hidden="true" strokeWidth={1.75} />
-          ) : (
-            <Icon className="h-[18px] w-[18px]" aria-hidden="true" strokeWidth={1.75} />
-          )}
-        </button>
-      </TooltipTrigger>
-      <TooltipContent side="right" sideOffset={6} className="text-[11px]">{label}</TooltipContent>
-    </Tooltip>
-  )
-}
-
-export default function DashboardPage() {
-  const [viewState, setViewState] = useState<DashboardViewState>({ status: "loading" })
-  const [calendars, setCalendars] = useState<Calendar[]>([])
-  const [calendarsSidebarOpen, setCalendarsSidebarOpen] = useState(false)
-  const [pendingCheckInItems, setPendingCheckInItems] = useState<CheckInApprovalItem[]>([])
-  const [plannerStatus, setPlannerStatus] = useState<PlannerUiStatus>("Idle")
-  const [plannerSummary, setPlannerSummary] = useState("")
-  const [isScheduling, setIsScheduling] = useState(false)
-  const [isRefreshing, setIsRefreshing] = useState(false)
-  const [taskErrorMessage, setTaskErrorMessage] = useState("")
-
-  const dashboard = viewState.status === "ready" ? viewState.dashboard : null
-  const events = dashboard?.events ?? []
-  const pendingCheckInEvents = useMemo(
-    () => pendingCheckInItems.map((item) => item.event),
-    [pendingCheckInItems],
-  )
-  const visibleCalendarIds = useMemo<string[] | undefined>(() => {
-    if (calendars.length === 0) {
-      return undefined
-    }
-
-    const nextIds = calendars.filter((calendar) => calendar.isVisible).map((calendar) => calendar.id)
-
-    if (!nextIds.includes(DEFAULT_TASK_CALENDAR_ID)) {
-      nextIds.push(DEFAULT_TASK_CALENDAR_ID)
-    }
-
-    return nextIds
-  }, [calendars])
-
-  const loadDashboard = useCallback(async (quiet = false) => {
-    if (quiet) {
-      setIsRefreshing(true)
-    } else {
-      setViewState({ status: "loading" })
-    }
-
-    try {
-      const [dashboardData, calendarData, checkInData] = await Promise.all([
-        fetchJson<DashboardResponse>("/api/dashboard", "Failed to load dashboard."),
-        fetchJson<CalendarListResponse>("/api/calendars", "Failed to load calendars."),
-        fetchJson<CheckInApprovalListResponse>("/api/checkin", "Failed to load check-ins."),
-      ])
-
-      setViewState({ status: "ready", dashboard: dashboardData })
-      setCalendars(sortCalendars(calendarData.calendars.map(toSidebarCalendar)))
-      setPendingCheckInItems(checkInData.items)
-      setTaskErrorMessage("")
-    } catch (error) {
-      if (error instanceof AuthRequiredError) {
-        setViewState({ status: "signed-out" })
-        setCalendars([])
-        setPendingCheckInItems([])
-      } else {
-        setViewState({
-          status: "error",
-          message: error instanceof Error ? error.message : "Backend request failed.",
-        })
+    <main
+      id="top"
+      className="landing relative min-h-screen overflow-hidden"
+      style={
+        {
+          ["--landing-px" as string]: "clamp(20px, 5vw, 88px)",
+        } as React.CSSProperties
       }
-    } finally {
-      setIsRefreshing(false)
-    }
-  }, [])
+    >
+      <span aria-hidden="true" className="landing-grain" />
+      <CursorAmbient />
 
-  useEffect(() => {
-    void loadDashboard()
+      <TimeSpine />
+      <LandingNav />
 
-    const handleRefresh = () => {
-      void loadDashboard(true)
-    }
+      <div className="relative z-10 pl-[var(--landing-px)] pr-[var(--landing-px)] md:pl-[calc(var(--landing-px)+72px)]">
+        <div className="mx-auto w-full max-w-[1180px]">
+          <section
+            id="section-hero"
+            data-spine-section="hero"
+            data-spine-index="01"
+            data-spine-label="start"
+            aria-labelledby="hero-heading"
+            className="relative grid grid-cols-1 gap-[clamp(40px,7vw,84px)] pb-[clamp(60px,9vw,120px)] lg:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)] lg:items-end"
+          >
+            <div className="lg:col-span-2">
+              <LandingHero />
+            </div>
+            <div className="lg:col-span-2 lg:-mt-6">
+              <SectionReveal oneShot>
+                <div className="ml-auto w-full max-w-[940px] pl-0 lg:pl-[clamp(40px,8vw,140px)]">
+                  <div className="relative">
+                    <span
+                      aria-hidden="true"
+                      className="pointer-events-none absolute -inset-4 -z-10 rounded-md"
+                      style={{
+                        background:
+                          "radial-gradient(60% 60% at 30% 40%, oklch(0.74 0.14 42 / 0.18), transparent 70%)",
+                      }}
+                    />
+                    <DashboardPreview />
+                    <p className="mt-3 max-w-[44ch] pl-1 text-[12px] leading-snug text-muted-foreground">
+                      A quiet day. The dominant surface is the schedule. Everything else is supporting context arranged
+                      around it.
+                    </p>
+                  </div>
+                </div>
+              </SectionReveal>
+            </div>
+          </section>
 
-    window.addEventListener(DASHBOARD_REFRESH_EVENT, handleRefresh)
-    return () => window.removeEventListener(DASHBOARD_REFRESH_EVENT, handleRefresh)
-  }, [loadDashboard])
+          <hr className="border-t border-[var(--rule)]" aria-hidden="true" />
 
-  async function handleCreateTask(input: CreateTaskRequest) {
-    setTaskErrorMessage("")
+          <SectionReveal as="section">
+            <section
+              id="section-problem"
+              data-spine-section="problem"
+              data-spine-index="02"
+              data-spine-label="problem"
+              className="grid grid-cols-1 gap-[clamp(28px,4vw,56px)] py-[clamp(72px,10vw,140px)] md:grid-cols-[minmax(0,0.42fr)_minmax(0,0.58fr)]"
+            >
+              <div>
+                <SectionEyebrow index="02" label="The avoidable failure" />
+                <h2 className="landing-display mt-4 max-w-[16ch] text-[clamp(1.8rem,3.6vw,2.8rem)] font-semibold leading-[1.04] text-foreground">
+                  You sat down on Sunday with three weeks of unread Canvas posts.
+                </h2>
+              </div>
+              <div className="space-y-5 text-[clamp(1rem,1.4vw,1.125rem)] leading-[1.6] text-foreground/80">
+                <p>
+                  A syllabus you skimmed in week one. A vague feeling that something was due. By the time you found
+                  it, the cushion was gone, the office hours had already happened, and the work that would&apos;ve
+                  been ninety minutes on Wednesday was now four panicked hours on Thursday night.
+                </p>
+                <p>
+                  Jarvis is not for the people who have a system. It&apos;s for the people who&apos;ve felt the gap
+                  between their tools knowing what&apos;s coming and them knowing what to start, today.
+                </p>
+              </div>
+            </section>
+          </SectionReveal>
 
-    try {
-      await fetchJson<TaskMutationResponse>("/api/tasks", "Failed to create task.", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(input),
-      })
-      await loadDashboard(true)
-    } catch (error) {
-      setTaskErrorMessage(error instanceof Error ? error.message : "Failed to create task.")
-    }
-  }
+          <hr className="border-t border-[var(--rule)]" aria-hidden="true" />
 
-  async function handleUpdateTask(taskId: string, input: UpdateTaskRequest) {
-    setTaskErrorMessage("")
+          <SectionReveal as="section">
+            <section
+              id="section-how"
+              data-spine-section="how"
+              data-spine-index="03"
+              data-spine-label="how"
+              className="py-[clamp(72px,10vw,140px)]"
+            >
+              <SectionEyebrow index="03" label="How it works" />
+              <h2 className="landing-display mt-4 max-w-[20ch] text-[clamp(1.8rem,3.6vw,2.8rem)] font-semibold leading-[1.04] text-foreground">
+                Three steps. None of them require a setup weekend.
+              </h2>
 
-    try {
-      await fetchJson<TaskMutationResponse>(`/api/tasks/${taskId}`, "Failed to update task.", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(input),
-      })
-      await loadDashboard(true)
-    } catch (error) {
-      setTaskErrorMessage(error instanceof Error ? error.message : "Failed to update task.")
-    }
-  }
+              <ol className="mt-[clamp(36px,5vw,64px)] divide-y divide-[var(--rule)]">
+                {steps.map((step, index) => (
+                  <li
+                    key={step.number}
+                    className="grid grid-cols-[auto_1fr] gap-x-[clamp(24px,5vw,72px)] gap-y-2 py-[clamp(28px,4vw,40px)] md:grid-cols-[120px_minmax(0,0.42fr)_minmax(0,0.58fr)]"
+                  >
+                    <span
+                      className="landing-display num text-[clamp(1.8rem,3.5vw,2.6rem)] font-light leading-none text-[var(--copper)]"
+                      aria-hidden="true"
+                      style={{ letterSpacing: "-0.02em" }}
+                    >
+                      {step.number}
+                    </span>
+                    <h3 className="self-start max-w-[28ch] text-[clamp(1.1rem,1.8vw,1.35rem)] font-semibold leading-[1.25] text-foreground md:col-span-1">
+                      {step.title}
+                    </h3>
+                    <p className="col-span-2 max-w-[58ch] text-[clamp(0.95rem,1.3vw,1.05rem)] leading-[1.6] text-foreground/70 md:col-span-1 md:col-start-3 md:row-start-1 md:self-start">
+                      {step.detail}
+                    </p>
+                    <span className="sr-only">Step {index + 1} of {steps.length}.</span>
+                  </li>
+                ))}
+              </ol>
+            </section>
+          </SectionReveal>
 
-  async function handleDeleteTask(taskId: string) {
-    setTaskErrorMessage("")
+          <div
+            aria-hidden="true"
+            className="my-[clamp(40px,6vw,80px)] h-[1px] w-full"
+            style={{
+              background:
+                "linear-gradient(to right, transparent, var(--copper) 18%, var(--copper-bright) 50%, var(--copper) 82%, transparent)",
+            }}
+          />
 
-    try {
-      await fetchJson<DeleteTaskResponse>(`/api/tasks/${taskId}`, "Failed to delete task.", {
-        method: "DELETE",
-      })
-      await loadDashboard(true)
-    } catch (error) {
-      setTaskErrorMessage(error instanceof Error ? error.message : "Failed to delete task.")
-    }
-  }
+          <SectionReveal as="section">
+            <section
+              id="section-not"
+              data-spine-section="not"
+              data-spine-index="04"
+              data-spine-label="not"
+              className="py-[clamp(56px,8vw,100px)]"
+            >
+              <SectionEyebrow index="04" label="What it isn&rsquo;t" />
+              <ul className="landing-display mt-6 max-w-[40ch] space-y-2 text-[clamp(1.5rem,3vw,2.4rem)] font-semibold leading-[1.12] text-foreground">
+                {refrains.map((line, index) => (
+                  <li
+                    key={line}
+                    className={index === refrains.length - 1 ? "text-foreground" : "text-foreground/35"}
+                  >
+                    {line}
+                  </li>
+                ))}
+              </ul>
+            </section>
+          </SectionReveal>
 
-  async function handleToggleTaskComplete(task: DashboardResponse["tasks"][number]) {
-    await handleUpdateTask(task.id, {
-      status: task.status === "completed" ? "todo" : "completed",
-    })
-  }
+          <SectionReveal as="section">
+            <section
+              id="section-cta"
+              data-spine-section="cta"
+              data-spine-index="05"
+              data-spine-label="early access"
+              className="grid grid-cols-1 items-end gap-[clamp(24px,4vw,56px)] border-t border-[var(--rule)] py-[clamp(80px,11vw,160px)] md:grid-cols-[minmax(0,0.55fr)_minmax(0,0.45fr)]"
+            >
+              <div id="waitlist" className="scroll-mt-24">
+                <SectionEyebrow index="05" label="Early access" />
+                <h2 className="landing-display mt-4 max-w-[18ch] text-[clamp(2rem,4.4vw,3.4rem)] font-semibold leading-[1.0] text-foreground">
+                  Stop guessing what to start next.
+                </h2>
+                <p className="mt-4 max-w-[44ch] text-[clamp(1rem,1.4vw,1.125rem)] leading-[1.55] text-foreground/70">
+                  Jarvis is invite-only while it stabilizes. Drop your school email and you&apos;ll hear when your
+                  spot comes up.
+                </p>
+              </div>
+              <div className="flex flex-col gap-3">
+                <WaitlistForm variant="anchor" id="anchor-waitlist" />
+                <p className="landing-mark text-[10.5px] text-muted-foreground">
+                  Invites in order. No spam. .edu preferred but not required.
+                </p>
+              </div>
+            </section>
+          </SectionReveal>
 
-  async function handleSchedule(taskIds: string[] = []) {
-    if (isScheduling || !dashboard) {
-      return
-    }
-
-    setIsScheduling(true)
-    setPlannerStatus("Scheduling")
-    setPlannerSummary("")
-
-    try {
-      const selectedTaskIds = new Set(taskIds)
-      const hardEvents = events
-        .filter((event) => !event.taskId || !selectedTaskIds.has(event.taskId))
-        .filter((event) => !visibleCalendarIds || !event.calendarId || visibleCalendarIds.includes(event.calendarId))
-        .map(toScheduleEventInput)
-
-      const scheduleResponse = await fetchJson<ScheduleResponse>("/api/schedule", "Scheduling failed.", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          taskIds,
-          hardEvents,
-        }),
-      })
-
-      setPlannerStatus(scheduleResponse.schedule.plannerStatus === "ready" ? "Ready" : "Idle")
-      setPlannerSummary(scheduleResponse.schedule.summary)
-      await loadDashboard(true)
-    } catch (error) {
-      setPlannerStatus("Error")
-      setPlannerSummary(error instanceof Error ? error.message : "Scheduling failed.")
-    } finally {
-      setIsScheduling(false)
-    }
-  }
-
-  const handleEventApproved = useCallback(
-    async () => {
-      await loadDashboard(true)
-    },
-    [loadDashboard],
-  )
-
-  const renderContent = () => {
-    if (viewState.status === "loading") {
-      return (
-        <ShellMessage
-          icon={Loader2}
-          title="Loading"
-          detail="Reading scheduler state from Supabase."
-        />
-      )
-    }
-
-    if (viewState.status === "signed-out") {
-      return (
-        <ShellMessage
-          icon={Sparkles}
-          title="Sign in"
-          detail="JARVIS needs an authenticated user before reading tasks, calendars, or memory."
-          action={<AuthControls />}
-        />
-      )
-    }
-
-    if (viewState.status === "error") {
-      return (
-        <ShellMessage
-          icon={AlertTriangle}
-          title="Backend unavailable"
-          detail={viewState.message}
-          action={
-            <Button size="sm" variant="outline" onClick={() => loadDashboard()} className="gap-2">
-              <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
-              Retry
-            </Button>
-          }
-        />
-      )
-    }
-
-    const dashboardData = viewState.dashboard
-
-    return (
-      <div className="flex min-h-0 flex-1 flex-col">
-        <div className="grid min-h-0 flex-1 grid-cols-1 gap-0 xl:grid-cols-[minmax(0,1fr)_380px] xl:divide-x xl:divide-rule">
-          <div className="min-h-[560px] xl:min-h-0 xl:pr-6">
-            <ScheduleView
-              calendars={calendars}
-              visibleCalendarIds={visibleCalendarIds}
-              events={dashboardData.events}
-              tasks={dashboardData.tasks}
-              onToggleTaskComplete={handleToggleTaskComplete}
-              plannerStatus={plannerStatus}
-              plannerSummary={plannerSummary}
-              onSchedule={() => handleSchedule()}
-              isScheduling={isScheduling}
-            />
-          </div>
-
-          <div className="rail-scroll flex min-h-0 min-w-0 flex-col overflow-y-auto pb-2 pt-6 xl:pb-2 xl:pl-6 xl:pr-1 xl:pt-0">
-            <MasterInput tasks={dashboardData.tasks} />
-            {pendingCheckInEvents.length > 0 ? (
-              <CheckInSidebar
-                events={pendingCheckInEvents}
-                calendars={calendars}
-                onEventApproved={handleEventApproved}
-              />
-            ) : null}
-            <TaskManager
-              mode="all"
-              calendars={calendars}
-              tasks={dashboardData.tasks}
-              scheduleEvents={dashboardData.events}
-              errorMessage={taskErrorMessage}
-              onClearError={() => setTaskErrorMessage("")}
-              onCreateTask={handleCreateTask}
-              onUpdateTask={handleUpdateTask}
-              onDeleteTask={handleDeleteTask}
-            />
-          </div>
+          <LandingFooter />
         </div>
       </div>
-    )
-  }
-
-  const stats = dashboard?.stats
-
-  return (
-    <TooltipProvider delayDuration={250} skipDelayDuration={400}>
-      <main className="h-screen overflow-hidden bg-background text-foreground">
-        <div className="flex h-full">
-          <aside className="hidden w-14 shrink-0 flex-col items-center gap-1.5 border-r border-rule py-4 md:flex">
-            <RailButton
-              label="Calendars"
-              icon={PanelLeft}
-              onClick={() => setCalendarsSidebarOpen(true)}
-              active={calendarsSidebarOpen}
-            />
-            <RailButton
-              label="Refresh"
-              icon={RefreshCw}
-              onClick={() => loadDashboard(true)}
-              disabled={isRefreshing}
-              spinning={isRefreshing}
-            />
-            <RailButton
-              label="Schedule"
-              icon={CalendarDays}
-              onClick={() => handleSchedule()}
-              disabled={isScheduling || !dashboard}
-              spinning={isScheduling}
-            />
-          </aside>
-
-          <section className="flex min-w-0 flex-1 flex-col">
-            <header className="flex h-16 shrink-0 items-center gap-5 border-b border-rule-strong px-6">
-              <div className="flex min-w-0 items-center gap-3">
-                <span className="text-[17px] font-semibold leading-none text-foreground">
-                  JARVIS
-                </span>
-                <span className="hidden h-4 w-px bg-rule-strong sm:block" />
-                <span className="hidden text-[11px] font-medium uppercase text-muted-foreground sm:block">
-                  Secretary
-                </span>
-              </div>
-
-              <div className="ml-auto flex items-center gap-3">
-                {stats ? (
-                  <div className="hidden items-center gap-1 md:flex">
-                    <StatGlyph icon={ListTodo} label="Tasks" value={stats.tasks} />
-                    <StatGlyph icon={CalendarDays} label="Loose" value={stats.unscheduled} />
-                    <StatGlyph icon={Brain} label="Memory" value={stats.memories} />
-                    <StatGlyph icon={Database} label="Sources" value={stats.sources} />
-                  </div>
-                ) : null}
-                <span className="hidden h-5 w-px bg-rule md:block" />
-                <LiveClock />
-                <button
-                  type="button"
-                  aria-label="Calendars"
-                  onClick={() => setCalendarsSidebarOpen(true)}
-                  className="flex h-9 w-9 items-center justify-center rounded-sm text-muted-foreground hover:bg-accent hover:text-foreground md:hidden"
-                >
-                  <PanelLeft className="h-[18px] w-[18px]" aria-hidden="true" />
-                </button>
-                <AuthControls />
-              </div>
-            </header>
-
-            <div className="flex min-h-0 flex-1 flex-col px-6 py-6">{renderContent()}</div>
-          </section>
-        </div>
-
-        <CalendarsSidebar
-          isOpen={calendarsSidebarOpen}
-          onClose={() => setCalendarsSidebarOpen(false)}
-          calendars={calendars}
-          onCalendarsChange={setCalendars}
-        />
-      </main>
-    </TooltipProvider>
+    </main>
   )
 }
