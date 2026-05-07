@@ -29,6 +29,7 @@ export function TimeSpine() {
   const clockRef = useRef<HTMLSpanElement | null>(null)
   const labelRefs = useRef<Array<HTMLDivElement | null>>([])
   const blocksAnimatedRef = useRef(false)
+  const activeIdRef = useRef<string | null>(null)
 
   useEffect(() => {
     const measure = () => {
@@ -48,6 +49,14 @@ export function TimeSpine() {
           heightRatio: height / max,
         })
       })
+
+      // Extend the last section to cover any trailing space (footer, padding)
+      // so the spine fills to its bottom edge instead of leaving dead space.
+      if (found.length > 0) {
+        const last = found[found.length - 1]
+        last.heightRatio = Math.max(last.heightRatio, 1 - last.topRatio)
+      }
+
       setSections(found)
     }
 
@@ -78,15 +87,15 @@ export function TimeSpine() {
     }
 
     const findActiveAndProgress = () => {
-      const probe = window.scrollY + window.innerHeight * 0.4
-      const max = document.documentElement.scrollHeight
+      const overall = computeOverallProgress()
       let active = sections[0]
       for (const s of sections) {
-        if (probe / max >= s.topRatio) active = s
+        if (overall >= s.topRatio) active = s
       }
-      const sectionTop = active.topRatio * max
-      const sectionHeight = Math.max(active.heightRatio * max, 1)
-      const localProgress = Math.min(1, Math.max(0, (probe - sectionTop) / sectionHeight))
+      const localProgress = Math.min(
+        1,
+        Math.max(0, (overall - active.topRatio) / Math.max(active.heightRatio, 0.0001)),
+      )
       return { active, localProgress }
     }
 
@@ -111,7 +120,10 @@ export function TimeSpine() {
         scrubber.style.transform = `translate3d(0, ${blockTopPx + fillHeightPx - 8}px, 0)`
       }
 
-      if (active.id !== activeId) setActiveId(active.id)
+      if (active.id !== activeIdRef.current) {
+        activeIdRef.current = active.id
+        setActiveId(active.id)
+      }
     }
 
     update()
@@ -191,7 +203,7 @@ export function TimeSpine() {
       window.removeEventListener("scroll", onScroll)
       window.removeEventListener("resize", onScroll)
     }
-  }, [sections, activeId])
+  }, [sections])
 
   const handleSectionClick = (id: string) => {
     const el = document.getElementById(id)
@@ -242,7 +254,7 @@ export function TimeSpine() {
             const isHovered = section.id === hoveredId
             const top = section.topRatio * 100
             const height = Math.max(section.heightRatio * 100, 4)
-            const targetWidth = isActive ? 28 : isHovered ? 16 : 6
+            const targetWidth = isHovered ? 16 : 6
             return (
               <button
                 type="button"
@@ -267,7 +279,7 @@ export function TimeSpine() {
                   transition: "width 380ms cubic-bezier(0.22, 1, 0.36, 1), background-color 320ms ease-out, left 380ms cubic-bezier(0.22, 1, 0.36, 1)",
                 }}
               >
-                {(isActive || isHovered) && section.label ? (
+                {isHovered && section.label ? (
                   <span
                     className="pointer-events-none absolute inset-y-0 left-0 right-0 flex items-center justify-center"
                     style={{
@@ -297,7 +309,7 @@ export function TimeSpine() {
                 "linear-gradient(to bottom, oklch(0.74 0.14 42 / 0.92), oklch(0.78 0.14 45))",
               borderRadius: "2px 2px 0 0",
               boxShadow: "0 0 0 1px oklch(0.84 0.12 50 / 0.6) inset, 0 8px 24px -8px oklch(0.74 0.14 42 / 0.7)",
-              transition: "height 200ms cubic-bezier(0.22, 1, 0.36, 1)",
+              transition: "opacity 180ms ease-out",
               willChange: "transform, height",
             }}
           />
