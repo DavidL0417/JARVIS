@@ -10,6 +10,10 @@ export const checkInEnergySchema = z.enum(["low", "medium", "high"])
 export const syncOriginSchema = z.enum(["local", "gcal"])
 export const calendarSourceSchema = z.enum(["local", "google", "imported", "task"])
 export const calendarSyncPreferenceSchema = z.enum(["active", "pending", "ignored"])
+export const integrationProviderSchema = z.enum(["google", "notion"])
+export const userIntegrationStatusSchema = z.enum(["connected", "needs_reauth", "disconnected", "error"])
+export const sourceConnectorIdSchema = z.enum(["notion", "gmail"])
+export const sourceConnectorStatusSchema = z.enum(["ready", "connected", "auth_needed", "missing_config", "failed"])
 export const memoryKindSchema = z.enum([
   "preference",
   "task_context",
@@ -79,6 +83,27 @@ export const userCalendarSchema = z.object({
   isTaskCalendar: z.boolean(),
   createdAt: z.string().datetime({ offset: true }),
   updatedAt: z.string().datetime({ offset: true }),
+})
+
+export const userIntegrationSchema = z.object({
+  id: z.string().uuid(),
+  userId: z.string().uuid(),
+  provider: integrationProviderSchema,
+  providerAccountEmail: z.string().min(1).nullable(),
+  providerUserId: z.string().min(1).nullable(),
+  status: userIntegrationStatusSchema,
+  selectedCalendarId: z.string().min(1).nullable(),
+  lastSyncedAt: z.string().datetime({ offset: true }).nullable(),
+  createdAt: z.string().datetime({ offset: true }),
+  updatedAt: z.string().datetime({ offset: true }),
+})
+
+export const sourceConnectorSchema = z.object({
+  id: sourceConnectorIdSchema,
+  status: sourceConnectorStatusSchema,
+  detail: z.string().min(1),
+  account: z.string().min(1).nullable(),
+  canRun: z.boolean(),
 })
 
 export const scheduleEventSchema = z.object({

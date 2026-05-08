@@ -26,10 +26,14 @@
 - Imported Google events are mirrored into `schedule_events`.
 - JARVIS-created task/focus blocks are persisted first, then synced outward when Google is connected.
 - Google OAuth provider tokens are captured from the callback exchange result immediately; sync responses expose an explicit authorization-required state instead of a generic failure.
+- Source connector readiness is derived on the server from public integration rows, private token presence, known OAuth scopes, and required environment variables. The UI must not treat a public `connected` row as runnable unless the private token/scope check also passes.
 
 ## Source Intake And Plans
 
 - Original uploaded context lives in the private Supabase Storage bucket `source-originals`; table rows in `source_files` point to those objects and carry processing status.
 - Extracted source facts enter `source_candidates` first. The app may approve candidates into tasks or memory, but it should not silently mutate the scheduler from inferred source text.
+- Gmail scans are context refreshes first and task extraction second. Source snapshots should preserve a planning digest even when no candidate needs approval.
+- Gmail authorization and Gmail API availability are separate readiness checks. If the Cloud project has not enabled `gmail.googleapis.com`, record a failed Gmail source snapshot and do not treat it as a user reauthorization problem.
+- Notion source intake uses a public OAuth connection, stores tokens in `app_private.integration_tokens`, and imports only pages/databases selected in the Notion authorization page picker.
 - `daily_plans` records the current command-deck plan: horizon, summary, now item, next items, risk items, source coverage, tradeoffs, model, and command.
 - Planner-created task blocks may reference `daily_plans.id` through `tasks.plan_id` and `schedule_events.plan_id`.

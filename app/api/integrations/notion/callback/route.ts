@@ -14,6 +14,7 @@ interface NotionOAuthState {
 
 interface NotionTokenResponse {
   access_token?: string
+  refresh_token?: string
   bot_id?: string
   workspace_id?: string
   workspace_name?: string
@@ -121,7 +122,7 @@ export async function GET(request: NextRequest) {
       userId: user.id,
       provider: "notion",
       accessToken: token.access_token ?? null,
-      refreshToken: null,
+      refreshToken: token.refresh_token ?? null,
       expiresAt: null,
       scope: null,
     })

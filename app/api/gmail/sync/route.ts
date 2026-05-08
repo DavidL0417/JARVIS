@@ -2,17 +2,26 @@ import { NextResponse } from "next/server"
 
 import { extractCandidatesFromText } from "@/lib/sources/extraction"
 import { insertSourceCandidates, insertSourceSnapshot } from "@/lib/sources/persistence"
+import { GMAIL_READONLY_SCOPE, hasOAuthScope } from "@/lib/google-oauth"
 import {
   isAuthenticationRequiredError,
   requireAuthenticatedUser,
 } from "@/lib/supabase/auth"
-import { getValidGoogleAccessToken } from "@/lib/supabase/google-calendar-integration"
+import { createSupabaseAdminClient } from "@/lib/supabase/server"
+import {
+  getGoogleTokensFromSession,
+  getStoredGoogleIntegration,
+  getValidGoogleAccessToken,
+  upsertGoogleCalendarIntegration,
+} from "@/lib/supabase/google-calendar-integration"
 import { sourceIntakeResponseSchema } from "@/schemas/sources"
 import type { SourceIntakeResponse } from "@/schemas/sources"
 
-const GMAIL_SEARCH_QUERY = [
+const GMAIL_CONTEXT_SEARCH_QUERY = [
   "newer_than:21d",
-  "(deadline OR due OR assignment OR syllabus OR exam OR quiz OR project OR meeting OR rescheduled)",
+  "-category:promotions",
+  "-category:social",
+  "(to:me OR cc:me OR deadline OR due OR assignment OR syllabus OR exam OR quiz OR project OR meeting OR rescheduled OR RSVP OR confirm OR \"action required\" OR logistics)",
 ].join(" ")
 
 interface GmailListResponse {
@@ -59,6 +68,10 @@ function getHeader(message: GmailMessageResponse, headerName: string) {
   return message.payload?.headers?.find((header) => header.name?.toLowerCase() === headerName.toLowerCase())?.value ?? null
 }
 
+function isGmailApiDisabledMessage(message: string) {
+  return /gmail api has not been used|gmail\.googleapis\.com|api has not been used|it is disabled/i.test(message)
+}
+
 async function fetchGmailJson<T>(accessToken: string, url: string): Promise<T> {
   const response = await fetch(url, {
     headers: {
@@ -71,6 +84,10 @@ async function fetchGmailJson<T>(accessToken: string, url: string): Promise<T> {
   if (!response.ok || !payload) {
     const message = payload?.error?.message || `Gmail API failed with status ${response.status}.`
 
+    if (response.status === 403 && isGmailApiDisabledMessage(message)) {
+      throw new Error(`GMAIL_API_DISABLED: ${message}`)
+    }
+
     if (response.status === 401 || response.status === 403) {
       throw new Error(`GMAIL_REAUTH_REQUIRED: ${message} Reconnect Google so JARVIS can request Gmail read-only access.`)
     }
@@ -82,8 +99,44 @@ async function fetchGmailJson<T>(accessToken: string, url: string): Promise<T> {
 }
 
 export async function POST() {
+  let userId: string | null = null
+
   try {
-    const { adminClient, user } = await requireAuthenticatedUser()
+    const { adminClient, authUser, serverClient, user } = await requireAuthenticatedUser()
+    userId = user.id
+    const { data: sessionData } = await serverClient.auth.getSession()
+    const sessionTokens = getGoogleTokensFromSession(sessionData.session)
+
+    if (sessionTokens.accessToken || sessionTokens.refreshToken) {
+      await upsertGoogleCalendarIntegration({
+        userId: user.id,
+        authUser,
+        ...sessionTokens,
+      })
+    }
+
+    const integration = await getStoredGoogleIntegration(user.id)
+
+    if (!integration) {
+      return NextResponse.json(
+        {
+          error: "Authorize Google with Gmail read-only access before scanning Gmail.",
+          needsAuthorization: true,
+        },
+        { status: 409 },
+      )
+    }
+
+    if (!hasOAuthScope(integration.scope, GMAIL_READONLY_SCOPE)) {
+      return NextResponse.json(
+        {
+          error: "Google must be reconnected with Gmail read-only access before scanning Gmail.",
+          needsAuthorization: true,
+        },
+        { status: 409 },
+      )
+    }
+
     const accessToken = await getValidGoogleAccessToken(user.id)
 
     if (!accessToken) {
@@ -96,7 +149,7 @@ export async function POST() {
       )
     }
 
-    const listUrl = `https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=10&q=${encodeURIComponent(GMAIL_SEARCH_QUERY)}`
+    const listUrl = `https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=20&q=${encodeURIComponent(GMAIL_CONTEXT_SEARCH_QUERY)}`
     const listPayload = await fetchGmailJson<GmailListResponse>(accessToken, listUrl)
     const messageIds = (listPayload.messages || [])
       .map((message) => message.id)
@@ -107,11 +160,11 @@ export async function POST() {
         adminClient,
         userId: user.id,
         source: "gmail",
-        sourceRef: GMAIL_SEARCH_QUERY,
+        sourceRef: GMAIL_CONTEXT_SEARCH_QUERY,
         freshness: "fresh",
-        summary: "Gmail scan completed; no recent deadline-like messages matched the query.",
+        summary: "Gmail context scan completed; no recent direct context messages matched the query.",
         payload: {
-          query: GMAIL_SEARCH_QUERY,
+          query: GMAIL_CONTEXT_SEARCH_QUERY,
           messageCount: 0,
         },
       })
@@ -155,19 +208,19 @@ export async function POST() {
       .join("\n\n---\n\n")
     const extraction = await extractCandidatesFromText({
       source: "gmail",
-      sourceRef: GMAIL_SEARCH_QUERY,
-      label: "Recent Gmail deadline scan",
+      sourceRef: GMAIL_CONTEXT_SEARCH_QUERY,
+      label: "Recent Gmail context scan",
       text: sourceText,
     })
     const sourceSnapshot = await insertSourceSnapshot({
       adminClient,
       userId: user.id,
       source: "gmail",
-      sourceRef: GMAIL_SEARCH_QUERY,
+      sourceRef: GMAIL_CONTEXT_SEARCH_QUERY,
       freshness: "fresh",
       summary: extraction.summary,
       payload: {
-        query: GMAIL_SEARCH_QUERY,
+        query: GMAIL_CONTEXT_SEARCH_QUERY,
         messageCount: messages.length,
         messageIds,
         model: extraction.model,
@@ -195,13 +248,50 @@ export async function POST() {
 
     const message = error instanceof Error ? error.message : "Unknown Gmail scan error."
 
-    if (message.startsWith("GMAIL_REAUTH_REQUIRED:")) {
+    if (message.startsWith("GMAIL_API_DISABLED:") || message.startsWith("GMAIL_REAUTH_REQUIRED:")) {
+      const needsAuthorization = message.startsWith("GMAIL_REAUTH_REQUIRED:")
+      const detail = message
+        .replace("GMAIL_API_DISABLED:", "")
+        .replace("GMAIL_REAUTH_REQUIRED:", "")
+        .trim()
+
+      if (userId) {
+        try {
+          const adminClient = createSupabaseAdminClient()
+
+          if (needsAuthorization) {
+            await adminClient
+              .from("integrations")
+              .update({
+                status: "needs_reauth",
+                updated_at: new Date().toISOString(),
+              })
+              .eq("user_id", userId)
+              .eq("provider", "google")
+          }
+
+          await insertSourceSnapshot({
+            adminClient,
+            userId,
+            source: "gmail",
+            sourceRef: GMAIL_CONTEXT_SEARCH_QUERY,
+            freshness: "failed",
+            summary: detail,
+            payload: {
+              reason: needsAuthorization ? "reauthorization_required" : "gmail_api_disabled",
+            },
+          })
+        } catch (recordError) {
+          console.error("Failed to record Gmail scan failure state.", recordError)
+        }
+      }
+
       return NextResponse.json(
         {
-          error: message.replace("GMAIL_REAUTH_REQUIRED:", "").trim(),
-          needsAuthorization: true,
+          error: detail,
+          needsAuthorization,
         },
-        { status: 409 },
+        { status: needsAuthorization ? 409 : 503 },
       )
     }
 

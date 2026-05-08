@@ -50,6 +50,20 @@ export function getGoogleTokensFromSession(session: Session | null): Required<Go
   }
 }
 
+async function getGoogleTokenScope(accessToken: string) {
+  const url = new URL("https://www.googleapis.com/oauth2/v1/tokeninfo")
+  url.searchParams.set("access_token", accessToken)
+
+  const response = await fetch(url, { cache: "no-store" })
+  const payload = (await response.json().catch(() => null)) as { scope?: string; error?: string } | null
+
+  if (!response.ok || !payload?.scope) {
+    return null
+  }
+
+  return payload.scope
+}
+
 function getGoogleProviderUserId(authUser: User) {
   const googleIdentity = authUser.identities?.find((identity) => identity.provider === "google")
   return googleIdentity?.id ?? null
@@ -146,6 +160,7 @@ export async function upsertGoogleCalendarIntegration(input: UpsertGoogleIntegra
   const adminClient = createSupabaseAdminClient()
   const existing = await getStoredGoogleIntegration(input.userId)
   const status = resolveIntegrationStatus(existing?.status ?? null, input, input.status)
+  const verifiedScope = input.accessToken ? await getGoogleTokenScope(input.accessToken) : null
 
   const publicRow: UserIntegrationUpsertRow = {
     user_id: input.userId,
@@ -171,7 +186,7 @@ export async function upsertGoogleCalendarIntegration(input: UpsertGoogleIntegra
     access_token: input.accessToken ?? existing?.access_token ?? null,
     refresh_token: input.refreshToken ?? existing?.refresh_token ?? null,
     expires_at: input.expiresAt ?? existing?.expires_at ?? null,
-    scope: input.scope ?? existing?.scope ?? null,
+    scope: verifiedScope ?? input.scope ?? existing?.scope ?? null,
   }
 
   await upsertGoogleTokenRow({

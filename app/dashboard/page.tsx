@@ -448,30 +448,32 @@ export default function DashboardPage() {
     const dashboardData = viewState.dashboard
 
     return (
-      <div className="flex min-h-0 flex-1 flex-col gap-5">
-        <DailyCommandStrip
-          dailyPlan={dashboardData.dailyPlan}
-          isPlanning={isScheduling}
-          plannerStatus={plannerStatus}
-          plannerSummary={plannerSummary}
-          onBuild={() => void handleDailyPlan()}
-          onReplan={async (command) => {
-            await handleDailyPlan(command)
-          }}
-        />
+      <div className="flex min-h-0 flex-1 flex-col">
         <div className="grid min-h-0 flex-1 grid-cols-1 gap-0 xl:grid-cols-[minmax(0,1fr)_380px] xl:divide-x xl:divide-rule">
-          <div className="min-h-[560px] xl:min-h-0 xl:pr-6">
-            <ScheduleView
-              calendars={calendars}
-              visibleCalendarIds={visibleCalendarIds}
-              events={dashboardData.events}
-              tasks={dashboardData.tasks}
-              onToggleTaskComplete={handleToggleTaskComplete}
+          <div className="flex min-h-[560px] min-w-0 flex-col gap-4 xl:min-h-0 xl:pr-6">
+            <DailyCommandStrip
+              dailyPlan={dashboardData.dailyPlan}
+              isPlanning={isScheduling}
               plannerStatus={plannerStatus}
               plannerSummary={plannerSummary}
-              onSchedule={() => void handleDailyPlan()}
-              isScheduling={isScheduling}
+              onBuild={() => void handleDailyPlan()}
+              onReplan={async (command) => {
+                await handleDailyPlan(command)
+              }}
             />
+            <div className="min-h-0 flex-1">
+              <ScheduleView
+                calendars={calendars}
+                visibleCalendarIds={visibleCalendarIds}
+                events={dashboardData.events}
+                tasks={dashboardData.tasks}
+                onToggleTaskComplete={handleToggleTaskComplete}
+                plannerStatus={plannerStatus}
+                plannerSummary={plannerSummary}
+                onSchedule={() => void handleDailyPlan()}
+                isScheduling={isScheduling}
+              />
+            </div>
           </div>
 
           <div className="rail-scroll flex min-h-0 min-w-0 flex-col gap-5 overflow-y-auto pb-2 pt-6 xl:pb-2 xl:pl-6 xl:pr-1 xl:pt-0">
@@ -616,6 +618,7 @@ export default function DashboardPage() {
         >
           {dashboard ? (
             <SourceSetupPanel
+              sourceConnectors={dashboard.sourceConnectors}
               sources={dashboard.sources}
               sourceFiles={dashboard.sourceFiles}
               sourceCandidates={dashboard.sourceCandidates}
@@ -633,6 +636,7 @@ export default function DashboardPage() {
           {dashboard ? (
             <ReviewLedgerPanel
               candidates={dashboard.sourceCandidates}
+              sources={dashboard.sources}
               onCandidatesChanged={() => loadDashboard(true)}
             />
           ) : null}

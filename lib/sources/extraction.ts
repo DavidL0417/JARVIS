@@ -54,11 +54,12 @@ type InputContentPart =
 const SOURCE_EXTRACTION_PROMPT = [
   "You extract scheduling context for JARVIS, a student secretary scheduler.",
   "Read the provided source and identify only explicit or strongly evidenced scheduling material.",
-  "The product moment is not generic summarization: find deadlines, assignments, meetings, routines, preferences, and uncertainty that would help build a trustworthy week plan.",
+  "The product moment is source intelligence, not generic summarization: find deadlines, assignments, meetings, routines, preferences, quick replies, admin/logistics decisions, resource links, instructor overrides, and uncertainty that would help build a trustworthy week plan.",
+  "For Gmail, treat email as context first and a task source second. Prioritize direct To/CC messages, messages naming the user as responsible, replies/RSVPs/confirmations, deadline overrides, logistics, and small 2-10 minute actions. Treat newsletters, broadcasts, digests, and notification-only messages as low confidence unless they clearly change the user's plan.",
   "Do not invent dates, courses, durations, or tasks. If a due date is ambiguous, keep dueAt null and explain the ambiguity in evidence.",
   "Use ISO 8601 timestamps with timezone offsets for dueAt when the source gives enough information. Assume America/Chicago only when the source gives a date without a timezone.",
   "Use priority high only for imminent, graded, blocking, or explicitly important items.",
-  "Return compact candidates that a user can approve into the scheduler.",
+  "Return task/deadline/event candidates only when they need scheduler action. Return note candidates for useful context that should inform the secretary but should not become a task.",
 ].join("\n")
 
 function candidateJsonSchema() {
@@ -68,7 +69,7 @@ function candidateJsonSchema() {
     properties: {
       summary: {
         type: "string",
-        description: "A short factual summary of what was extracted or why nothing actionable was found.",
+        description: "A short factual context digest of what changed, what mattered, and why nothing scheduler-actionable was found when applicable.",
       },
       candidates: {
         type: "array",

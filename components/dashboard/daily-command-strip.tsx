@@ -1,17 +1,28 @@
 "use client"
 
-import { useState } from "react"
-import { ArrowUp, CalendarClock, Loader2, RefreshCw, Zap } from "lucide-react"
+import { CalendarClock, Clock3, Loader2, Moon, RefreshCw, Zap } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import {
-  InputGroup,
-  InputGroupAddon,
-  InputGroupButton,
-  InputGroupInput,
-} from "@/components/ui/input-group"
 import type { DailyPlan } from "@/types"
+
+const QUICK_REPLANS = [
+  {
+    label: "Lighter",
+    command: "I'm tired, make today lighter.",
+    icon: Zap,
+  },
+  {
+    label: "Later",
+    command: "Move flexible work later today.",
+    icon: Clock3,
+  },
+  {
+    label: "Protect night",
+    command: "Keep tonight protected; move non-urgent work earlier or tomorrow.",
+    icon: Moon,
+  },
+] as const
 
 function formatPlanTime(value: string | null) {
   if (!value) {
@@ -43,25 +54,13 @@ export function DailyCommandStrip({
   onBuild: () => void
   onReplan: (command: string) => Promise<void>
 }) {
-  const [command, setCommand] = useState("")
   const nowItem = dailyPlan?.nowItem
   const nextItem = dailyPlan?.nextItems[0]
   const highRisks = severityCount(dailyPlan, "high")
   const mediumRisks = severityCount(dailyPlan, "medium")
 
-  async function handleSubmit() {
-    const trimmed = command.trim()
-
-    if (!trimmed || isPlanning) {
-      return
-    }
-
-    await onReplan(trimmed)
-    setCommand("")
-  }
-
   return (
-    <section className="grid shrink-0 gap-4 border-b border-rule-strong pb-5 lg:grid-cols-[minmax(0,1fr)_minmax(320px,440px)]">
+    <section className="shrink-0 border-b border-rule-strong pb-4">
       <div className="flex min-w-0 flex-col gap-3">
         <div className="flex flex-wrap items-center gap-2">
           <Button
@@ -71,7 +70,11 @@ export function DailyCommandStrip({
             disabled={isPlanning}
             className="h-7 gap-2 rounded-sm border-copper/40 bg-copper-soft px-2.5 text-[11px] font-medium uppercase tracking-wide text-copper hover:bg-copper-soft hover:brightness-110"
           >
-            {isPlanning ? <Loader2 className="animate-spin" aria-hidden="true" /> : <CalendarClock aria-hidden="true" />}
+            {isPlanning ? (
+              <Loader2 data-icon="inline-start" className="animate-spin" aria-hidden="true" />
+            ) : (
+              <CalendarClock data-icon="inline-start" aria-hidden="true" />
+            )}
             Build Today
           </Button>
           <Badge variant="outline" className="rounded-sm border-copper/30 bg-copper-soft text-copper">
@@ -91,7 +94,7 @@ export function DailyCommandStrip({
         </div>
 
         <div className="min-w-0">
-          <h1 className="truncate text-[26px] font-semibold leading-tight text-foreground">
+          <h1 className="truncate text-[22px] font-semibold leading-tight text-foreground">
             {nowItem?.title ?? "Build today from live context"}
           </h1>
           <p className="mt-1 line-clamp-2 max-w-[76ch] text-[13px] leading-5 text-muted-foreground">
@@ -107,48 +110,35 @@ export function DailyCommandStrip({
               : "No next block placed."}
           </span>
         </div>
-      </div>
 
-      <div className="flex min-w-0 flex-col justify-end gap-3">
-        <div className="flex items-center justify-end">
+        <div className="flex flex-wrap items-center gap-2">
+          {QUICK_REPLANS.map((action) => {
+            const Icon = action.icon
+            return (
+              <Button
+                key={action.label}
+                size="sm"
+                variant="secondary"
+                onClick={() => void onReplan(action.command)}
+                disabled={isPlanning}
+                className="h-7 gap-1.5 rounded-sm px-2 text-[11px] font-medium"
+              >
+                <Icon data-icon="inline-start" aria-hidden="true" />
+                {action.label}
+              </Button>
+            )
+          })}
           <Button
             size="icon"
-            variant={plannerStatus === "Error" ? "destructive" : "secondary"}
+            variant={plannerStatus === "Error" ? "destructive" : "ghost"}
             onClick={onBuild}
             disabled={isPlanning}
             aria-label="Refresh daily plan"
+            className="size-7 rounded-sm"
           >
             {isPlanning ? <Loader2 className="animate-spin" aria-hidden="true" /> : <RefreshCw aria-hidden="true" />}
           </Button>
         </div>
-
-        <InputGroup className="rounded-sm border-rule bg-secondary/25">
-          <InputGroupAddon>
-            <span className="num text-[10px] uppercase text-muted-foreground">Command</span>
-          </InputGroupAddon>
-          <InputGroupInput
-            value={command}
-            onChange={(event) => setCommand(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") {
-                event.preventDefault()
-                void handleSubmit()
-              }
-            }}
-            placeholder="I'm tired, make today lighter."
-            disabled={isPlanning}
-          />
-          <InputGroupAddon align="inline-end">
-            <InputGroupButton
-              size="icon-xs"
-              aria-label="Replan"
-              disabled={isPlanning || command.trim().length === 0}
-              onClick={() => void handleSubmit()}
-            >
-              {isPlanning ? <Loader2 className="animate-spin" aria-hidden="true" /> : <ArrowUp aria-hidden="true" />}
-            </InputGroupButton>
-          </InputGroupAddon>
-        </InputGroup>
 
         {plannerSummary ? (
           <p className={`line-clamp-2 text-[12px] leading-5 ${plannerStatus === "Error" ? "text-destructive" : "text-muted-foreground"}`}>

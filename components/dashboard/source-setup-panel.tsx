@@ -1,8 +1,21 @@
 "use client"
 
 import { useRef, useState } from "react"
-import { BookOpen, CalendarDays, Database, FileUp, Loader2, Mail, Upload } from "lucide-react"
+import {
+  AlertTriangle,
+  BookOpen,
+  CalendarDays,
+  CheckCircle2,
+  CircleDashed,
+  Database,
+  FileUp,
+  Loader2,
+  Mail,
+  Upload,
+} from "lucide-react"
+import type { LucideIcon } from "lucide-react"
 
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
   Field,
@@ -17,9 +30,21 @@ import {
   InputGroupTextarea,
 } from "@/components/ui/input-group"
 import { startGoogleOAuthRedirect } from "@/lib/supabase/auth-actions"
-import type { SourceCandidate, SourceFileSummary, SourceSnapshotSummary } from "@/types"
+import type {
+  SourceCandidate,
+  SourceConnector,
+  SourceConnectorId,
+  SourceConnectorStatus,
+  SourceFileSummary,
+  SourceSnapshotSummary,
+} from "@/types"
 
 type ActionStatus = "idle" | "busy" | "error"
+type ActionPayload = {
+  error?: string
+  details?: string
+  needsAuthorization?: boolean
+}
 
 async function readJson<T>(response: Response, fallback: string): Promise<T> {
   const payload = await response.json().catch(() => null)
@@ -38,6 +63,10 @@ async function readJson<T>(response: Response, fallback: string): Promise<T> {
   return payload as T
 }
 
+function getPayloadMessage(payload: ActionPayload | null, fallback: string) {
+  return payload?.details || payload?.error || fallback
+}
+
 function StatLine({ label, value }: { label: string; value: string | number }) {
   return (
     <div className="flex items-baseline justify-between gap-3 border-b border-rule py-2 last:border-b-0">
@@ -47,12 +76,95 @@ function StatLine({ label, value }: { label: string; value: string | number }) {
   )
 }
 
+function getConnector(connectors: SourceConnector[], id: SourceConnectorId): SourceConnector {
+  const connector = connectors.find((item) => item.id === id)
+
+  if (connector) {
+    return connector
+  }
+
+  return {
+    id,
+    status: "auth_needed",
+    account: null,
+    canRun: false,
+    detail:
+      id === "notion"
+        ? "Authorize a Notion workspace before importing scheduling context."
+        : "Authorize Google with Gmail read-only access before scanning mail context.",
+  }
+}
+
+function getStatusLabel(status: SourceConnectorStatus) {
+  if (status === "auth_needed") {
+    return "auth needed"
+  }
+
+  if (status === "missing_config") {
+    return "missing config"
+  }
+
+  return status
+}
+
+function statusVariant(status: SourceConnectorStatus): "outline" | "secondary" | "destructive" {
+  if (status === "connected" || status === "ready") {
+    return "secondary"
+  }
+
+  if (status === "failed" || status === "missing_config") {
+    return "destructive"
+  }
+
+  return "outline"
+}
+
+function StatusGlyph({ status }: { status: SourceConnectorStatus }) {
+  if (status === "connected" || status === "ready") {
+    return <CheckCircle2 className="h-3 w-3 text-emerald-300" aria-hidden="true" />
+  }
+
+  if (status === "failed" || status === "missing_config") {
+    return <AlertTriangle className="h-3 w-3 text-destructive" aria-hidden="true" />
+  }
+
+  return <CircleDashed className="h-3 w-3 text-copper" aria-hidden="true" />
+}
+
+function ConnectorStatus({
+  icon: Icon,
+  title,
+  connector,
+}: {
+  icon: LucideIcon
+  title: string
+  connector: SourceConnector
+}) {
+  return (
+    <div className="grid grid-cols-[1rem_minmax(0,1fr)] gap-2 rounded-sm bg-secondary/15 px-3 py-2.5 text-[12px]">
+      <Icon className="mt-0.5 h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
+      <div className="min-w-0">
+        <div className="flex items-center justify-between gap-2">
+          <span className="font-medium text-foreground">{title}</span>
+          <Badge variant={statusVariant(connector.status)} className="gap-1 rounded-sm">
+            <StatusGlyph status={connector.status} />
+            {getStatusLabel(connector.status)}
+          </Badge>
+        </div>
+        <p className="mt-1 line-clamp-2 leading-5 text-muted-foreground">{connector.detail}</p>
+      </div>
+    </div>
+  )
+}
+
 export function SourceSetupPanel({
+  sourceConnectors,
   sources,
   sourceFiles,
   sourceCandidates,
   onSourcesChanged,
 }: {
+  sourceConnectors: SourceConnector[]
   sources: SourceSnapshotSummary[]
   sourceFiles: SourceFileSummary[]
   sourceCandidates: SourceCandidate[]
@@ -64,6 +176,9 @@ export function SourceSetupPanel({
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const pendingCount = sourceCandidates.filter((candidate) => candidate.status === "pending").length
   const failedCount = sources.filter((source) => source.freshness === "failed").length
+  const notionConnector = getConnector(sourceConnectors, "notion")
+  const gmailConnector = getConnector(sourceConnectors, "gmail")
+  const gmailConfigMissing = gmailConnector.status === "missing_config"
 
   async function runAction(action: () => Promise<void>) {
     setStatus("busy")
@@ -74,6 +189,7 @@ export function SourceSetupPanel({
       await onSourcesChanged()
       setStatus("idle")
     } catch (error) {
+      await onSourcesChanged().catch(() => undefined)
       setStatus("error")
       setErrorMessage(error instanceof Error ? error.message : "Source action failed.")
     }
@@ -121,16 +237,19 @@ export function SourceSetupPanel({
     })
   }
 
-  async function handleNotionConnect() {
-    await runAction(async () => {
-      const response = await fetch("/api/integrations/notion/start", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ next: "/dashboard" }),
-      })
-      const payload = await readJson<{ authorizationUrl: string }>(response, "Notion authorization failed.")
-      window.location.href = payload.authorizationUrl
+  async function startNotionAuthorization() {
+    const response = await fetch("/api/integrations/notion/start", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ next: "/dashboard" }),
     })
+    const payload = await readJson<{ authorizationUrl: string }>(response, "Notion authorization failed.")
+
+    window.location.href = payload.authorizationUrl
+  }
+
+  async function handleNotionConnect() {
+    await runAction(startNotionAuthorization)
   }
 
   async function handleNotionImport() {
@@ -140,8 +259,22 @@ export function SourceSetupPanel({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({}),
       })
+      const payload = (await response.json().catch(() => null)) as ActionPayload | null
 
-      await readJson(response, "Notion import failed.")
+      if (response.status === 409 && payload?.needsAuthorization) {
+        await startNotionAuthorization()
+        return
+      }
+
+      if (!response.ok || !payload) {
+        throw new Error(getPayloadMessage(payload, "Notion import failed."))
+      }
+    })
+  }
+
+  async function handleGoogleAuthorize() {
+    await runAction(async () => {
+      await startGoogleOAuthRedirect("/dashboard")
     })
   }
 
@@ -150,13 +283,11 @@ export function SourceSetupPanel({
       const response = await fetch("/api/gmail/sync", {
         method: "POST",
       })
+      const payload = (await response.json().catch(() => null)) as ActionPayload | null
 
-      if (response.status === 409) {
-        await startGoogleOAuthRedirect("/dashboard")
-        return
+      if (!response.ok || !payload) {
+        throw new Error(getPayloadMessage(payload, "Gmail scan failed."))
       }
-
-      await readJson(response, "Gmail scan failed.")
     })
   }
 
@@ -172,21 +303,52 @@ export function SourceSetupPanel({
 
       <div className="grid grid-cols-2 gap-2">
         <Button size="sm" variant="outline" className="justify-start gap-2" onClick={() => fileInputRef.current?.click()} disabled={status === "busy"}>
-          <FileUp aria-hidden="true" />
+          <FileUp data-icon="inline-start" aria-hidden="true" />
           Upload
         </Button>
-        <Button size="sm" variant="outline" className="justify-start gap-2" onClick={handleGmailScan} disabled={status === "busy"}>
-          <Mail aria-hidden="true" />
-          Gmail
+        <Button
+          size="sm"
+          variant="outline"
+          className="justify-start gap-2"
+          onClick={gmailConnector.canRun ? handleGmailScan : handleGoogleAuthorize}
+          disabled={status === "busy" || gmailConfigMissing}
+        >
+          <Mail data-icon="inline-start" aria-hidden="true" />
+          {gmailConnector.canRun ? "Scan Gmail" : "Authorize Gmail"}
         </Button>
-        <Button size="sm" variant="outline" className="justify-start gap-2" onClick={handleNotionConnect} disabled={status === "busy"}>
-          <BookOpen aria-hidden="true" />
-          Notion
+        <Button
+          size="sm"
+          variant="outline"
+          className="justify-start gap-2"
+          onClick={handleNotionConnect}
+          disabled={status === "busy"}
+        >
+          <BookOpen data-icon="inline-start" aria-hidden="true" />
+          {notionConnector.status === "connected" ? "Reconnect workspace" : "Connect workspace"}
         </Button>
-        <Button size="sm" variant="outline" className="justify-start gap-2" onClick={handleNotionImport} disabled={status === "busy"}>
-          <CalendarDays aria-hidden="true" />
-          Import
+        <Button
+          size="sm"
+          variant="outline"
+          className="justify-start gap-2"
+          onClick={handleNotionImport}
+          disabled={status === "busy"}
+        >
+          <CalendarDays data-icon="inline-start" aria-hidden="true" />
+          Import Notion
         </Button>
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <ConnectorStatus
+          icon={BookOpen}
+          title="Notion"
+          connector={notionConnector}
+        />
+        <ConnectorStatus
+          icon={Mail}
+          title="Gmail"
+          connector={gmailConnector}
+        />
       </div>
 
       <input

@@ -1,12 +1,12 @@
 "use client"
 
 import { useMemo, useState } from "react"
-import { Check, Loader2, X } from "lucide-react"
+import { Check, Database, Loader2, X } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import type { SourceCandidate } from "@/types"
+import type { SourceCandidate, SourceSnapshotSummary } from "@/types"
 
 function formatDue(value: string | null) {
   if (!value) {
@@ -28,6 +28,15 @@ function confidenceLabel(value: number | null) {
   return `${Math.round(value * 100)}%`
 }
 
+function formatCapturedAt(value: string) {
+  return new Date(value).toLocaleString([], {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  })
+}
+
 async function readCandidateResponse(response: Response, fallback: string) {
   const payload = await response.json().catch(() => null)
 
@@ -45,9 +54,11 @@ async function readCandidateResponse(response: Response, fallback: string) {
 
 export function ReviewLedgerPanel({
   candidates,
+  sources,
   onCandidatesChanged,
 }: {
   candidates: SourceCandidate[]
+  sources: SourceSnapshotSummary[]
   onCandidatesChanged: () => Promise<void>
 }) {
   const [busyId, setBusyId] = useState<string | null>(null)
@@ -55,6 +66,10 @@ export function ReviewLedgerPanel({
   const pendingCandidates = useMemo(
     () => candidates.filter((candidate) => candidate.status === "pending").slice(0, 8),
     [candidates],
+  )
+  const recentSources = useMemo(
+    () => sources.filter((source) => source.source !== "google_calendar").slice(0, 6),
+    [sources],
   )
 
   async function mutateCandidate(candidateId: string, action: "approve" | "dismiss") {
@@ -87,14 +102,35 @@ export function ReviewLedgerPanel({
   return (
     <section className="flex flex-col gap-3 border-b border-rule pb-5">
       <div className="flex items-center justify-between gap-3">
-        <h2 className="text-[13px] font-semibold uppercase text-foreground">Review Ledger</h2>
+        <h2 className="text-[13px] font-semibold uppercase text-foreground">Context Inbox</h2>
         <Badge variant="outline" className="rounded-sm">
-          {pendingCandidates.length}
+          {pendingCandidates.length + recentSources.length}
         </Badge>
       </div>
 
+      {recentSources.length > 0 ? (
+        <div className="flex flex-col gap-2">
+          {recentSources.map((source) => (
+            <div key={source.id} className="grid grid-cols-[1rem_minmax(0,1fr)] gap-2 rounded-sm bg-secondary/15 px-3 py-2.5 text-[12px]">
+              <Database className="mt-0.5 h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
+              <div className="min-w-0">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-medium capitalize text-foreground">{source.source.replace("_", " ")}</span>
+                  <span className="num text-[10px] uppercase text-muted-foreground">
+                    {formatCapturedAt(source.capturedAt)}
+                  </span>
+                </div>
+                <p className="mt-1 line-clamp-3 leading-5 text-muted-foreground">{source.summary}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : null}
+
       {pendingCandidates.length === 0 ? (
-        <p className="text-[12px] leading-5 text-muted-foreground">No extracted items waiting.</p>
+        <p className="text-[12px] leading-5 text-muted-foreground">
+          No approval items waiting. Recent source scans still inform planning context.
+        </p>
       ) : (
         <ScrollArea className="max-h-[320px] pr-3">
           <div className="flex flex-col gap-2">

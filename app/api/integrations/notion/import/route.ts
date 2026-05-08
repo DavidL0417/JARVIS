@@ -25,6 +25,21 @@ interface NotionSearchResponse {
   message?: string
 }
 
+interface NotionBlock {
+  id?: string
+  type?: string
+  has_children?: boolean
+  [key: string]: unknown
+}
+
+interface NotionBlockChildrenResponse {
+  results?: NotionBlock[]
+  has_more?: boolean
+  next_cursor?: string | null
+  error?: string
+  message?: string
+}
+
 function extractPlainText(value: unknown): string[] {
   if (!value || typeof value !== "object") {
     return []
@@ -49,9 +64,88 @@ function extractPlainText(value: unknown): string[] {
   ]
 }
 
-function renderNotionResult(result: NotionSearchResult, index: number) {
+async function fetchNotionJson<T>(
+  accessToken: string,
+  url: string,
+  init?: RequestInit,
+): Promise<T> {
+  const response = await fetch(url, {
+    ...init,
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+      "Notion-Version": "2022-06-28",
+    },
+    cache: "no-store",
+  })
+  const payload = (await response.json().catch(() => null)) as (T & { error?: string; message?: string }) | null
+
+  if (!response.ok || !payload) {
+    const message = payload?.message || payload?.error || `Notion API failed with status ${response.status}.`
+
+    if (response.status === 401 || response.status === 403) {
+      throw new Error(`NOTION_REAUTH_REQUIRED: ${message} Reconnect Notion so JARVIS can read shared pages.`)
+    }
+
+    throw new Error(message)
+  }
+
+  return payload
+}
+
+function renderNotionBlock(block: NotionBlock) {
+  const text = extractPlainText(block).join(" ").replace(/\s+/g, " ").trim()
+
+  if (!text) {
+    return null
+  }
+
+  return `${block.type ?? "block"}: ${text}`
+}
+
+async function fetchNotionBlockText(accessToken: string, blockId: string, depth = 0): Promise<string[]> {
+  const lines: string[] = []
+  let cursor: string | null = null
+  let fetchedPages = 0
+
+  do {
+    const url = new URL(`https://api.notion.com/v1/blocks/${encodeURIComponent(blockId)}/children`)
+    url.searchParams.set("page_size", "30")
+
+    if (cursor) {
+      url.searchParams.set("start_cursor", cursor)
+    }
+
+    const payload = await fetchNotionJson<NotionBlockChildrenResponse>(accessToken, url.toString())
+    const blocks = payload.results || []
+
+    for (const block of blocks) {
+      const rendered = renderNotionBlock(block)
+
+      if (rendered) {
+        lines.push(rendered)
+      }
+
+      if (block.id && block.has_children && depth < 1) {
+        const childLines = await fetchNotionBlockText(accessToken, block.id, depth + 1)
+        lines.push(...childLines)
+      }
+    }
+
+    cursor = payload.has_more ? payload.next_cursor ?? null : null
+    fetchedPages += 1
+  } while (cursor && fetchedPages < 2)
+
+  return lines
+}
+
+async function renderNotionResult(accessToken: string, result: NotionSearchResult, index: number) {
   const propertyText = extractPlainText(result.properties).join(" | ").slice(0, 4000)
   const title = extractPlainText(result.title).join(" ").trim()
+  const contentText =
+    result.id && result.object === "page"
+      ? (await fetchNotionBlockText(accessToken, result.id)).join("\n").slice(0, 8000)
+      : ""
 
   return [
     `Result ${index + 1}`,
@@ -60,6 +154,7 @@ function renderNotionResult(result: NotionSearchResult, index: number) {
     title ? `Title: ${title}` : null,
     result.url ? `URL: ${result.url}` : null,
     propertyText ? `Properties: ${propertyText}` : null,
+    contentText ? `Content:\n${contentText}` : null,
   ]
     .filter((part): part is string => Boolean(part))
     .join("\n")
@@ -82,29 +177,18 @@ export async function POST(request: Request) {
       )
     }
 
-    const response = await fetch("https://api.notion.com/v1/search", {
+    const accessToken = token.access_token
+    const payload = await fetchNotionJson<NotionSearchResponse>(accessToken, "https://api.notion.com/v1/search", {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${token.access_token}`,
-        "Content-Type": "application/json",
-        "Notion-Version": "2022-06-28",
-      },
       body: JSON.stringify({
         query,
-        page_size: 20,
+        page_size: 12,
         sort: {
           direction: "descending",
           timestamp: "last_edited_time",
         },
       }),
-      cache: "no-store",
     })
-    const payload = (await response.json().catch(() => null)) as NotionSearchResponse | null
-
-    if (!response.ok || !payload) {
-      throw new Error(payload?.message || payload?.error || `Notion import failed with status ${response.status}.`)
-    }
-
     const results = payload.results || []
 
     if (results.length === 0) {
@@ -130,7 +214,8 @@ export async function POST(request: Request) {
       return NextResponse.json(sourceIntakeResponseSchema.parse(responsePayload))
     }
 
-    const sourceText = results.map(renderNotionResult).join("\n\n---\n\n")
+    const renderedResults = await Promise.all(results.map((result, index) => renderNotionResult(accessToken, result, index)))
+    const sourceText = renderedResults.join("\n\n---\n\n")
     const extraction = await extractCandidatesFromText({
       source: "notion",
       sourceRef: query,
@@ -182,12 +267,18 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Authentication required." }, { status: 401 })
     }
 
+    const message = error instanceof Error ? error.message : "Unknown Notion import error."
+    const needsAuthorization = message.startsWith("NOTION_REAUTH_REQUIRED:")
+
     return NextResponse.json(
       {
-        error: "Failed to import Notion context.",
-        details: error instanceof Error ? error.message : "Unknown Notion import error.",
+        error: needsAuthorization
+          ? message.replace("NOTION_REAUTH_REQUIRED:", "").trim()
+          : "Failed to import Notion context.",
+        details: message,
+        needsAuthorization,
       },
-      { status: 500 },
+      { status: needsAuthorization ? 409 : 500 },
     )
   }
 }

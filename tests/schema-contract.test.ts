@@ -21,6 +21,23 @@ describe("production response schemas", () => {
         tasks: [],
         events: [],
         memories: [],
+        integrations: [],
+        sourceConnectors: [
+          {
+            id: "notion",
+            status: "missing_config",
+            detail: "Notion OAuth is not configured for this app. Add NOTION_CLIENT_ID and NOTION_CLIENT_SECRET on the server before users can connect a workspace.",
+            account: null,
+            canRun: false,
+          },
+          {
+            id: "gmail",
+            status: "auth_needed",
+            detail: "Authorize Google with Gmail read-only access before scanning mail.",
+            account: null,
+            canRun: false,
+          },
+        ],
         sources: [],
         sourceFiles: [],
         sourceCandidates: [],

@@ -7,6 +7,8 @@ export type CheckInOutcome = "completed" | "missed" | "partial"
 export type CheckInEnergy = "low" | "medium" | "high"
 export type IntegrationProvider = "google" | "notion"
 export type UserIntegrationStatus = "connected" | "needs_reauth" | "disconnected" | "error"
+export type SourceConnectorId = "notion" | "gmail"
+export type SourceConnectorStatus = "ready" | "connected" | "auth_needed" | "missing_config" | "failed"
 export type SyncOrigin = "local" | "gcal"
 export type CalendarSource = "local" | "google" | "imported" | "task"
 export type CalendarSyncPreference = "active" | "pending" | "ignored"
@@ -133,6 +135,14 @@ export interface UserIntegrationRow {
   last_synced_at: string | null
   created_at: string
   updated_at: string
+}
+
+export interface SourceConnector {
+  id: SourceConnectorId
+  status: SourceConnectorStatus
+  detail: string
+  account: string | null
+  canRun: boolean
 }
 
 export interface IntegrationTokenRow {
@@ -601,6 +611,8 @@ export interface DashboardResponse {
   tasks: Task[]
   events: ScheduleEvent[]
   memories: MemoryEntrySummary[]
+  integrations: UserIntegration[]
+  sourceConnectors: SourceConnector[]
   sources: SourceSnapshotSummary[]
   sourceFiles: SourceFileSummary[]
   sourceCandidates: SourceCandidate[]

@@ -5,11 +5,13 @@ import {
   dailyPlanSchema,
   preferredCheckInModeSchema,
   scheduleEventSchema,
+  sourceConnectorSchema,
   sourceCandidateSchema,
   sourceFileSummarySchema,
   sourceSnapshotSummarySchema,
   taskSchema,
   taskStatusSchema,
+  userIntegrationSchema,
 } from "@/schemas/common"
 
 export const dashboardStatsSchema = z.object({
@@ -33,6 +35,8 @@ export const dashboardResponseSchema = z.object({
   tasks: z.array(taskSchema),
   events: z.array(scheduleEventSchema),
   memories: z.array(memoryEntrySummarySchema),
+  integrations: z.array(userIntegrationSchema),
+  sourceConnectors: z.array(sourceConnectorSchema),
   sources: z.array(sourceSnapshotSummarySchema),
   sourceFiles: z.array(sourceFileSummarySchema),
   sourceCandidates: z.array(sourceCandidateSchema),

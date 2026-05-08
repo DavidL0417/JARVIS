@@ -1,9 +1,11 @@
 "use client"
 
-import { AlertTriangle, CheckCircle2, CircleDashed, ShieldAlert } from "lucide-react"
+import { CheckCircle2, CircleDashed, ShieldAlert } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import type { DailyPlan, SourceSnapshotSummary } from "@/types"
+
+const OPTIONAL_SOURCE_LABELS = new Set(["notion", "gmail", "files"])
 
 function statusTone(status: string) {
   if (status === "fresh" || status === "connected") {
@@ -15,6 +17,16 @@ function statusTone(status: string) {
   }
 
   return "text-copper"
+}
+
+function shouldShowCoverageItem(item: DailyPlan["sourceCoverage"][number]) {
+  const label = item.label.toLowerCase()
+
+  if (!OPTIONAL_SOURCE_LABELS.has(label)) {
+    return true
+  }
+
+  return item.status !== "missing"
 }
 
 function riskTone(severity: "low" | "medium" | "high") {
@@ -36,17 +48,18 @@ export function ContextRailPanel({
   dailyPlan: DailyPlan | null
   sources: SourceSnapshotSummary[]
 }) {
-  const sourceCoverage = dailyPlan?.sourceCoverage ?? []
+  const sourceCoverage = (dailyPlan?.sourceCoverage ?? []).filter(shouldShowCoverageItem)
   const risks = dailyPlan?.riskItems ?? []
   const recentSources = sources.slice(0, 4)
+  const basisCount = sourceCoverage.length || recentSources.length
 
   return (
     <section className="flex flex-col gap-5 border-b border-rule pb-5">
       <div className="flex flex-col gap-3">
         <div className="flex items-center justify-between gap-3">
-          <h2 className="text-[13px] font-semibold uppercase text-foreground">Context</h2>
+          <h2 className="text-[13px] font-semibold uppercase text-foreground">Plan Basis</h2>
           <Badge variant="outline" className="rounded-sm">
-            {sourceCoverage.length || recentSources.length}
+            {basisCount}
           </Badge>
         </div>
 
@@ -85,7 +98,7 @@ export function ContextRailPanel({
             ))}
           </div>
         ) : (
-          <p className="text-[12px] leading-5 text-muted-foreground">No source snapshots yet.</p>
+          <p className="text-[12px] leading-5 text-muted-foreground">No plan basis recorded.</p>
         )}
       </div>
 
@@ -115,10 +128,7 @@ export function ContextRailPanel({
             ))}
           </div>
         ) : (
-          <div className="flex items-start gap-2 text-[12px] leading-5 text-muted-foreground">
-            <AlertTriangle className="mt-0.5 h-3.5 w-3.5" aria-hidden="true" />
-            <span>No plan risks recorded.</span>
-          </div>
+          <p className="text-[12px] leading-5 text-muted-foreground">No plan risks recorded.</p>
         )}
       </div>
     </section>

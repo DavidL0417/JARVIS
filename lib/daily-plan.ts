@@ -291,8 +291,10 @@ function deriveSourceCoverage(input: {
 
   const googleIntegration = input.integrations.find((integration) => integration.provider === "google")
   const notionIntegration = input.integrations.find((integration) => integration.provider === "notion")
-
-  return [
+  const notionSnapshot = latestBySource.get("notion")
+  const gmailSnapshot = latestBySource.get("gmail")
+  const fileSnapshot = latestBySource.get("manual")
+  const coverage: SourceCoverageItem[] = [
     {
       label: "Google Calendar",
       status: googleIntegration?.status === "connected" ? "connected" : latestBySource.get("google_calendar")?.freshness ?? "missing",
@@ -300,24 +302,35 @@ function deriveSourceCoverage(input: {
         ? "Connected for fixed commitments."
         : latestBySource.get("google_calendar")?.summary ?? "Not connected yet.",
     },
-    {
+  ]
+
+  if (notionIntegration?.status === "connected" || notionSnapshot) {
+    coverage.push({
       label: "Notion",
-      status: notionIntegration?.status === "connected" ? "connected" : latestBySource.get("notion")?.freshness ?? "missing",
+      status: notionIntegration?.status === "connected" ? "connected" : notionSnapshot?.freshness ?? "missing",
       detail: notionIntegration?.status === "connected"
         ? "Connected for workspace import."
-        : latestBySource.get("notion")?.summary ?? "No Notion import yet.",
-    },
-    {
+        : notionSnapshot?.summary ?? "No Notion import yet.",
+    })
+  }
+
+  if (gmailSnapshot) {
+    coverage.push({
       label: "Gmail",
-      status: latestBySource.get("gmail")?.freshness ?? "missing",
-      detail: latestBySource.get("gmail")?.summary ?? "No Gmail deadline scan yet.",
-    },
-    {
+      status: gmailSnapshot.freshness,
+      detail: gmailSnapshot.summary,
+    })
+  }
+
+  if (input.sourceFileCount > 0 || fileSnapshot) {
+    coverage.push({
       label: "Files",
-      status: input.sourceFileCount > 0 ? "connected" : latestBySource.get("manual")?.freshness ?? "missing",
-      detail: input.sourceFileCount > 0 ? `${input.sourceFileCount} original source file${input.sourceFileCount === 1 ? "" : "s"} stored.` : "No syllabi or screenshots uploaded.",
-    },
-  ]
+      status: input.sourceFileCount > 0 ? "connected" : fileSnapshot?.freshness ?? "missing",
+      detail: input.sourceFileCount > 0 ? `${input.sourceFileCount} original source file${input.sourceFileCount === 1 ? "" : "s"} stored.` : fileSnapshot?.summary ?? "No source files uploaded.",
+    })
+  }
+
+  return coverage
 }
 
 async function loadScheduleContext(input: {
