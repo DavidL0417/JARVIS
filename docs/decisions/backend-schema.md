@@ -17,7 +17,7 @@
 
 ## Production V1 Tables
 
-- Public: `profiles`, `preferences`, `calendars`, `tasks`, `schedule_events`, `checkins`, `integrations`, `assistant_threads`, `assistant_messages`, `assistant_tool_runs`, `memory_items`, `source_snapshots`, `change_logs`.
+- Public: `profiles`, `preferences`, `calendars`, `tasks`, `schedule_events`, `checkins`, `integrations`, `assistant_threads`, `assistant_messages`, `assistant_tool_runs`, `memory_items`, `source_snapshots`, `source_files`, `source_candidates`, `daily_plans`, `change_logs`.
 - Private: `app_private.integration_tokens`.
 
 ## Calendar Source Of Truth
@@ -26,3 +26,10 @@
 - Imported Google events are mirrored into `schedule_events`.
 - JARVIS-created task/focus blocks are persisted first, then synced outward when Google is connected.
 - Google OAuth provider tokens are captured from the callback exchange result immediately; sync responses expose an explicit authorization-required state instead of a generic failure.
+
+## Source Intake And Plans
+
+- Original uploaded context lives in the private Supabase Storage bucket `source-originals`; table rows in `source_files` point to those objects and carry processing status.
+- Extracted source facts enter `source_candidates` first. The app may approve candidates into tasks or memory, but it should not silently mutate the scheduler from inferred source text.
+- `daily_plans` records the current command-deck plan: horizon, summary, now item, next items, risk items, source coverage, tradeoffs, model, and command.
+- Planner-created task blocks may reference `daily_plans.id` through `tasks.plan_id` and `schedule_events.plan_id`.

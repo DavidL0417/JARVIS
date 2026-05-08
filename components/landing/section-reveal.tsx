@@ -26,6 +26,17 @@ export function SectionReveal({
     const node = ref.current
     if (!node) return
 
+    const isNearViewport = () => {
+      const rect = node.getBoundingClientRect()
+      return rect.top < window.innerHeight * 0.95 && rect.bottom > 0
+    }
+
+    const revealIfNearViewport = () => {
+      if (document.visibilityState === "visible" && isNearViewport()) {
+        setVisible(true)
+      }
+    }
+
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches
     if (reduced || !("IntersectionObserver" in window)) {
       setVisible(true)
@@ -46,9 +57,14 @@ export function SectionReveal({
     )
 
     observer.observe(node)
+    window.addEventListener("pageshow", revealIfNearViewport)
+    document.addEventListener("visibilitychange", revealIfNearViewport)
+    window.requestAnimationFrame(revealIfNearViewport)
 
     return () => {
       observer.disconnect()
+      window.removeEventListener("pageshow", revealIfNearViewport)
+      document.removeEventListener("visibilitychange", revealIfNearViewport)
     }
   }, [oneShot])
 

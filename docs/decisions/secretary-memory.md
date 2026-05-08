@@ -25,5 +25,13 @@ Scheduler and Master Input context should combine:
 - active task context,
 - current mirrored calendar events,
 - recent source snapshots,
+- pending source candidates and failed source refreshes,
+- the latest daily plan when one exists,
 - recent observations/change logs,
 - relevant memory items.
+
+## Review Boundary
+
+- Source extraction creates candidates, not automatic truth.
+- Approving task/deadline/event candidates may create scheduler tasks; approving preference/routine/note candidates may create memory.
+- Failed extraction or source refresh state should remain visible in source snapshots and daily-plan risk, not disappear behind an empty queue.

@@ -120,6 +120,7 @@ function mapGoogleEventToScheduleEvent(
     isCheckedIn: true,
     allDay: isAllDay,
     calendarId: toCalendarKey(googleCalendarId),
+    planId: null,
   }
 }
 

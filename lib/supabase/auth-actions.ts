@@ -6,6 +6,7 @@ import { tryCreateSupabaseBrowserClient } from "@/lib/supabase/client"
 const GOOGLE_CALENDAR_SCOPES = [
   "https://www.googleapis.com/auth/calendar.readonly",
   "https://www.googleapis.com/auth/calendar.events",
+  "https://www.googleapis.com/auth/gmail.readonly",
 ].join(" ")
 
 export class GoogleCalendarAuthorizationError extends Error {

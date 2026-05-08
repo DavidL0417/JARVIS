@@ -24,6 +24,9 @@ function buildTaskInsert(input: CreateTaskRequest, userId: string) {
     allDay: input.allDay ?? false,
     calendarId: input.calendarId ?? TASKS_CALENDAR_ID,
     tags: input.tags ?? [],
+    sourceSnapshotId: input.sourceSnapshotId ?? null,
+    sourceCandidateId: input.sourceCandidateId ?? null,
+    planId: input.planId ?? null,
   }
 
   return mapTaskToInsert(task)

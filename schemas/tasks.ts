@@ -19,6 +19,9 @@ export const createTaskRequestSchema = z.object({
   calendarId: z.string().trim().min(1).nullable().optional(),
   tags: z.array(taskTagSchema).optional().default([]),
   scheduledFor: z.string().datetime().nullable().optional(),
+  sourceSnapshotId: z.string().uuid().nullable().optional(),
+  sourceCandidateId: z.string().uuid().nullable().optional(),
+  planId: z.string().uuid().nullable().optional(),
 })
 
 export const updateTaskRequestSchema = z
@@ -34,6 +37,9 @@ export const updateTaskRequestSchema = z
     calendarId: z.string().trim().min(1).nullable().optional(),
     tags: z.array(taskTagSchema).optional(),
     scheduledFor: z.string().datetime().nullable().optional(),
+    sourceSnapshotId: z.string().uuid().nullable().optional(),
+    sourceCandidateId: z.string().uuid().nullable().optional(),
+    planId: z.string().uuid().nullable().optional(),
   })
   .refine((value) => Object.keys(value).length > 0, {
     message: "At least one task field must be provided.",

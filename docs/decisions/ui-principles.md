@@ -23,6 +23,8 @@
 ## Layout Rules
 
 - The first screen is the product, not a landing page.
-- Main surface: schedule and current operational context.
-- Secondary surfaces: command input, task queue, memory/source status, sync state.
+- Main surface: daily command strip plus schedule.
+- Secondary surfaces: source intake, review ledger, risk/source context, command input, task queue, sync state.
+- The command strip should foreground Now, Why, Next, and replanning in one glance.
+- The review ledger is the approval boundary for extracted source facts.
 - Controls should keep stable dimensions to avoid layout shift.

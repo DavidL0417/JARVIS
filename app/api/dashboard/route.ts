@@ -1,11 +1,17 @@
 import { NextResponse } from "next/server"
 
 import {
+  DAILY_PLAN_SELECT,
   getCheckInModeFromCount,
+  mapDailyPlanRowToDailyPlan,
   mapMemoryItemRowToSummary,
   mapScheduleEventRowToScheduleEvent,
+  mapSourceCandidateRowToCandidate,
+  mapSourceFileRowToSummary,
   mapSourceSnapshotRowToSummary,
   mapTaskRowToTask,
+  SOURCE_CANDIDATE_SELECT,
+  SOURCE_FILE_SELECT,
   MEMORY_ITEM_SELECT,
   SCHEDULE_EVENT_SELECT,
   SOURCE_SNAPSHOT_SELECT,
@@ -18,8 +24,11 @@ import {
 import { dashboardResponseSchema } from "@/schemas/dashboard"
 import type {
   DashboardResponse,
+  DailyPlanRow,
   MemoryItemRow,
   ScheduleEventRow,
+  SourceCandidateRow,
+  SourceFileRow,
   SourceSnapshotRow,
   Task,
   TaskRow,
@@ -53,7 +62,16 @@ export async function GET() {
   try {
     const { adminClient, user } = await requireAuthenticatedUser()
 
-    const [tasksResult, eventsResult, checkinsResult, memoryResult, sourceResult] = await Promise.all([
+    const [
+      tasksResult,
+      eventsResult,
+      checkinsResult,
+      memoryResult,
+      sourceResult,
+      sourceFileResult,
+      sourceCandidateResult,
+      dailyPlanResult,
+    ] = await Promise.all([
       adminClient
         .from("tasks")
         .select(TASK_SELECT)
@@ -78,6 +96,26 @@ export async function GET() {
         .eq("user_id", user.id)
         .order("captured_at", { ascending: false })
         .limit(8),
+      adminClient
+        .from("source_files")
+        .select(SOURCE_FILE_SELECT)
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false })
+        .limit(8),
+      adminClient
+        .from("source_candidates")
+        .select(SOURCE_CANDIDATE_SELECT)
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false })
+        .limit(12),
+      adminClient
+        .from("daily_plans")
+        .select(DAILY_PLAN_SELECT)
+        .eq("user_id", user.id)
+        .neq("status", "superseded")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle<DailyPlanRow>(),
     ])
 
     if (
@@ -85,7 +123,10 @@ export async function GET() {
       eventsResult.error ||
       checkinsResult.error ||
       memoryResult.error ||
-      sourceResult.error
+      sourceResult.error ||
+      sourceFileResult.error ||
+      sourceCandidateResult.error ||
+      dailyPlanResult.error
     ) {
       throw new Error(
         tasksResult.error?.message ||
@@ -93,6 +134,9 @@ export async function GET() {
           checkinsResult.error?.message ||
           memoryResult.error?.message ||
           sourceResult.error?.message ||
+          sourceFileResult.error?.message ||
+          sourceCandidateResult.error?.message ||
+          dailyPlanResult.error?.message ||
           "Failed to load dashboard data from Supabase.",
       )
     }
@@ -103,6 +147,11 @@ export async function GET() {
       .sort((left, right) => new Date(left.start).getTime() - new Date(right.start).getTime())
     const memories = (memoryResult.data || []).map((row) => mapMemoryItemRowToSummary(row as MemoryItemRow))
     const sources = (sourceResult.data || []).map((row) => mapSourceSnapshotRowToSummary(row as SourceSnapshotRow))
+    const sourceFiles = (sourceFileResult.data || []).map((row) => mapSourceFileRowToSummary(row as SourceFileRow))
+    const sourceCandidates = (sourceCandidateResult.data || []).map((row) =>
+      mapSourceCandidateRowToCandidate(row as SourceCandidateRow),
+    )
+    const dailyPlan = dailyPlanResult.data ? mapDailyPlanRowToDailyPlan(dailyPlanResult.data) : null
     const scheduledTaskIds = new Set(
       (eventsResult.data || [])
         .map((event) => (event as { task_id: string | null }).task_id)
@@ -143,6 +192,9 @@ export async function GET() {
       events,
       memories,
       sources,
+      sourceFiles,
+      sourceCandidates,
+      dailyPlan,
     }
 
     const parsedPayload = dashboardResponseSchema.safeParse(dashboardPayload)

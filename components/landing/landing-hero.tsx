@@ -18,19 +18,35 @@ export function LandingHero() {
     ) as HTMLElement[]
     const keyword = keywordRef.current
 
-    if (reduced) {
+    const revealNow = () => {
       targets.forEach((el) => {
         el.style.opacity = "1"
         el.style.transform = "none"
       })
       if (keyword) {
-        keyword.style.transform = "none"
+        keyword.style.clipPath = "inset(0 0% 0 0)"
         keyword.style.opacity = "1"
+        keyword.style.transform = "none"
       }
-      return
+    }
+
+    const revealWhenVisible = () => {
+      if (document.visibilityState === "visible") revealNow()
+    }
+
+    window.addEventListener("pageshow", revealNow)
+    document.addEventListener("visibilitychange", revealWhenVisible)
+
+    if (reduced) {
+      revealNow()
+      return () => {
+        window.removeEventListener("pageshow", revealNow)
+        document.removeEventListener("visibilitychange", revealWhenVisible)
+      }
     }
 
     let cancelled = false
+    const fallback = window.setTimeout(revealNow, 1800)
     void (async () => {
       const { eases, stagger, createTimeline } = await import("animejs")
       if (cancelled) return
@@ -64,6 +80,9 @@ export function LandingHero() {
 
     return () => {
       cancelled = true
+      window.clearTimeout(fallback)
+      window.removeEventListener("pageshow", revealNow)
+      document.removeEventListener("visibilitychange", revealWhenVisible)
     }
   }, [])
 

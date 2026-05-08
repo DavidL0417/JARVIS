@@ -198,6 +198,7 @@ export async function replanSchedule(input: ReplanRequest) {
       isCheckedIn: event.isCheckedIn ?? false,
       allDay: event.allDay ?? false,
       calendarId: event.calendarId ?? null,
+      planId: event.planId ?? null,
     })),
   })
 
@@ -512,6 +513,7 @@ function materializeTaskPlacements(
       isCheckedIn: false,
       allDay: task.allDay,
       calendarId: DEFAULT_TASKS_CALENDAR_ID,
+      planId: null,
     }
   })
 }
@@ -662,6 +664,7 @@ function taskToFixedEvent(
     isCheckedIn: false,
     allDay: task.allDay,
     calendarId: DEFAULT_TASKS_CALENDAR_ID,
+    planId: task.planId,
   }
 }
 

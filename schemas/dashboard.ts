@@ -2,8 +2,11 @@ import { z } from "zod"
 
 import {
   memoryEntrySummarySchema,
+  dailyPlanSchema,
   preferredCheckInModeSchema,
   scheduleEventSchema,
+  sourceCandidateSchema,
+  sourceFileSummarySchema,
   sourceSnapshotSummarySchema,
   taskSchema,
   taskStatusSchema,
@@ -31,6 +34,9 @@ export const dashboardResponseSchema = z.object({
   events: z.array(scheduleEventSchema),
   memories: z.array(memoryEntrySummarySchema),
   sources: z.array(sourceSnapshotSummarySchema),
+  sourceFiles: z.array(sourceFileSummarySchema),
+  sourceCandidates: z.array(sourceCandidateSchema),
+  dailyPlan: dailyPlanSchema.nullable(),
 })
 
 export type DashboardResponseInput = z.infer<typeof dashboardResponseSchema>

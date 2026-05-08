@@ -8,7 +8,9 @@ import {
   Brain,
   CalendarDays,
   Database,
+  Inbox,
   Loader2,
+  MessageSquare,
   PanelLeft,
   RefreshCw,
   Sparkles,
@@ -23,9 +25,15 @@ import {
   toSidebarCalendar,
   type Calendar,
 } from "@/components/dashboard/calendars-sidebar"
-import { MasterInput } from "@/components/dashboard/master-input"
+import { ContextRailPanel } from "@/components/dashboard/context-rail-panel"
+import { DailyCommandStrip } from "@/components/dashboard/daily-command-strip"
+import { RailSheet } from "@/components/dashboard/rail-sheet"
+import { ReviewLedgerPanel } from "@/components/dashboard/review-ledger-panel"
+import { SecretaryOverlay } from "@/components/dashboard/secretary-overlay"
+import { SourceSetupPanel } from "@/components/dashboard/source-setup-panel"
 import { TaskManager } from "@/components/dashboard/task-manager"
 import { Button } from "@/components/ui/button"
+import { Kbd } from "@/components/ui/kbd"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import type {
   CalendarListResponse,
@@ -34,10 +42,10 @@ import type {
   DeleteTaskResponse,
   ScheduleEvent,
   ScheduleEventInput,
-  ScheduleResponse,
   TaskMutationResponse,
   UpdateTaskRequest,
 } from "@/types"
+import type { DailyPlanResponse } from "@/schemas/daily-plan"
 
 const ScheduleView = dynamic(
   () => import("@/components/dashboard/schedule-view").then((module) => module.ScheduleView),
@@ -103,6 +111,7 @@ function toScheduleEventInput(event: ScheduleEvent): ScheduleEventInput {
     isCheckedIn: event.isCheckedIn,
     allDay: event.allDay,
     calendarId: event.calendarId,
+    planId: event.planId,
   }
 }
 
@@ -183,6 +192,7 @@ function RailButton({
   disabled,
   active,
   spinning,
+  badge,
 }: {
   label: string
   icon: LucideIcon
@@ -190,6 +200,7 @@ function RailButton({
   disabled?: boolean
   active?: boolean
   spinning?: boolean
+  badge?: boolean
 }) {
   return (
     <Tooltip>
@@ -199,7 +210,7 @@ function RailButton({
           aria-label={label}
           onClick={onClick}
           disabled={disabled}
-          className={`group flex h-10 w-10 items-center justify-center rounded-sm transition-colors disabled:opacity-40 ${
+          className={`group relative flex h-10 w-10 items-center justify-center rounded-sm transition-colors disabled:opacity-40 ${
             active
               ? "bg-copper-soft text-copper"
               : "text-muted-foreground hover:bg-accent hover:text-foreground"
@@ -210,6 +221,12 @@ function RailButton({
           ) : (
             <Icon className="h-[18px] w-[18px]" aria-hidden="true" strokeWidth={1.75} />
           )}
+          {badge ? (
+            <span
+              className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-copper"
+              aria-hidden="true"
+            />
+          ) : null}
         </button>
       </TooltipTrigger>
       <TooltipContent side="right" sideOffset={6} className="text-[11px]">{label}</TooltipContent>
@@ -221,6 +238,9 @@ export default function DashboardPage() {
   const [viewState, setViewState] = useState<DashboardViewState>({ status: "loading" })
   const [calendars, setCalendars] = useState<Calendar[]>([])
   const [calendarsSidebarOpen, setCalendarsSidebarOpen] = useState(false)
+  const [sourcesSheetOpen, setSourcesSheetOpen] = useState(false)
+  const [inboxSheetOpen, setInboxSheetOpen] = useState(false)
+  const [secretaryOpen, setSecretaryOpen] = useState(false)
   const [plannerStatus, setPlannerStatus] = useState<PlannerUiStatus>("Idle")
   const [plannerSummary, setPlannerSummary] = useState("")
   const [isScheduling, setIsScheduling] = useState(false)
@@ -285,6 +305,18 @@ export default function DashboardPage() {
     return () => window.removeEventListener(DASHBOARD_REFRESH_EVENT, handleRefresh)
   }, [loadDashboard])
 
+  useEffect(() => {
+    const handleKey = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault()
+        setSecretaryOpen((current) => !current)
+      }
+    }
+
+    window.addEventListener("keydown", handleKey)
+    return () => window.removeEventListener("keydown", handleKey)
+  }, [])
+
   async function handleCreateTask(input: CreateTaskRequest) {
     setTaskErrorMessage("")
 
@@ -334,7 +366,16 @@ export default function DashboardPage() {
     })
   }
 
-  async function handleSchedule(taskIds: string[] = []) {
+  function buildHardEventsForPlanning(taskIds: string[]) {
+    const selectedTaskIds = new Set(taskIds)
+
+    return events
+      .filter((event) => !event.taskId || !selectedTaskIds.has(event.taskId))
+      .filter((event) => !visibleCalendarIds || !event.calendarId || visibleCalendarIds.includes(event.calendarId))
+      .map(toScheduleEventInput)
+  }
+
+  async function handleDailyPlan(command?: string) {
     if (isScheduling || !dashboard) {
       return
     }
@@ -344,27 +385,23 @@ export default function DashboardPage() {
     setPlannerSummary("")
 
     try {
-      const selectedTaskIds = new Set(taskIds)
-      const hardEvents = events
-        .filter((event) => !event.taskId || !selectedTaskIds.has(event.taskId))
-        .filter((event) => !visibleCalendarIds || !event.calendarId || visibleCalendarIds.includes(event.calendarId))
-        .map(toScheduleEventInput)
-
-      const scheduleResponse = await fetchJson<ScheduleResponse>("/api/schedule", "Scheduling failed.", {
+      const taskIds = dashboard.tasks.map((task) => task.id)
+      const endpoint = command?.trim() ? "/api/daily-plan/replan" : "/api/daily-plan/build"
+      const planResponse = await fetchJson<DailyPlanResponse>(endpoint, "Daily planning failed.", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          taskIds,
-          hardEvents,
+          command: command?.trim() || null,
+          hardEvents: buildHardEventsForPlanning(taskIds),
         }),
       })
 
-      setPlannerStatus(scheduleResponse.schedule.plannerStatus === "ready" ? "Ready" : "Idle")
-      setPlannerSummary(scheduleResponse.schedule.summary)
+      setPlannerStatus("Ready")
+      setPlannerSummary(planResponse.dailyPlan.summary)
       await loadDashboard(true)
     } catch (error) {
       setPlannerStatus("Error")
-      setPlannerSummary(error instanceof Error ? error.message : "Scheduling failed.")
+      setPlannerSummary(error instanceof Error ? error.message : "Daily planning failed.")
     } finally {
       setIsScheduling(false)
     }
@@ -411,7 +448,17 @@ export default function DashboardPage() {
     const dashboardData = viewState.dashboard
 
     return (
-      <div className="flex min-h-0 flex-1 flex-col">
+      <div className="flex min-h-0 flex-1 flex-col gap-5">
+        <DailyCommandStrip
+          dailyPlan={dashboardData.dailyPlan}
+          isPlanning={isScheduling}
+          plannerStatus={plannerStatus}
+          plannerSummary={plannerSummary}
+          onBuild={() => void handleDailyPlan()}
+          onReplan={async (command) => {
+            await handleDailyPlan(command)
+          }}
+        />
         <div className="grid min-h-0 flex-1 grid-cols-1 gap-0 xl:grid-cols-[minmax(0,1fr)_380px] xl:divide-x xl:divide-rule">
           <div className="min-h-[560px] xl:min-h-0 xl:pr-6">
             <ScheduleView
@@ -422,13 +469,13 @@ export default function DashboardPage() {
               onToggleTaskComplete={handleToggleTaskComplete}
               plannerStatus={plannerStatus}
               plannerSummary={plannerSummary}
-              onSchedule={() => handleSchedule()}
+              onSchedule={() => void handleDailyPlan()}
               isScheduling={isScheduling}
             />
           </div>
 
-          <div className="rail-scroll flex min-h-0 min-w-0 flex-col overflow-y-auto pb-2 pt-6 xl:pb-2 xl:pl-6 xl:pr-1 xl:pt-0">
-            <MasterInput tasks={dashboardData.tasks} />
+          <div className="rail-scroll flex min-h-0 min-w-0 flex-col gap-5 overflow-y-auto pb-2 pt-6 xl:pb-2 xl:pl-6 xl:pr-1 xl:pt-0">
+            <ContextRailPanel dailyPlan={dashboardData.dailyPlan} sources={dashboardData.sources} />
             <TaskManager
               mode="all"
               calendars={calendars}
@@ -447,6 +494,7 @@ export default function DashboardPage() {
   }
 
   const stats = dashboard?.stats
+  const pendingCandidates = dashboard?.sourceCandidates.filter((candidate) => candidate.status === "pending").length ?? 0
 
   return (
     <TooltipProvider delayDuration={250} skipDelayDuration={400}>
@@ -460,6 +508,19 @@ export default function DashboardPage() {
               active={calendarsSidebarOpen}
             />
             <RailButton
+              label="Sources"
+              icon={Database}
+              onClick={() => setSourcesSheetOpen(true)}
+              active={sourcesSheetOpen}
+            />
+            <RailButton
+              label={pendingCandidates > 0 ? `Inbox · ${pendingCandidates} pending` : "Inbox"}
+              icon={Inbox}
+              onClick={() => setInboxSheetOpen(true)}
+              active={inboxSheetOpen}
+              badge={pendingCandidates > 0}
+            />
+            <RailButton
               label="Refresh"
               icon={RefreshCw}
               onClick={() => loadDashboard(true)}
@@ -467,9 +528,9 @@ export default function DashboardPage() {
               spinning={isRefreshing}
             />
             <RailButton
-              label="Schedule"
+              label="Build Today"
               icon={CalendarDays}
-              onClick={() => handleSchedule()}
+              onClick={() => void handleDailyPlan()}
               disabled={isScheduling || !dashboard}
               spinning={isScheduling}
             />
@@ -497,6 +558,32 @@ export default function DashboardPage() {
                   </div>
                 ) : null}
                 <span className="hidden h-5 w-px bg-rule md:block" />
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      onClick={() => setSecretaryOpen(true)}
+                      className="hidden h-8 items-center gap-2 rounded-sm border border-rule bg-secondary/30 px-2.5 text-[11px] uppercase text-muted-foreground transition-colors hover:border-rule-strong hover:text-foreground md:inline-flex"
+                      aria-label="Open secretary"
+                    >
+                      <MessageSquare className="h-3.5 w-3.5 text-copper" aria-hidden="true" strokeWidth={1.75} />
+                      <span className="num font-medium">Secretary</span>
+                      <Kbd className="ml-1 h-4 px-1 text-[10px]">⌘K</Kbd>
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent sideOffset={6} className="text-[11px]">
+                    Talk to JARVIS
+                  </TooltipContent>
+                </Tooltip>
+                <button
+                  type="button"
+                  onClick={() => setSecretaryOpen(true)}
+                  aria-label="Open secretary"
+                  className="flex h-9 w-9 items-center justify-center rounded-sm text-copper hover:bg-accent md:hidden"
+                >
+                  <MessageSquare className="h-[18px] w-[18px]" aria-hidden="true" />
+                </button>
+                <span className="hidden h-5 w-px bg-rule md:block" />
                 <LiveClock />
                 <button
                   type="button"
@@ -519,6 +606,42 @@ export default function DashboardPage() {
           onClose={() => setCalendarsSidebarOpen(false)}
           calendars={calendars}
           onCalendarsChange={setCalendars}
+        />
+
+        <RailSheet
+          isOpen={sourcesSheetOpen}
+          onClose={() => setSourcesSheetOpen(false)}
+          title="Sources"
+          width={420}
+        >
+          {dashboard ? (
+            <SourceSetupPanel
+              sources={dashboard.sources}
+              sourceFiles={dashboard.sourceFiles}
+              sourceCandidates={dashboard.sourceCandidates}
+              onSourcesChanged={() => loadDashboard(true)}
+            />
+          ) : null}
+        </RailSheet>
+
+        <RailSheet
+          isOpen={inboxSheetOpen}
+          onClose={() => setInboxSheetOpen(false)}
+          title="Inbox"
+          width={420}
+        >
+          {dashboard ? (
+            <ReviewLedgerPanel
+              candidates={dashboard.sourceCandidates}
+              onCandidatesChanged={() => loadDashboard(true)}
+            />
+          ) : null}
+        </RailSheet>
+
+        <SecretaryOverlay
+          isOpen={secretaryOpen}
+          onOpenChange={setSecretaryOpen}
+          tasks={dashboard?.tasks ?? []}
         />
       </main>
     </TooltipProvider>

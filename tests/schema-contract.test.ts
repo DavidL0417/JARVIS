@@ -22,6 +22,9 @@ describe("production response schemas", () => {
         events: [],
         memories: [],
         sources: [],
+        sourceFiles: [],
+        sourceCandidates: [],
+        dailyPlan: null,
       }),
     ).toMatchObject({
       stats: {

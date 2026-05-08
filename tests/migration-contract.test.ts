@@ -10,6 +10,10 @@ const googleTokenRpcMigration = readFileSync(
   "supabase/migrations/20260506042431_service_role_google_token_rpc.sql",
   "utf8",
 )
+const dailyCommandDeckMigration = readFileSync(
+  "supabase/migrations/20260508011003_daily_command_deck_context.sql",
+  "utf8",
+)
 
 describe("production Supabase migration", () => {
   it("keeps OAuth tokens outside public tables", () => {
@@ -36,6 +40,10 @@ describe("production Supabase migration", () => {
     ]) {
       expect(migration).toContain(`alter table public.${table} enable row level security;`)
     }
+
+    for (const table of ["source_files", "source_candidates", "daily_plans"]) {
+      expect(dailyCommandDeckMigration).toContain(`alter table public.${table} enable row level security;`)
+    }
   })
 
   it("keeps browser clients behind backend routes instead of direct table grants", () => {
@@ -52,5 +60,20 @@ describe("production Supabase migration", () => {
     expect(googleTokenRpcMigration).toContain(
       "grant execute on function public.upsert_google_integration_token(uuid, text, text, timestamptz, text) to service_role;",
     )
+  })
+
+  it("stores source originals privately and exposes only user-owned metadata", () => {
+    expect(dailyCommandDeckMigration).toContain("insert into storage.buckets")
+    expect(dailyCommandDeckMigration).toContain("'source-originals'")
+    expect(dailyCommandDeckMigration).toContain("public = false")
+    expect(dailyCommandDeckMigration).toContain("create policy source_originals_select_own on storage.objects")
+    expect(dailyCommandDeckMigration).toContain("create table public.source_candidates")
+    expect(dailyCommandDeckMigration).toContain("create table public.daily_plans")
+  })
+
+  it("allows Notion tokens without exposing the private token table", () => {
+    expect(dailyCommandDeckMigration).toContain("check (provider in ('google', 'notion'))")
+    expect(dailyCommandDeckMigration).toContain("revoke all on function public.get_integration_token(uuid, text) from public, anon, authenticated;")
+    expect(dailyCommandDeckMigration).toContain("grant execute on function public.upsert_integration_token(uuid, text, text, text, timestamptz, text) to service_role;")
   })
 })

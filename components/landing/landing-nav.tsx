@@ -30,6 +30,7 @@ export function LandingNav() {
     >
       <a
         href="#top"
+        data-bloom-shield
         className="landing-display group inline-flex items-baseline gap-0.5 text-[16px] font-semibold leading-none text-foreground"
         style={{ letterSpacing: "-0.03em" }}
       >
@@ -45,6 +46,7 @@ export function LandingNav() {
         <a
           ref={ctaRef}
           href="#waitlist"
+          data-bloom-shield
           className="inline-flex h-8 items-center rounded-[2px] bg-[var(--copper)] px-3 text-[12px] font-medium tracking-tight text-[var(--primary-foreground)] shadow-[0_4px_18px_-6px_oklch(0.74_0.14_42_/_0.55)] transition-shadow hover:shadow-[0_6px_22px_-6px_oklch(0.74_0.14_42_/_0.7)]"
           style={{ willChange: "transform" }}
         >

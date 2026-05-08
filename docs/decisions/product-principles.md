@@ -16,5 +16,10 @@ JARVIS is a secretary-second-brain scheduler. It should not merely place blocks 
 ## Integration Direction
 
 - Google Calendar is implemented as a DB mirror.
-- Notion, Gmail, and CalDAV-style sources are modeled through source snapshots for future ingestion.
+- Notion and Gmail ingestion should create source snapshots and reviewable source candidates before changing the schedule.
+- Uploaded syllabi/screenshots/text are first-class context sources: preserve the original file, extract candidate scheduling facts, then ask for approval.
+- The daily command deck should answer "what now, why, what next, what is at risk" from the latest plan rather than asking the user to maintain a planning system manually.
+- Default planning horizon is today plus the next seven days.
+- Calendar writes remain in-app-first; outward sync is a separate approved/explicit action path.
+- CalDAV-style sources are modeled through source snapshots for future ingestion.
 - Source read failures must be surfaced clearly and must not be replaced with guessed content.
