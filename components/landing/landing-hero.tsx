@@ -91,6 +91,7 @@ export function LandingHero() {
           Sit down and know{" "}
           <span
             ref={keywordRef}
+            data-bloom-dim
             className="landing-keyword opacity-0"
             style={{ clipPath: "inset(0 100% 0 0)" }}
           >

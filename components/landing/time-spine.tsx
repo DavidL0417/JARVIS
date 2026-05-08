@@ -35,27 +35,31 @@ export function TimeSpine() {
     const measure = () => {
       const max = document.documentElement.scrollHeight
       if (max <= 0) return
-      const found: SectionMap[] = []
       const candidates = document.querySelectorAll<HTMLElement>("[data-spine-section]")
-      candidates.forEach((el) => {
-        const rect = el.getBoundingClientRect()
-        const top = rect.top + window.scrollY
-        const height = rect.height
-        found.push({
-          id: el.id || el.dataset.spineSection || `section-${found.length}`,
-          index: el.dataset.spineIndex || "",
-          label: el.dataset.spineLabel || "",
-          topRatio: top / max,
-          heightRatio: height / max,
+      const measured = Array.from(candidates)
+        .map((el, index) => {
+          const rect = el.getBoundingClientRect()
+          const top = rect.top + window.scrollY
+          return {
+            id: el.id || el.dataset.spineSection || `section-${index}`,
+            index: el.dataset.spineIndex || "",
+            label: el.dataset.spineLabel || "",
+            top,
+          }
         })
-      })
+        .sort((a, b) => a.top - b.top)
 
-      // Extend the last section to cover any trailing space (footer, padding)
-      // so the spine fills to its bottom edge instead of leaving dead space.
-      if (found.length > 0) {
-        const last = found[found.length - 1]
-        last.heightRatio = Math.max(last.heightRatio, 1 - last.topRatio)
-      }
+      const found: SectionMap[] = measured.map((section, index) => {
+        const blockTop = index === 0 ? 0 : section.top
+        const nextTop = measured[index + 1]?.top ?? max
+        return {
+          id: section.id,
+          index: section.index,
+          label: section.label,
+          topRatio: blockTop / max,
+          heightRatio: Math.max(0, nextTop - blockTop) / max,
+        }
+      })
 
       setSections(found)
     }

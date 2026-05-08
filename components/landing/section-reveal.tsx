@@ -59,8 +59,9 @@ export function SectionReveal({
       data-visible={visible}
       style={{
         opacity: visible ? 1 : 0,
-        transform: visible ? "translateY(0)" : `translateY(${oneShot ? 24 : 40}px)`,
-        transition: "opacity 520ms ease-out, transform 620ms cubic-bezier(0.22, 1, 0.36, 1)",
+        transform: visible ? "translateY(0)" : `translateY(${oneShot ? 28 : 96}px)`,
+        transition:
+          "opacity 700ms cubic-bezier(0.22, 1, 0.36, 1), transform 920ms cubic-bezier(0.16, 1, 0.3, 1)",
         willChange: visible ? "auto" : "opacity, transform",
       }}
     >

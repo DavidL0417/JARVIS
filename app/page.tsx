@@ -1,6 +1,6 @@
 import type { Metadata } from "next"
 
-import { CursorAmbient } from "@/components/landing/cursor-ambient"
+import { CursorSpotlight } from "@/components/landing/cursor-spotlight"
 import { DashboardPreview } from "@/components/landing/dashboard-preview"
 import { LandingFooter } from "@/components/landing/landing-footer"
 import { LandingHero } from "@/components/landing/landing-hero"
@@ -76,7 +76,7 @@ export default function LandingPage() {
       }
     >
       <span aria-hidden="true" className="landing-grain" />
-      <CursorAmbient />
+      <CursorSpotlight />
 
       <TimeSpine />
       <LandingNav />
@@ -125,7 +125,7 @@ export default function LandingPage() {
               data-spine-section="problem"
               data-spine-index="02"
               data-spine-label="problem"
-              className="grid grid-cols-1 gap-[clamp(28px,4vw,56px)] py-[clamp(72px,10vw,140px)] md:grid-cols-[minmax(0,0.42fr)_minmax(0,0.58fr)]"
+              className="stagger-leftright grid grid-cols-1 gap-[clamp(28px,4vw,56px)] py-[clamp(72px,10vw,140px)] md:grid-cols-[minmax(0,0.42fr)_minmax(0,0.58fr)]"
             >
               <div>
                 <SectionEyebrow index="02" label="The avoidable failure" />
@@ -162,7 +162,7 @@ export default function LandingPage() {
                 Three steps. None of them require a setup weekend.
               </h2>
 
-              <ol className="mt-[clamp(36px,5vw,64px)] divide-y divide-[var(--rule)]">
+              <ol className="stagger-children mt-[clamp(36px,5vw,64px)] divide-y divide-[var(--rule)]">
                 {steps.map((step, index) => (
                   <li
                     key={step.number}
@@ -206,7 +206,7 @@ export default function LandingPage() {
               className="py-[clamp(56px,8vw,100px)]"
             >
               <SectionEyebrow index="04" label="What it isn&rsquo;t" />
-              <ul className="landing-display mt-6 max-w-[40ch] space-y-2 text-[clamp(1.5rem,3vw,2.4rem)] font-semibold leading-[1.12] text-foreground">
+              <ul className="stagger-children landing-display mt-6 max-w-[40ch] space-y-2 text-[clamp(1.5rem,3vw,2.4rem)] font-semibold leading-[1.12] text-foreground">
                 {refrains.map((line, index) => (
                   <li
                     key={line}

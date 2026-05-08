@@ -98,6 +98,7 @@ export function WaitlistForm({ variant = "compact", id = "waitlist" }: WaitlistF
   return (
     <form onSubmit={handleSubmit} className="w-full" noValidate>
       <div
+        data-bloom-dim
         className={
           variant === "anchor"
             ? "flex w-full max-w-[36rem] items-stretch border border-[var(--rule-strong)] bg-[var(--card)] focus-within:border-[var(--copper)] focus-within:ring-1 focus-within:ring-[var(--copper-soft)]"
