@@ -3,16 +3,16 @@
 import { useEffect, useRef } from "react"
 
 const DOT_SPACING = 28
-const DOT_RADIUS = 1.45
+const DOT_RADIUS = 1.15
 const POINTER_RADIUS = 168
 const POINTER_STRENGTH = 16
 const DRIFT_STRENGTH = 1.85
 const POINTER_EASE = 0.055
 const RETURN_EASE = 0.04
-const WAVE_FREQ_X = 0.0048
-const WAVE_FREQ_Y = 0.0039
-const WAVE_SPEED_A = 0.36
-const WAVE_SPEED_B = 0.24
+const WAVE_FREQ_X = 0.0042
+const WAVE_FREQ_Y = 0.0036
+const WAVE_SPEED_A = 0.32
+const WAVE_SPEED_B = 0.21
 const FIELD_PADDING = POINTER_RADIUS + DOT_SPACING
 
 type Dot = {
@@ -127,19 +127,19 @@ export function CursorSpotlight() {
             0.5
         const waveNorm = (wave + 2) * 0.25
         const pulse = (Math.sin(t * 0.42 + dot.phase * 1.8) + 1) * 0.5
-        const baseAlpha = 0.55 + pulse * 0.08 + waveNorm * 0.32
-        const alpha = Math.min(1, baseAlpha * dot.weight + proximity * 0.32)
-        const radius = DOT_RADIUS + proximity * 0.4 + pulse * 0.08 + waveNorm * 0.35
+        const baseAlpha = 0.32 + pulse * 0.06 + waveNorm * 0.18
+        const alpha = Math.min(0.85, baseAlpha * dot.weight + proximity * 0.32)
+        const radius = DOT_RADIUS + proximity * 0.4 + pulse * 0.06 + waveNorm * 0.18
 
-        const warm = waveNorm > 0.5
+        const warm = waveNorm > 0.55
         context.beginPath()
         context.arc(x, y, radius, 0, Math.PI * 2)
         context.fillStyle =
           proximity > 0
             ? `rgba(245, 178, 104, ${alpha})`
             : warm
-              ? `rgba(228, 172, 124, ${alpha})`
-              : `rgba(196, 152, 118, ${alpha})`
+              ? `rgba(214, 158, 110, ${alpha})`
+              : `rgba(186, 144, 110, ${alpha})`
         context.fill()
       }
 
