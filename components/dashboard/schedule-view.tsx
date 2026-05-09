@@ -1018,7 +1018,7 @@ export function ScheduleView({
         <div ref={gridScrollRef} className="relative flex-1 overflow-auto">
           {/* Day headers */}
           <div
-            className={`sticky top-0 z-10 grid bg-background ${dayColumnTemplate} border-b border-rule-strong`}
+            className={`sticky top-0 z-[40] grid bg-background ${dayColumnTemplate} border-b border-rule-strong`}
           >
             <div className="h-14" />
             {displayDates.map((date, i) => (
@@ -1042,7 +1042,7 @@ export function ScheduleView({
 
           {/* All-day lane */}
           <div
-            className={`sticky top-14 z-[9] grid bg-background ${dayColumnTemplate} border-b border-rule`}
+            className={`sticky top-14 z-[35] grid bg-background ${dayColumnTemplate} border-b border-rule`}
           >
             <div className="num flex min-h-9 items-start justify-end px-2 py-1.5 text-[11px] font-medium uppercase text-muted-foreground">
               All

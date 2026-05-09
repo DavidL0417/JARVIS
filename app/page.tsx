@@ -10,13 +10,13 @@ import { TimeSpine } from "@/components/landing/time-spine"
 import { WaitlistForm } from "@/components/landing/waitlist-form"
 
 export const metadata: Metadata = {
-  title: "Jarvis — Sit down and know exactly what to start",
+  title: "Jarvis — A secretary that already knows everything",
   description:
-    "Jarvis pulls deadlines from your Canvas and syllabi, breaks them into the next concrete action, and surfaces them two weeks before crunch. No system to build, no AI hijacking your day.",
+    "Jarvis connects to your Gmail, Canvas, Notion, and every source you use — then decides what you should work on next. No thinking required. An autonomous secretary with full context.",
   openGraph: {
-    title: "Jarvis — Sit down and know exactly what to start",
+    title: "Jarvis — A secretary that already knows everything",
     description:
-      "Pulled from your Canvas and syllabi, broken into the next concrete action, surfaced two weeks before crunch.",
+      "Connected to every source you use. Decides what you should do next so you never have to think about it.",
     type: "website",
   },
 }
@@ -24,29 +24,29 @@ export const metadata: Metadata = {
 const steps = [
   {
     number: "01",
-    title: "Connect Canvas and your syllabi.",
+    title: "Connect everything you already use.",
     detail:
-      "Drop in the syllabus PDFs you already have. Jarvis pulls deadlines, weights, and quiet expectations the LMS won't show you.",
+      "Gmail, Canvas, Notion, Google Calendar — Jarvis plugs into every source where your obligations live. No manual entry. It reads what you read.",
   },
   {
     number: "02",
-    title: "Jarvis surfaces what's coming, two weeks early.",
+    title: "Jarvis decides what matters next.",
     detail:
-      "Every deadline is broken into a concrete next action and dropped onto a real schedule, not a list of vague intentions.",
+      "With full context across every source, it breaks obligations into concrete actions and schedules them. You don’t prioritize. It already knows.",
   },
   {
     number: "03",
-    title: "Sit down knowing what to start.",
+    title: "You sit down and start. That’s it.",
     detail:
-      "Open Jarvis and the first thing on screen is the next 30-90 minutes. Approve, revise, or skip. No ceremony.",
+      "Open Jarvis and the first thing on screen is exactly what to do for the next 30–90 minutes. No planning, no thinking, no ceremony.",
   },
 ]
 
 const refrains = [
-  "Not a system to build like Notion.",
-  "Not an AI hijacking your day like Motion.",
-  "Not a chatbot pretending to be your therapist.",
-  "A schedule, surfaced honestly.",
+  "Not a system you have to build.",
+  "Not an AI that needs you to tell it what to do.",
+  "Not a chatbot pretending to know your life.",
+  "A secretary that already knows everything.",
 ]
 
 function SectionEyebrow({ index, label }: { index: string; label: string }) {
@@ -108,8 +108,7 @@ export default function LandingPage() {
                     />
                     <DashboardPreview />
                     <p className="mt-3 max-w-[44ch] pl-1 text-[12px] leading-snug text-muted-foreground">
-                      A quiet day. The dominant surface is the schedule. Everything else is supporting context arranged
-                      around it.
+                      Everything from every source, distilled into one view. You open it and start — nothing to figure out.
                     </p>
                   </div>
                 </div>
@@ -128,20 +127,21 @@ export default function LandingPage() {
               className="stagger-leftright grid grid-cols-1 gap-[clamp(28px,4vw,56px)] py-[clamp(72px,10vw,140px)] md:grid-cols-[minmax(0,0.42fr)_minmax(0,0.58fr)]"
             >
               <div>
-                <SectionEyebrow index="02" label="The avoidable failure" />
+                <SectionEyebrow index="02" label="The real problem" />
                 <h2 className="landing-display mt-4 max-w-[16ch] text-[clamp(1.8rem,3.6vw,2.8rem)] font-semibold leading-[1.04] text-foreground">
-                  You sat down on Sunday with three weeks of unread Canvas posts.
+                  Your information is everywhere. Your brain shouldn&apos;t have to be.
                 </h2>
               </div>
               <div className="space-y-5 text-[clamp(1rem,1.4vw,1.125rem)] leading-[1.6] text-foreground/80">
                 <p>
-                  A syllabus you skimmed in week one. A vague feeling that something was due. By the time you found
-                  it, the cushion was gone, the office hours had already happened, and the work that would&apos;ve
-                  been ninety minutes on Wednesday was now four panicked hours on Thursday night.
+                  Deadlines buried in Canvas. Meeting notes in Notion. Commitments scattered across Gmail threads.
+                  You already have the information — it&apos;s just in twelve places, and your brain is the only
+                  thing stitching it together.
                 </p>
                 <p>
-                  Jarvis is not for the people who have a system. It&apos;s for the people who&apos;ve felt the gap
-                  between their tools knowing what&apos;s coming and them knowing what to start, today.
+                  Jarvis connects to every source you use and builds the full picture automatically. It doesn&apos;t
+                  wait for you to check — it already knows what&apos;s due, what&apos;s changed, and what to do
+                  about it. Like handing your entire life to a secretary who never drops a thread.
                 </p>
               </div>
             </section>
@@ -159,7 +159,7 @@ export default function LandingPage() {
             >
               <SectionEyebrow index="03" label="How it works" />
               <h2 className="landing-display mt-4 max-w-[20ch] text-[clamp(1.8rem,3.6vw,2.8rem)] font-semibold leading-[1.04] text-foreground">
-                Three steps. None of them require a setup weekend.
+                Three steps. Then you stop thinking about it.
               </h2>
 
               <ol className="stagger-children mt-[clamp(36px,5vw,64px)] divide-y divide-[var(--rule)]">
@@ -230,11 +230,11 @@ export default function LandingPage() {
               <div id="waitlist" className="scroll-mt-24">
                 <SectionEyebrow index="05" label="Early access" />
                 <h2 className="landing-display mt-4 max-w-[18ch] text-[clamp(2rem,4.4vw,3.4rem)] font-semibold leading-[1.0] text-foreground">
-                  Stop guessing what to start next.
+                  Stop thinking. Start doing.
                 </h2>
                 <p className="mt-4 max-w-[44ch] text-[clamp(1rem,1.4vw,1.125rem)] leading-[1.55] text-foreground/70">
-                  Jarvis is invite-only while it stabilizes. Drop your school email and you&apos;ll hear when your
-                  spot comes up.
+                  Jarvis is invite-only while it stabilizes. Drop your email and you&apos;ll hear when your
+                  spot opens up.
                 </p>
               </div>
               <div className="flex flex-col gap-3">

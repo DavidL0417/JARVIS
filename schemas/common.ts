@@ -10,6 +10,10 @@ export const checkInEnergySchema = z.enum(["low", "medium", "high"])
 export const syncOriginSchema = z.enum(["local", "gcal"])
 export const calendarSourceSchema = z.enum(["local", "google", "imported", "task"])
 export const calendarSyncPreferenceSchema = z.enum(["active", "pending", "ignored"])
+export const integrationProviderSchema = z.enum(["google", "notion"])
+export const userIntegrationStatusSchema = z.enum(["connected", "needs_reauth", "disconnected", "error"])
+export const sourceConnectorIdSchema = z.enum(["notion", "gmail"])
+export const sourceConnectorStatusSchema = z.enum(["ready", "connected", "auth_needed", "missing_config", "failed"])
 export const memoryKindSchema = z.enum([
   "preference",
   "task_context",
@@ -22,6 +26,10 @@ export const memoryImportanceSchema = z.enum(["low", "medium", "high", "critical
 export const memoryStatusSchema = z.enum(["active", "candidate", "stale", "superseded", "archived"])
 export const sourceKindSchema = z.enum(["notion", "gmail", "caldav", "google_calendar", "manual", "system"])
 export const sourceFreshnessSchema = z.enum(["fresh", "partial", "stale", "failed"])
+export const sourceFileStatusSchema = z.enum(["uploading", "ready", "processing", "processed", "failed"])
+export const sourceCandidateKindSchema = z.enum(["task", "deadline", "event", "routine", "preference", "note"])
+export const sourceCandidateStatusSchema = z.enum(["pending", "approved", "dismissed"])
+export const dailyPlanStatusSchema = z.enum(["draft", "ready", "error", "superseded"])
 
 const hhmmPattern = /^([01]\d|2[0-3]):([0-5]\d)$/
 const tagSchema = z.string().trim().min(1)
@@ -55,6 +63,9 @@ export const taskSchema = z.object({
   allDay: z.boolean(),
   calendarId: z.string().min(1).nullable(),
   tags: z.array(tagSchema),
+  sourceSnapshotId: z.string().uuid().nullable(),
+  sourceCandidateId: z.string().uuid().nullable(),
+  planId: z.string().uuid().nullable(),
 })
 
 export const userCalendarSchema = z.object({
@@ -72,6 +83,31 @@ export const userCalendarSchema = z.object({
   isTaskCalendar: z.boolean(),
   createdAt: z.string().datetime({ offset: true }),
   updatedAt: z.string().datetime({ offset: true }),
+})
+
+export const userIntegrationSchema = z.object({
+  id: z.string().uuid(),
+  userId: z.string().uuid(),
+  provider: integrationProviderSchema,
+  providerAccountEmail: z.string().min(1).nullable(),
+  providerUserId: z.string().min(1).nullable(),
+  status: userIntegrationStatusSchema,
+  selectedCalendarId: z.string().min(1).nullable(),
+  selectedSourceId: z.string().min(1).nullable(),
+  selectedSourceName: z.string().min(1).nullable(),
+  lastSyncedAt: z.string().datetime({ offset: true }).nullable(),
+  createdAt: z.string().datetime({ offset: true }),
+  updatedAt: z.string().datetime({ offset: true }),
+})
+
+export const sourceConnectorSchema = z.object({
+  id: sourceConnectorIdSchema,
+  status: sourceConnectorStatusSchema,
+  detail: z.string().min(1),
+  account: z.string().min(1).nullable(),
+  canRun: z.boolean(),
+  selectedSourceId: z.string().min(1).nullable(),
+  selectedSourceName: z.string().min(1).nullable(),
 })
 
 export const scheduleEventSchema = z.object({
@@ -92,6 +128,7 @@ export const scheduleEventSchema = z.object({
   isCheckedIn: z.boolean(),
   allDay: z.boolean(),
   calendarId: z.string().min(1).nullable(),
+  planId: z.string().uuid().nullable(),
 })
 
 export const scheduleEventInputSchema = scheduleEventSchema.omit({ userId: true }).extend({
@@ -101,6 +138,7 @@ export const scheduleEventInputSchema = scheduleEventSchema.omit({ userId: true 
   lastSyncedFrom: syncOriginSchema.optional().default("local"),
   allDay: z.boolean().optional().default(false),
   isCheckedIn: z.boolean().optional().default(false),
+  planId: z.string().uuid().nullable().optional().default(null),
 })
 
 export const memoryEntrySummarySchema = z.object({
@@ -121,4 +159,87 @@ export const sourceSnapshotSummarySchema = z.object({
   freshness: sourceFreshnessSchema,
   summary: z.string().min(1),
   capturedAt: z.string().datetime({ offset: true }),
+})
+
+export const sourceFileSummarySchema = z.object({
+  id: z.string().uuid(),
+  source: sourceKindSchema,
+  sourceRef: z.string().min(1).nullable(),
+  fileName: z.string().min(1),
+  mimeType: z.string().min(1),
+  storagePath: z.string().min(1),
+  sizeBytes: z.number().int().nonnegative(),
+  status: sourceFileStatusSchema,
+  errorMessage: z.string().min(1).nullable(),
+  createdAt: z.string().datetime({ offset: true }),
+  updatedAt: z.string().datetime({ offset: true }),
+})
+
+export const sourceCandidateSchema = z.object({
+  id: z.string().uuid(),
+  userId: z.string().uuid(),
+  sourceSnapshotId: z.string().uuid().nullable(),
+  sourceFileId: z.string().uuid().nullable(),
+  kind: sourceCandidateKindSchema,
+  title: z.string().min(1),
+  description: z.string().min(1).nullable(),
+  course: z.string().min(1).nullable(),
+  dueAt: z.string().datetime({ offset: true }).nullable(),
+  durationMinutes: z.number().int().positive().nullable(),
+  priority: prioritySchema,
+  confidence: z.number().min(0).max(1).nullable(),
+  evidence: z.string().min(1).nullable(),
+  status: sourceCandidateStatusSchema,
+  approvedTaskId: z.string().uuid().nullable(),
+  createdAt: z.string().datetime({ offset: true }),
+  updatedAt: z.string().datetime({ offset: true }),
+})
+
+export const dailyPlanNowItemSchema = z.object({
+  title: z.string().min(1),
+  why: z.string().min(1),
+  start: z.string().datetime({ offset: true }).nullable(),
+  end: z.string().datetime({ offset: true }).nullable(),
+  taskId: z.string().uuid().nullable(),
+  eventId: z.string().uuid().nullable(),
+})
+
+export const dailyPlanListItemSchema = z.object({
+  title: z.string().min(1),
+  start: z.string().datetime({ offset: true }).nullable(),
+  end: z.string().datetime({ offset: true }).nullable(),
+  kind: z.enum(["task", "event", "routine", "break"]),
+})
+
+export const dailyPlanRiskItemSchema = z.object({
+  title: z.string().min(1),
+  detail: z.string().min(1),
+  severity: z.enum(["low", "medium", "high"]),
+  taskId: z.string().uuid().nullable().optional(),
+  eventId: z.string().uuid().nullable().optional(),
+})
+
+export const sourceCoverageItemSchema = z.object({
+  label: z.string().min(1),
+  status: z.union([sourceFreshnessSchema, z.enum(["connected", "missing"])]),
+  detail: z.string().min(1),
+})
+
+export const dailyPlanSchema = z.object({
+  id: z.string().uuid(),
+  userId: z.string().uuid(),
+  horizonStart: z.string().datetime({ offset: true }),
+  horizonEnd: z.string().datetime({ offset: true }),
+  status: dailyPlanStatusSchema,
+  summary: z.string().min(1),
+  nowItem: dailyPlanNowItemSchema.nullable(),
+  nextItems: z.array(dailyPlanListItemSchema),
+  riskItems: z.array(dailyPlanRiskItemSchema),
+  tradeoffs: z.array(z.string().min(1)),
+  sourceCoverage: z.array(sourceCoverageItemSchema),
+  command: z.string().min(1).nullable(),
+  model: z.string().min(1).nullable(),
+  errorMessage: z.string().min(1).nullable(),
+  createdAt: z.string().datetime({ offset: true }),
+  updatedAt: z.string().datetime({ offset: true }),
 })

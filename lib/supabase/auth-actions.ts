@@ -1,12 +1,8 @@
 "use client"
 
 import type { GoogleCalendarSyncResponse } from "@/types"
+import { GOOGLE_SOURCE_SCOPES } from "@/lib/google-oauth"
 import { tryCreateSupabaseBrowserClient } from "@/lib/supabase/client"
-
-const GOOGLE_CALENDAR_SCOPES = [
-  "https://www.googleapis.com/auth/calendar.readonly",
-  "https://www.googleapis.com/auth/calendar.events",
-].join(" ")
 
 export class GoogleCalendarAuthorizationError extends Error {
   constructor(message = "Google Calendar needs authorization.") {
@@ -50,7 +46,7 @@ export async function startGoogleOAuthRedirect(nextPath?: string) {
     provider: "google",
     options: {
       redirectTo,
-      scopes: GOOGLE_CALENDAR_SCOPES,
+      scopes: GOOGLE_SOURCE_SCOPES,
       queryParams: {
         access_type: "offline",
         include_granted_scopes: "true",

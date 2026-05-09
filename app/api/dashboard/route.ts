@@ -1,29 +1,53 @@
 import { NextResponse } from "next/server"
 
 import {
+  DAILY_PLAN_SELECT,
   getCheckInModeFromCount,
+  mapDailyPlanRowToDailyPlan,
   mapMemoryItemRowToSummary,
   mapScheduleEventRowToScheduleEvent,
+  mapSourceCandidateRowToCandidate,
+  mapSourceFileRowToSummary,
   mapSourceSnapshotRowToSummary,
   mapTaskRowToTask,
+  mapUserIntegrationRowToUserIntegration,
+  SOURCE_CANDIDATE_SELECT,
+  SOURCE_FILE_SELECT,
   MEMORY_ITEM_SELECT,
   SCHEDULE_EVENT_SELECT,
   SOURCE_SNAPSHOT_SELECT,
   TASK_SELECT,
+  USER_INTEGRATION_SELECT,
 } from "@/lib/data/mappers"
+import { GMAIL_READONLY_SCOPE, hasOAuthScope } from "@/lib/google-oauth"
 import {
   isAuthenticationRequiredError,
   requireAuthenticatedUser,
 } from "@/lib/supabase/auth"
+import {
+  getStoredGoogleIntegration,
+  type StoredGoogleIntegration,
+} from "@/lib/supabase/google-calendar-integration"
+import { getStoredIntegrationToken } from "@/lib/supabase/integration-tokens"
 import { dashboardResponseSchema } from "@/schemas/dashboard"
 import type {
   DashboardResponse,
+  DailyPlanRow,
   MemoryItemRow,
   ScheduleEventRow,
+  SourceCandidateRow,
+  SourceFileRow,
   SourceSnapshotRow,
+  SourceSnapshotSummary,
   Task,
   TaskRow,
+  UserIntegration,
+  UserIntegrationRow,
+  IntegrationTokenRow,
+  SourceConnector,
 } from "@/types"
+
+type AdminClient = Awaited<ReturnType<typeof requireAuthenticatedUser>>["adminClient"]
 
 function pickCurrentTask(tasks: Task[]): DashboardResponse["currentTask"] {
   const scheduledTask = tasks.find((task) => task.status === "scheduled")
@@ -49,11 +73,258 @@ function pickCurrentTask(tasks: Task[]): DashboardResponse["currentTask"] {
   }
 }
 
+function getIntegration(integrations: UserIntegration[], provider: UserIntegration["provider"]) {
+  return integrations.find((integration) => integration.provider === provider) ?? null
+}
+
+function getLatestSource(sources: SourceSnapshotSummary[], source: SourceSnapshotSummary["source"]) {
+  return sources.find((snapshot) => snapshot.source === source) ?? null
+}
+
+function getIntegrationAccount(integration: UserIntegration | null) {
+  return integration?.providerAccountEmail || integration?.providerUserId || null
+}
+
+function isMissingSelectedSourceColumn(error: { message?: string; code?: string } | null) {
+  return Boolean(
+    error &&
+      (error.code === "42703" ||
+        /selected_source_id|selected_source_name|does not exist/i.test(error.message ?? "")),
+  )
+}
+
+async function getNotionSelectedSource(adminClient: AdminClient, userId: string) {
+  const { data, error } = await adminClient
+    .from("integrations")
+    .select("selected_source_id, selected_source_name")
+    .eq("user_id", userId)
+    .eq("provider", "notion")
+    .maybeSingle<{ selected_source_id: string | null; selected_source_name: string | null }>()
+
+  if (isMissingSelectedSourceColumn(error)) {
+    return {
+      selectedSourceId: null,
+      selectedSourceName: null,
+    }
+  }
+
+  if (error) {
+    throw new Error(error.message)
+  }
+
+  return {
+    selectedSourceId: data?.selected_source_id ?? null,
+    selectedSourceName: data?.selected_source_name ?? null,
+  }
+}
+
+function withNotionSelectedSource(
+  integrations: UserIntegration[],
+  selectedSource: { selectedSourceId: string | null; selectedSourceName: string | null },
+) {
+  return integrations.map((integration) => {
+    if (integration.provider !== "notion") {
+      return integration
+    }
+
+    return {
+      ...integration,
+      selectedSourceId: selectedSource.selectedSourceId,
+      selectedSourceName: selectedSource.selectedSourceName,
+    }
+  })
+}
+
+function getDistinctActiveSourceCount(input: {
+  sources: SourceSnapshotSummary[]
+  sourceConnectors: SourceConnector[]
+}) {
+  const sourceLabels = new Set<string>()
+
+  for (const connector of input.sourceConnectors) {
+    if (connector.status === "connected" || connector.status === "ready") {
+      sourceLabels.add(connector.id)
+    }
+  }
+
+  for (const source of input.sources) {
+    if (source.freshness !== "failed") {
+      sourceLabels.add(source.source)
+    }
+  }
+
+  return sourceLabels.size
+}
+
+function getMissingEnv(names: string[]) {
+  return names.filter((name) => !process.env[name])
+}
+
+function hasRunnableGoogleToken(integration: StoredGoogleIntegration | null) {
+  if (!integration) {
+    return false
+  }
+
+  const expiresAt = integration.expires_at ? new Date(integration.expires_at).getTime() : null
+  const accessTokenIsFresh = Boolean(
+    integration.access_token && (!expiresAt || expiresAt > Date.now() + 60_000),
+  )
+
+  return accessTokenIsFresh || Boolean(integration.refresh_token)
+}
+
+function deriveSourceConnectors(input: {
+  integrations: UserIntegration[]
+  sources: SourceSnapshotSummary[]
+  googleIntegration: StoredGoogleIntegration | null
+  notionToken: IntegrationTokenRow | null
+}): SourceConnector[] {
+  const googleIntegration = getIntegration(input.integrations, "google")
+  const notionIntegration = getIntegration(input.integrations, "notion")
+  const gmailSource = getLatestSource(input.sources, "gmail")
+  const notionSource = getLatestSource(input.sources, "notion")
+  const googleAccount = getIntegrationAccount(googleIntegration)
+  const notionAccount = getIntegrationAccount(notionIntegration)
+  const missingGoogleEnv = getMissingEnv(["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET"])
+  const missingNotionEnv = getMissingEnv(["NOTION_CLIENT_ID", "NOTION_CLIENT_SECRET"])
+  const sourceConnectors: SourceConnector[] = []
+
+  if (notionIntegration?.status === "connected" && input.notionToken?.access_token) {
+    sourceConnectors.push({
+      id: "notion",
+      status: "connected",
+      account: notionAccount,
+      canRun: true,
+      detail: notionIntegration.selectedSourceName
+        ? `${notionAccount ? `${notionAccount}. ` : ""}Import uses ${notionIntegration.selectedSourceName}.`
+        : `${notionAccount ? `${notionAccount}. ` : ""}Choose the authoritative tasks database before importing.`,
+      selectedSourceId: notionIntegration.selectedSourceId,
+      selectedSourceName: notionIntegration.selectedSourceName,
+    })
+  } else if (missingNotionEnv.length > 0) {
+    sourceConnectors.push({
+      id: "notion",
+      status: "missing_config",
+      account: notionAccount,
+      canRun: false,
+      detail: "This deployment has not configured the Notion connector yet. The app owner must add one Notion public OAuth connection before users can connect a workspace.",
+      selectedSourceId: notionIntegration?.selectedSourceId ?? null,
+      selectedSourceName: notionIntegration?.selectedSourceName ?? null,
+    })
+  } else if (notionIntegration?.status === "error" || notionSource?.freshness === "failed") {
+    sourceConnectors.push({
+      id: "notion",
+      status: "failed",
+      account: notionAccount,
+      canRun: false,
+      detail: notionSource?.summary || "Notion authorization failed. Reconnect the workspace.",
+      selectedSourceId: notionIntegration?.selectedSourceId ?? null,
+      selectedSourceName: notionIntegration?.selectedSourceName ?? null,
+    })
+  } else {
+    sourceConnectors.push({
+      id: "notion",
+      status: "auth_needed",
+      account: notionAccount,
+      canRun: false,
+      detail: "Authorize a Notion workspace before importing scheduling context.",
+      selectedSourceId: notionIntegration?.selectedSourceId ?? null,
+      selectedSourceName: notionIntegration?.selectedSourceName ?? null,
+    })
+  }
+
+  if (missingGoogleEnv.length > 0) {
+    sourceConnectors.push({
+      id: "gmail",
+      status: "missing_config",
+      account: googleAccount,
+      canRun: false,
+      detail: `Google OAuth is not configured for this app. Add ${missingGoogleEnv.join(" and ")} on the server before users can authorize Gmail.`,
+      selectedSourceId: null,
+      selectedSourceName: null,
+    })
+  } else if (!googleIntegration || googleIntegration.status === "disconnected") {
+    sourceConnectors.push({
+      id: "gmail",
+      status: "auth_needed",
+      account: googleAccount,
+      canRun: false,
+      detail: "Authorize Google with Gmail read-only access before scanning mail context.",
+      selectedSourceId: null,
+      selectedSourceName: null,
+    })
+  } else if (googleIntegration.status === "error") {
+    sourceConnectors.push({
+      id: "gmail",
+      status: "failed",
+      account: googleAccount,
+      canRun: false,
+      detail: gmailSource?.summary || "Google authorization failed. Reconnect Google before scanning Gmail.",
+      selectedSourceId: null,
+      selectedSourceName: null,
+    })
+  } else if (googleIntegration.status === "needs_reauth" || !hasRunnableGoogleToken(input.googleIntegration)) {
+    sourceConnectors.push({
+      id: "gmail",
+      status: "auth_needed",
+      account: googleAccount,
+      canRun: false,
+      detail: `${googleAccount ? `${googleAccount}. ` : ""}Reconnect Google; the connected row exists, but the private OAuth token is missing or expired.`,
+      selectedSourceId: null,
+      selectedSourceName: null,
+    })
+  } else if (!hasOAuthScope(input.googleIntegration?.scope, GMAIL_READONLY_SCOPE)) {
+    sourceConnectors.push({
+      id: "gmail",
+      status: "auth_needed",
+      account: googleAccount,
+      canRun: false,
+      detail: `${googleAccount ? `${googleAccount}. ` : ""}Reconnect Google once so JARVIS can confirm Gmail read-only scope.`,
+      selectedSourceId: null,
+      selectedSourceName: null,
+    })
+  } else if (gmailSource?.freshness === "failed") {
+    sourceConnectors.push({
+      id: "gmail",
+      status: "failed",
+      account: googleAccount,
+      canRun: true,
+      detail: gmailSource.summary,
+      selectedSourceId: null,
+      selectedSourceName: null,
+    })
+  } else {
+    sourceConnectors.push({
+      id: "gmail",
+      status: "ready",
+      account: googleAccount,
+      canRun: true,
+      detail: `${googleAccount ? `${googleAccount}. ` : ""}Ready to scan recent mail for planning context, small actions, logistics, and deadlines.`,
+      selectedSourceId: null,
+      selectedSourceName: null,
+    })
+  }
+
+  return sourceConnectors
+}
+
 export async function GET() {
   try {
     const { adminClient, user } = await requireAuthenticatedUser()
 
-    const [tasksResult, eventsResult, checkinsResult, memoryResult, sourceResult] = await Promise.all([
+    const [
+      tasksResult,
+      eventsResult,
+      checkinsResult,
+      memoryResult,
+      sourceResult,
+      sourceFileResult,
+      sourceCandidateResult,
+      integrationResult,
+      storedGoogleIntegration,
+      storedNotionToken,
+      dailyPlanResult,
+    ] = await Promise.all([
       adminClient
         .from("tasks")
         .select(TASK_SELECT)
@@ -78,6 +349,33 @@ export async function GET() {
         .eq("user_id", user.id)
         .order("captured_at", { ascending: false })
         .limit(8),
+      adminClient
+        .from("source_files")
+        .select(SOURCE_FILE_SELECT)
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false })
+        .limit(8),
+      adminClient
+        .from("source_candidates")
+        .select(SOURCE_CANDIDATE_SELECT)
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false })
+        .limit(12),
+      adminClient
+        .from("integrations")
+        .select(USER_INTEGRATION_SELECT)
+        .eq("user_id", user.id)
+        .order("updated_at", { ascending: false }),
+      getStoredGoogleIntegration(user.id),
+      getStoredIntegrationToken(user.id, "notion"),
+      adminClient
+        .from("daily_plans")
+        .select(DAILY_PLAN_SELECT)
+        .eq("user_id", user.id)
+        .neq("status", "superseded")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle<DailyPlanRow>(),
     ])
 
     if (
@@ -85,7 +383,11 @@ export async function GET() {
       eventsResult.error ||
       checkinsResult.error ||
       memoryResult.error ||
-      sourceResult.error
+      sourceResult.error ||
+      sourceFileResult.error ||
+      sourceCandidateResult.error ||
+      integrationResult.error ||
+      dailyPlanResult.error
     ) {
       throw new Error(
         tasksResult.error?.message ||
@@ -93,6 +395,10 @@ export async function GET() {
           checkinsResult.error?.message ||
           memoryResult.error?.message ||
           sourceResult.error?.message ||
+          sourceFileResult.error?.message ||
+          sourceCandidateResult.error?.message ||
+          integrationResult.error?.message ||
+          dailyPlanResult.error?.message ||
           "Failed to load dashboard data from Supabase.",
       )
     }
@@ -103,6 +409,23 @@ export async function GET() {
       .sort((left, right) => new Date(left.start).getTime() - new Date(right.start).getTime())
     const memories = (memoryResult.data || []).map((row) => mapMemoryItemRowToSummary(row as MemoryItemRow))
     const sources = (sourceResult.data || []).map((row) => mapSourceSnapshotRowToSummary(row as SourceSnapshotRow))
+    const sourceFiles = (sourceFileResult.data || []).map((row) => mapSourceFileRowToSummary(row as SourceFileRow))
+    const sourceCandidates = (sourceCandidateResult.data || []).map((row) =>
+      mapSourceCandidateRowToCandidate(row as SourceCandidateRow),
+    )
+    const integrations = withNotionSelectedSource(
+      (integrationResult.data || []).map((row) =>
+        mapUserIntegrationRowToUserIntegration(row as UserIntegrationRow),
+      ),
+      await getNotionSelectedSource(adminClient, user.id),
+    )
+    const sourceConnectors = deriveSourceConnectors({
+      integrations,
+      sources,
+      googleIntegration: storedGoogleIntegration,
+      notionToken: storedNotionToken,
+    })
+    const dailyPlan = dailyPlanResult.data ? mapDailyPlanRowToDailyPlan(dailyPlanResult.data) : null
     const scheduledTaskIds = new Set(
       (eventsResult.data || [])
         .map((event) => (event as { task_id: string | null }).task_id)
@@ -136,13 +459,18 @@ export async function GET() {
         unscheduled: unscheduledCount,
         checkInMode: getCheckInModeFromCount((checkinsResult.data || []).length),
         memories: memories.length,
-        sources: sources.length,
+        sources: getDistinctActiveSourceCount({ sources, sourceConnectors }),
       },
       currentTask: pickCurrentTask(tasks),
       tasks,
       events,
       memories,
+      integrations,
+      sourceConnectors,
       sources,
+      sourceFiles,
+      sourceCandidates,
+      dailyPlan,
     }
 
     const parsedPayload = dashboardResponseSchema.safeParse(dashboardPayload)

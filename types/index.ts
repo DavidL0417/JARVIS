@@ -5,8 +5,10 @@ export type ScheduleEventSource = "task" | "calendar" | "focus"
 export type CheckInMood = "good" | "okay" | "stuck"
 export type CheckInOutcome = "completed" | "missed" | "partial"
 export type CheckInEnergy = "low" | "medium" | "high"
-export type IntegrationProvider = "google"
+export type IntegrationProvider = "google" | "notion"
 export type UserIntegrationStatus = "connected" | "needs_reauth" | "disconnected" | "error"
+export type SourceConnectorId = "notion" | "gmail"
+export type SourceConnectorStatus = "ready" | "connected" | "auth_needed" | "missing_config" | "failed"
 export type SyncOrigin = "local" | "gcal"
 export type CalendarSource = "local" | "google" | "imported" | "task"
 export type CalendarSyncPreference = "active" | "pending" | "ignored"
@@ -15,6 +17,10 @@ export type MemoryImportance = "low" | "medium" | "high" | "critical"
 export type MemoryStatus = "active" | "candidate" | "stale" | "superseded" | "archived"
 export type SourceKind = "notion" | "gmail" | "caldav" | "google_calendar" | "manual" | "system"
 export type SourceFreshness = "fresh" | "partial" | "stale" | "failed"
+export type SourceFileStatus = "uploading" | "ready" | "processing" | "processed" | "failed"
+export type SourceCandidateKind = "task" | "deadline" | "event" | "routine" | "preference" | "note"
+export type SourceCandidateStatus = "pending" | "approved" | "dismissed"
+export type DailyPlanStatus = "draft" | "ready" | "error" | "superseded"
 export type AssistantToolStatus = "completed" | "clarification" | "error" | "pending_approval"
 
 export interface UserRow {
@@ -78,6 +84,8 @@ export interface TaskRow {
   calendar_id: string | null
   tags: string[]
   source_snapshot_id: string | null
+  source_candidate_id: string | null
+  plan_id: string | null
 }
 
 export interface ScheduleEventRow {
@@ -100,6 +108,7 @@ export interface ScheduleEventRow {
   is_checked_in: boolean
   all_day: boolean
   calendar_id: string | null
+  plan_id: string | null
 }
 
 export interface CheckInRow {
@@ -123,9 +132,21 @@ export interface UserIntegrationRow {
   provider_user_id: string | null
   status: UserIntegrationStatus
   selected_calendar_id: string | null
+  selected_source_id?: string | null
+  selected_source_name?: string | null
   last_synced_at: string | null
   created_at: string
   updated_at: string
+}
+
+export interface SourceConnector {
+  id: SourceConnectorId
+  status: SourceConnectorStatus
+  detail: string
+  account: string | null
+  canRun: boolean
+  selectedSourceId: string | null
+  selectedSourceName: string | null
 }
 
 export interface IntegrationTokenRow {
@@ -172,6 +193,61 @@ export interface SourceSnapshotRow {
   created_at: string
 }
 
+export interface SourceFileRow {
+  id: string
+  user_id: string
+  source: SourceKind
+  source_ref: string | null
+  file_name: string
+  mime_type: string
+  storage_path: string
+  size_bytes: number
+  status: SourceFileStatus
+  error_message: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface SourceCandidateRow {
+  id: string
+  user_id: string
+  source_snapshot_id: string | null
+  source_file_id: string | null
+  kind: SourceCandidateKind
+  title: string
+  description: string | null
+  course: string | null
+  due_at: string | null
+  duration_minutes: number | null
+  priority: Priority
+  confidence: number | null
+  evidence: string | null
+  payload: Record<string, unknown>
+  status: SourceCandidateStatus
+  approved_task_id: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface DailyPlanRow {
+  id: string
+  user_id: string
+  horizon_start: string
+  horizon_end: string
+  status: DailyPlanStatus
+  summary: string
+  now_item: Record<string, unknown> | null
+  next_items: Record<string, unknown>[]
+  risk_items: Record<string, unknown>[]
+  tradeoffs: Record<string, unknown>[]
+  source_coverage: Record<string, unknown>[]
+  command: string | null
+  model: string | null
+  error_message: string | null
+  created_at: string
+  updated_at: string
+}
+
 export interface ChangeLogRow {
   id: string
   user_id: string
@@ -187,11 +263,18 @@ export interface ChangeLogRow {
 }
 
 export type UserPreferencesUpsertRow = Omit<UserPreferencesRow, "id" | "created_at" | "updated_at">
-export type TaskInsertRow = Omit<TaskRow, "id" | "created_at" | "updated_at" | "source_snapshot_id"> & {
+export type TaskInsertRow = Omit<
+  TaskRow,
+  "id" | "created_at" | "updated_at" | "source_snapshot_id" | "source_candidate_id" | "plan_id"
+> & {
   source_snapshot_id?: string | null
+  source_candidate_id?: string | null
+  plan_id?: string | null
 }
 export type TaskUpdateRow = Partial<Omit<TaskInsertRow, "user_id">>
-export type ScheduleEventInsertRow = Omit<ScheduleEventRow, "id" | "created_at" | "updated_at">
+export type ScheduleEventInsertRow = Omit<ScheduleEventRow, "id" | "created_at" | "updated_at" | "plan_id"> & {
+  plan_id?: string | null
+}
 export type CheckInInsertRow = Omit<CheckInRow, "id" | "created_at" | "event_id"> & { event_id?: string | null }
 export type UserIntegrationUpsertRow = Omit<UserIntegrationRow, "id" | "created_at" | "updated_at">
 export type UserCalendarUpsertRow = Omit<UserCalendarRow, "id" | "created_at" | "updated_at">
@@ -251,6 +334,9 @@ export interface Task {
   allDay: boolean
   calendarId: string | null
   tags: string[]
+  sourceSnapshotId: string | null
+  sourceCandidateId: string | null
+  planId: string | null
 }
 
 export interface ScheduleEvent {
@@ -271,6 +357,7 @@ export interface ScheduleEvent {
   isCheckedIn: boolean
   allDay: boolean
   calendarId: string | null
+  planId: string | null
 }
 
 export interface UserIntegration {
@@ -281,6 +368,8 @@ export interface UserIntegration {
   providerUserId: string | null
   status: UserIntegrationStatus
   selectedCalendarId: string | null
+  selectedSourceId: string | null
+  selectedSourceName: string | null
   lastSyncedAt: string | null
   createdAt: string
   updatedAt: string
@@ -326,6 +415,89 @@ export interface SourceSnapshotSummary {
   freshness: SourceFreshness
   summary: string
   capturedAt: string
+}
+
+export interface SourceFileSummary {
+  id: string
+  source: SourceKind
+  sourceRef: string | null
+  fileName: string
+  mimeType: string
+  storagePath: string
+  sizeBytes: number
+  status: SourceFileStatus
+  errorMessage: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface SourceCandidate {
+  id: string
+  userId: string
+  sourceSnapshotId: string | null
+  sourceFileId: string | null
+  kind: SourceCandidateKind
+  title: string
+  description: string | null
+  course: string | null
+  dueAt: string | null
+  durationMinutes: number | null
+  priority: Priority
+  confidence: number | null
+  evidence: string | null
+  status: SourceCandidateStatus
+  approvedTaskId: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface DailyPlanNowItem {
+  title: string
+  why: string
+  start: string | null
+  end: string | null
+  taskId: string | null
+  eventId: string | null
+}
+
+export interface DailyPlanListItem {
+  title: string
+  start: string | null
+  end: string | null
+  kind: "task" | "event" | "routine" | "break"
+}
+
+export interface DailyPlanRiskItem {
+  title: string
+  detail: string
+  severity: "low" | "medium" | "high"
+  taskId?: string | null
+  eventId?: string | null
+}
+
+export interface SourceCoverageItem {
+  label: string
+  status: SourceFreshness | "connected" | "missing"
+  detail: string
+}
+
+export interface DailyPlan {
+  id: string
+  userId: string
+  horizonStart: string
+  horizonEnd: string
+  status: DailyPlanStatus
+  summary: string
+  nowItem: DailyPlanNowItem | null
+  nextItems: DailyPlanListItem[]
+  riskItems: DailyPlanRiskItem[]
+  tradeoffs: string[]
+  sourceCoverage: SourceCoverageItem[]
+  command: string | null
+  model: string | null
+  errorMessage: string | null
+  createdAt: string
+  updatedAt: string
 }
 
 export interface AvailabilityContext {
@@ -445,7 +617,12 @@ export interface DashboardResponse {
   tasks: Task[]
   events: ScheduleEvent[]
   memories: MemoryEntrySummary[]
+  integrations: UserIntegration[]
+  sourceConnectors: SourceConnector[]
   sources: SourceSnapshotSummary[]
+  sourceFiles: SourceFileSummary[]
+  sourceCandidates: SourceCandidate[]
+  dailyPlan: DailyPlan | null
 }
 
 export interface CreateTaskRequest {
@@ -460,6 +637,9 @@ export interface CreateTaskRequest {
   calendarId?: string | null
   tags?: string[]
   scheduledFor?: string | null
+  sourceSnapshotId?: string | null
+  sourceCandidateId?: string | null
+  planId?: string | null
 }
 
 export interface UpdateTaskRequest {
@@ -474,6 +654,9 @@ export interface UpdateTaskRequest {
   calendarId?: string | null
   tags?: string[]
   scheduledFor?: string | null
+  sourceSnapshotId?: string | null
+  sourceCandidateId?: string | null
+  planId?: string | null
 }
 
 export interface TaskMutationResponse {
@@ -590,6 +773,7 @@ export interface ScheduleEventInput {
   isCheckedIn?: boolean
   allDay?: boolean
   calendarId?: string | null
+  planId?: string | null
 }
 
 export interface ScheduleRequest {

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
 
+import { USER_INTEGRATION_SELECT } from "../lib/data/mappers"
 import { assistantMessageResponseSchema } from "../schemas/assistant"
 import { dashboardResponseSchema } from "../schemas/dashboard"
 
@@ -21,7 +22,31 @@ describe("production response schemas", () => {
         tasks: [],
         events: [],
         memories: [],
+        integrations: [],
+        sourceConnectors: [
+          {
+            id: "notion",
+            status: "missing_config",
+            detail: "Notion OAuth is not configured for this app. Add NOTION_CLIENT_ID and NOTION_CLIENT_SECRET on the server before users can connect a workspace.",
+            account: null,
+            canRun: false,
+            selectedSourceId: null,
+            selectedSourceName: null,
+          },
+          {
+            id: "gmail",
+            status: "auth_needed",
+            detail: "Authorize Google with Gmail read-only access before scanning mail.",
+            account: null,
+            canRun: false,
+            selectedSourceId: null,
+            selectedSourceName: null,
+          },
+        ],
         sources: [],
+        sourceFiles: [],
+        sourceCandidates: [],
+        dailyPlan: null,
       }),
     ).toMatchObject({
       stats: {
@@ -76,5 +101,10 @@ describe("production response schemas", () => {
         ],
       },
     })
+  })
+
+  it("keeps new integration source fields off the critical dashboard select", () => {
+    expect(USER_INTEGRATION_SELECT).not.toContain("selected_source_id")
+    expect(USER_INTEGRATION_SELECT).not.toContain("selected_source_name")
   })
 })

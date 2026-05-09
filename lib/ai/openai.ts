@@ -12,7 +12,7 @@ const DEFAULT_WORKDAY_END = "17:00"
 const DEFAULT_TASK_DURATION_MINUTES = 50
 const DEFAULT_BREAK_MINUTES = 10
 const MIN_SLOT_MINUTES = 15
-const FIVE_DAY_HORIZON_DAYS = 5
+const FIVE_DAY_HORIZON_DAYS = 7
 const DEFAULT_OPENAI_MODEL = "gpt-4.1"
 const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses"
 const DEFAULT_TASKS_CALENDAR_ID = "cal-tasks"
@@ -182,7 +182,7 @@ export async function generateSchedule(input: SchedulePreparationContext): Promi
       plannerStatus: "ready",
       proposedEvents: sortEventsByStart(planningContext.fixedTaskEvents),
       unscheduledTaskIds: [],
-      summary: "No active tasks fell inside the current five-day planning window.",
+      summary: "No active tasks fell inside the current seven-day planning window.",
     })
   }
 
@@ -250,6 +250,7 @@ export async function replanSchedule(input: ReplanRequest) {
       isCheckedIn: event.isCheckedIn ?? false,
       allDay: event.allDay ?? false,
       calendarId: event.calendarId ?? null,
+      planId: event.planId ?? null,
     })),
   })
 
@@ -506,6 +507,7 @@ function materializeTaskPlacements(
       isCheckedIn: false,
       allDay: task.allDay,
       calendarId: DEFAULT_TASKS_CALENDAR_ID,
+      planId: null,
     }
   })
 }
@@ -556,7 +558,7 @@ function validateGeneratedEvents(
     }
 
     if (!isEventInsidePlanningWindow(event.start, event.end, context.planningWindow)) {
-      throw new Error(`OpenAI scheduled task ${task.id} outside the five-day planning horizon.`)
+      throw new Error(`OpenAI scheduled task ${task.id} outside the seven-day planning horizon.`)
     }
 
     if (task.deadline && endMs > new Date(task.deadline).getTime()) {
@@ -656,6 +658,7 @@ function taskToFixedEvent(
     isCheckedIn: false,
     allDay: task.allDay,
     calendarId: DEFAULT_TASKS_CALENDAR_ID,
+    planId: task.planId,
   }
 }
 

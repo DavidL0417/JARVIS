@@ -286,7 +286,7 @@ export function TaskManager({
           key={task.id}
           className="rounded-sm bg-muted/20 px-2.5 py-2.5"
         >
-          <div className="space-y-2">
+          <div className="flex flex-col gap-2">
             <Input
               value={editDraft.title}
               onChange={(event) => setEditDraft((current) => ({ ...current, title: event.target.value }))}
@@ -457,7 +457,7 @@ export function TaskManager({
   ]
 
   return (
-    <section className="mt-7 flex flex-col border-t border-rule-strong pt-7">
+    <section className="flex flex-col pt-1">
       <header className="mb-4 flex items-center justify-between gap-2">
         <div className="flex items-baseline gap-2">
           <h2 className="eyebrow">{headerTitle}</h2>
@@ -488,7 +488,7 @@ export function TaskManager({
       ) : null}
 
       {createOpen ? (
-        <div className="mb-5 space-y-2 rounded-sm bg-muted/20 px-3 py-3">
+        <div className="mb-5 flex flex-col gap-2 rounded-sm bg-muted/20 px-3 py-3">
           <Input
             placeholder="New task"
             value={createDraft.title}
@@ -559,7 +559,7 @@ export function TaskManager({
         </div>
       ) : null}
 
-      <div className="space-y-7">
+      <div className="flex flex-col gap-7">
         {sections.map((section) => (
           <div key={section.id}>
             <div className="mb-2 flex items-baseline gap-2">
@@ -573,7 +573,7 @@ export function TaskManager({
                 {section.id === "overdue" ? "Nothing overdue." : section.id === "todo" ? "Inbox empty." : "Nothing scheduled."}
               </p>
             ) : (
-              <ul className="space-y-1.5">
+              <ul className="flex flex-col gap-1.5">
                 {section.tasks.map((task, index) => renderTaskRow(task, index))}
               </ul>
             )}
@@ -603,7 +603,7 @@ export function TaskManager({
                 Nothing closed yet.
               </p>
             ) : (
-              <ul className="mt-2 space-y-1.5">{completedTasks.map((task, index) => renderTaskRow(task, index))}</ul>
+              <ul className="mt-2 flex flex-col gap-1.5">{completedTasks.map((task, index) => renderTaskRow(task, index))}</ul>
             )
           ) : null}
         </div>
