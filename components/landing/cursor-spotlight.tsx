@@ -197,21 +197,47 @@ export function CursorSpotlight() {
       context.stroke()
     }
 
-    const drawPointerGlow = (t: number) => {
+    const drawPointerDots = (offsetX: number, offsetY: number, t: number) => {
       pointer.x += (pointer.tx - pointer.x) * 0.11
       pointer.y += (pointer.ty - pointer.y) * 0.11
       if (!pointer.active) return
 
-      const pulse = (Math.sin(t * 4.2) + 1) * 0.5
-      const radius = POINTER_RADIUS + pulse * 12
-      const gradient = context.createRadialGradient(pointer.x, pointer.y, 0, pointer.x, pointer.y, radius)
-      gradient.addColorStop(0, "rgba(245, 178, 104, 0.15)")
-      gradient.addColorStop(0.36, "rgba(224, 166, 111, 0.045)")
-      gradient.addColorStop(1, "rgba(224, 166, 111, 0)")
-      context.fillStyle = gradient
-      context.beginPath()
-      context.arc(pointer.x, pointer.y, radius, 0, Math.PI * 2)
-      context.fill()
+      const size = TILE_SIZE
+      const startX = wrap(offsetX, -size, 0)
+      const startY = wrap(offsetY, -size, 0)
+      const pulse = (Math.sin(t * 4.6) + 1) * 0.5
+      const minCol = Math.floor((pointer.x - POINTER_RADIUS - startX) / TILE_SPACING) - 1
+      const maxCol = Math.ceil((pointer.x + POINTER_RADIUS - startX) / TILE_SPACING) + 1
+      const minRow = Math.floor((pointer.y - POINTER_RADIUS - startY) / TILE_SPACING) - 1
+      const maxRow = Math.ceil((pointer.y + POINTER_RADIUS - startY) / TILE_SPACING) + 1
+
+      for (let row = minRow; row <= maxRow; row += 1) {
+        for (let col = minCol; col <= maxCol; col += 1) {
+          const tileRow = ((row % 24) + 24) % 24
+          const tileCol = ((col % 24) + 24) % 24
+          const index = 11 + tileRow * 41 + tileCol * 97
+          const stagger = tileRow % 2 === 0 ? 0 : TILE_SPACING * 0.5
+          const x = startX + col * TILE_SPACING + stagger + (seededNoise(index) - 0.5) * 6
+          const y = startY + row * TILE_SPACING + (seededNoise(index + 19) - 0.5) * 6
+          const dx = x - pointer.x
+          const dy = y - pointer.y
+          const distance = Math.hypot(dx, dy)
+          if (distance > POINTER_RADIUS) continue
+
+          const proximity = 1 - distance / POINTER_RADIUS
+          const force = proximity * proximity
+          const angle = Math.atan2(dy, dx)
+          const pushedX = x + Math.cos(angle) * force * 5
+          const pushedY = y + Math.sin(angle) * force * 5
+          const radius = 1.3 + force * 1.9 + pulse * 0.18
+          const alpha = 0.2 + force * 0.68
+
+          context.beginPath()
+          context.arc(pushedX, pushedY, radius, 0, Math.PI * 2)
+          context.fillStyle = `rgba(245, 178, 104, ${alpha})`
+          context.fill()
+        }
+      }
     }
 
     const tick = (time: number) => {
@@ -227,18 +253,25 @@ export function CursorSpotlight() {
       context.clearRect(0, 0, width, height)
       context.globalCompositeOperation = "lighter"
 
+      const baseOffsetX = Math.sin(t * 0.18) * 18 - cameraY * 0.025 + scrollDrag * 0.12
+      const baseOffsetY = t * 14 - cameraY * 0.18 + scrollDrag * 0.52
+      const brightOffsetX = Math.cos(t * 0.23) * 24 + cameraY * 0.018 - scrollDrag * 0.18
+      const brightOffsetY = t * -19 - cameraY * 0.27 + scrollDrag * 0.35
+
       drawTileLayer(
         baseTile,
-        Math.sin(t * 0.18) * 18 - cameraY * 0.025 + scrollDrag * 0.12,
-        t * 14 - cameraY * 0.18 + scrollDrag * 0.52,
+        baseOffsetX,
+        baseOffsetY,
         0.94,
       )
       drawTileLayer(
         brightTile,
-        Math.cos(t * 0.23) * 24 + cameraY * 0.018 - scrollDrag * 0.18,
-        t * -19 - cameraY * 0.27 + scrollDrag * 0.35,
+        brightOffsetX,
+        brightOffsetY,
         0.5 + Math.sin(t * 0.7) * 0.1,
       )
+
+      drawPointerDots(baseOffsetX, baseOffsetY, t)
 
       const currentSpan = height + CURRENT_WRAP_PADDING * 2
       for (const current of currents) {
@@ -255,8 +288,6 @@ export function CursorSpotlight() {
           drawCurrent(current, baseY - currentSpan, t, scrollDrag)
         }
       }
-
-      drawPointerGlow(t)
       context.globalCompositeOperation = "source-over"
       raf = window.requestAnimationFrame(tick)
     }
