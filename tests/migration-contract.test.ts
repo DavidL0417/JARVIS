@@ -18,6 +18,10 @@ const notionAuthoritativeSourceMigration = readFileSync(
   "supabase/migrations/20260508231116_notion_authoritative_source.sql",
   "utf8",
 )
+const explicitDenyPoliciesMigration = readFileSync(
+  "supabase/migrations/20260509170508_explicit_waitlist_deny_policies.sql",
+  "utf8",
+)
 
 describe("production Supabase migration", () => {
   it("keeps OAuth tokens outside public tables", () => {
@@ -86,5 +90,13 @@ describe("production Supabase migration", () => {
     expect(notionAuthoritativeSourceMigration).toContain("add column if not exists selected_source_name text")
     expect(notionAuthoritativeSourceMigration).not.toContain("access_token")
     expect(notionAuthoritativeSourceMigration).not.toContain("refresh_token")
+  })
+
+  it("keeps public waitlist and private token tables explicitly closed to browser roles", () => {
+    expect(explicitDenyPoliciesMigration).toContain("create policy waitlist_deny_anon_authenticated")
+    expect(explicitDenyPoliciesMigration).toContain("on public.waitlist")
+    expect(explicitDenyPoliciesMigration).toContain("to anon, authenticated")
+    expect(explicitDenyPoliciesMigration).toContain("create policy integration_tokens_deny_anon_authenticated")
+    expect(explicitDenyPoliciesMigration).toContain("on app_private.integration_tokens")
   })
 })

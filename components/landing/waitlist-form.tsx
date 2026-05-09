@@ -34,7 +34,7 @@ export function WaitlistForm({ variant = "compact", id = "waitlist" }: WaitlistF
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
 
-    const trimmed = email.trim()
+    const trimmed = email.trim().toLowerCase()
 
     if (!trimmed || !EMAIL_PATTERN.test(trimmed)) {
       setStatus({ kind: "error", message: "That email doesn't look right." })
@@ -110,7 +110,7 @@ export function WaitlistForm({ variant = "compact", id = "waitlist" }: WaitlistF
         </label>
         <input
           id={`${id}-email`}
-          type="email"
+          type="text"
           inputMode="email"
           autoComplete="email"
           spellCheck={false}

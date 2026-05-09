@@ -2,124 +2,188 @@
 
 import { useEffect, useRef } from "react"
 
-const HERO_SELECTOR = "#section-hero"
-const BASE_OPACITY = "0.52"
-const IDLE_OPACITY = "0.16"
-const READABLE_OPACITY = "0.08"
-const READABLE_TEXT_SELECTOR = "a, button, p, h1, h2, h3, h4, li, label, input, textarea, [data-bloom-dim]"
-const BLOOM_SHIELD_SELECTOR = "[data-bloom-shield], [data-bloom-dim]"
-const BLOOM_SHIELD_PADDING_PX = 56
+const DOT_SPACING = 28
+const DOT_RADIUS = 1.15
+const POINTER_RADIUS = 168
+const POINTER_STRENGTH = 16
+const DRIFT_STRENGTH = 1.85
+const POINTER_EASE = 0.055
+const RETURN_EASE = 0.04
+const WAVE_FREQ_X = 0.0042
+const WAVE_FREQ_Y = 0.0036
+const WAVE_SPEED_A = 0.32
+const WAVE_SPEED_B = 0.21
+const FIELD_PADDING = POINTER_RADIUS + DOT_SPACING
+
+type Dot = {
+  x: number
+  y: number
+  phase: number
+  speed: number
+  weight: number
+  ox: number
+  oy: number
+}
 
 export function CursorSpotlight() {
-  const ref = useRef<HTMLDivElement | null>(null)
+  const ref = useRef<HTMLCanvasElement | null>(null)
 
   useEffect(() => {
-    const el = ref.current
-    if (!el) return
+    const canvas = ref.current
+    if (!canvas) return
     if (typeof window === "undefined") return
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return
-    if (window.matchMedia("(pointer: coarse)").matches) return
 
-    let mx = -2000
-    let my = -2000
-    let cx = mx
-    let cy = my
+    const context = canvas.getContext("2d", { alpha: true })
+    if (!context) return
+
+    const reducedPointer = window.matchMedia("(pointer: coarse)").matches
+    const dots: Dot[] = []
+    const pointer = {
+      x: -10000,
+      y: -10000,
+      tx: -10000,
+      ty: -10000,
+      active: false,
+    }
+
     let raf = 0
-    let active = false
-    let idleTimer = 0
+    let width = 0
+    let height = 0
+    let dpr = 1
 
-    const tick = () => {
-      cx += (mx - cx) * 0.18
-      cy += (my - cy) * 0.18
-      el.style.setProperty("--cx", `${cx.toFixed(1)}px`)
-      el.style.setProperty("--cy", `${cy.toFixed(1)}px`)
-      raf = window.requestAnimationFrame(tick)
-    }
+    const rebuildField = () => {
+      dots.length = 0
+      width = window.innerWidth
+      height = window.innerHeight
+      dpr = Math.min(window.devicePixelRatio || 1, 2)
 
-    const setOpacity = (value: string) => {
-      if (el.style.opacity !== value) el.style.opacity = value
-    }
+      canvas.width = Math.ceil(width * dpr)
+      canvas.height = Math.ceil(height * dpr)
+      canvas.style.width = `${width}px`
+      canvas.style.height = `${height}px`
+      context.setTransform(dpr, 0, 0, dpr, 0, 0)
 
-    const isInsideBloomShield = (x: number, y: number) => {
-      const shields = document.querySelectorAll<HTMLElement>(BLOOM_SHIELD_SELECTOR)
-      for (const shield of shields) {
-        const rect = shield.getBoundingClientRect()
-        if (
-          x >= rect.left - BLOOM_SHIELD_PADDING_PX &&
-          x <= rect.right + BLOOM_SHIELD_PADDING_PX &&
-          y >= rect.top - BLOOM_SHIELD_PADDING_PX &&
-          y <= rect.bottom + BLOOM_SHIELD_PADDING_PX
-        ) {
-          return true
+      const columns = Math.ceil((width + FIELD_PADDING * 2) / DOT_SPACING)
+      const rows = Math.ceil((height + FIELD_PADDING * 2) / DOT_SPACING)
+
+      for (let row = 0; row <= rows; row += 1) {
+        for (let col = 0; col <= columns; col += 1) {
+          const stagger = row % 2 === 0 ? 0 : DOT_SPACING * 0.5
+          dots.push({
+            x: col * DOT_SPACING - FIELD_PADDING + stagger,
+            y: row * DOT_SPACING - FIELD_PADDING,
+            phase: (row * 0.73 + col * 0.37) % Math.PI,
+            speed: 0.42 + ((row + col) % 7) * 0.034,
+            weight: 0.78 + ((row * 3 + col * 5) % 9) * 0.018,
+            ox: 0,
+            oy: 0,
+          })
         }
       }
-      return false
+    }
+
+    const tick = (time: number) => {
+      const t = time * 0.001
+      pointer.x += (pointer.tx - pointer.x) * 0.09
+      pointer.y += (pointer.ty - pointer.y) * 0.09
+
+      context.clearRect(0, 0, width, height)
+
+      for (const dot of dots) {
+        const driftX = Math.sin(t * dot.speed + dot.phase) * DRIFT_STRENGTH
+        const driftY = Math.cos(t * (dot.speed * 0.74) + dot.phase * 1.4) * (DRIFT_STRENGTH * 0.82)
+        const baseX = dot.x + driftX
+        const baseY = dot.y + driftY
+        let proximity = 0
+        let targetOx = 0
+        let targetOy = 0
+
+        if (pointer.active) {
+          const dx = baseX + dot.ox - pointer.x
+          const dy = baseY + dot.oy - pointer.y
+          const distance = Math.hypot(dx, dy)
+
+          if (distance < POINTER_RADIUS) {
+            proximity = 1 - distance / POINTER_RADIUS
+            const force = proximity * proximity * POINTER_STRENGTH
+            const angle = Math.atan2(dy, dx)
+            targetOx = Math.cos(angle) * force
+            targetOy = Math.sin(angle) * force
+          }
+        }
+
+        const ease = proximity > 0 ? POINTER_EASE : RETURN_EASE
+        dot.ox += (targetOx - dot.ox) * ease
+        dot.oy += (targetOy - dot.oy) * ease
+
+        const x = baseX + dot.ox
+        const y = baseY + dot.oy
+
+        const wave =
+          Math.sin(dot.x * WAVE_FREQ_X + dot.y * WAVE_FREQ_Y + t * WAVE_SPEED_A) *
+            0.5 +
+          Math.sin(dot.x * WAVE_FREQ_Y - dot.y * WAVE_FREQ_X + t * WAVE_SPEED_B + 1.7) *
+            0.5
+        const waveNorm = (wave + 2) * 0.25
+        const pulse = (Math.sin(t * 0.42 + dot.phase * 1.8) + 1) * 0.5
+        const baseAlpha = 0.32 + pulse * 0.06 + waveNorm * 0.18
+        const alpha = Math.min(0.85, baseAlpha * dot.weight + proximity * 0.32)
+        const radius = DOT_RADIUS + proximity * 0.4 + pulse * 0.06 + waveNorm * 0.18
+
+        const warm = waveNorm > 0.55
+        context.beginPath()
+        context.arc(x, y, radius, 0, Math.PI * 2)
+        context.fillStyle =
+          proximity > 0
+            ? `rgba(245, 178, 104, ${alpha})`
+            : warm
+              ? `rgba(214, 158, 110, ${alpha})`
+              : `rgba(186, 144, 110, ${alpha})`
+        context.fill()
+      }
+
+      raf = window.requestAnimationFrame(tick)
     }
 
     const onMove = (event: PointerEvent) => {
       if (event.pointerType === "touch") return
-      mx = event.clientX
-      my = event.clientY
-      window.clearTimeout(idleTimer)
-
-      const target = document.elementFromPoint(mx, my)
-      const inHero = Boolean(target?.closest(HERO_SELECTOR))
-      const overReadableText = Boolean(target?.closest(READABLE_TEXT_SELECTOR))
-
-      if (!inHero || isInsideBloomShield(mx, my)) {
-        active = false
-        setOpacity("0")
-        return
-      }
-
-      if (!active) {
-        active = true
-      }
-
-      setOpacity(overReadableText ? READABLE_OPACITY : BASE_OPACITY)
-      idleTimer = window.setTimeout(() => setOpacity(IDLE_OPACITY), 850)
+      pointer.tx = event.clientX
+      pointer.ty = event.clientY
+      pointer.active = true
+      canvas.dataset.active = "true"
     }
 
     const onLeave = () => {
-      window.clearTimeout(idleTimer)
-      mx = -2000
-      my = -2000
-      active = false
-      el.style.opacity = "0"
+      pointer.tx = -10000
+      pointer.ty = -10000
+      pointer.active = false
+      canvas.dataset.active = "false"
     }
 
-    el.style.opacity = "0"
-    el.style.setProperty("--cx", `${mx}px`)
-    el.style.setProperty("--cy", `${my}px`)
+    rebuildField()
     raf = window.requestAnimationFrame(tick)
 
-    window.addEventListener("pointermove", onMove)
+    if (!reducedPointer) {
+      window.addEventListener("pointermove", onMove)
+    }
+    window.addEventListener("resize", rebuildField)
     document.addEventListener("pointerleave", onLeave)
 
     return () => {
       window.removeEventListener("pointermove", onMove)
+      window.removeEventListener("resize", rebuildField)
       document.removeEventListener("pointerleave", onLeave)
-      window.clearTimeout(idleTimer)
       window.cancelAnimationFrame(raf)
     }
   }, [])
 
   return (
-    <div
+    <canvas
       ref={ref}
       aria-hidden="true"
-      className="cursor-spotlight pointer-events-none fixed inset-0 z-[2]"
-      style={{
-        backgroundImage:
-          "radial-gradient(circle 170px at var(--cx, -2000px) var(--cy, -2000px), oklch(0.84 0.15 48 / 0.18), oklch(0.74 0.14 42 / 0.08) 42%, transparent 76%)",
-        backgroundSize: "100% 100%",
-        backgroundPosition: "0 0",
-        backgroundAttachment: "fixed",
-        filter: "blur(10px)",
-        opacity: 0,
-        transition: "opacity 480ms ease-out",
-        willChange: "opacity",
-      }}
+      data-active="false"
+      className="cursor-dot-field pointer-events-none fixed inset-0 z-[2]"
     />
   )
 }

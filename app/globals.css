@@ -207,11 +207,20 @@
   color: var(--foreground);
   background-image:
     radial-gradient(60rem 40rem at 18% -8%, var(--copper-glow), transparent 60%),
-    radial-gradient(48rem 36rem at 92% 18%, oklch(0.55 0.14 38 / 0.08), transparent 65%),
-    radial-gradient(circle at 1px 1px, oklch(0.40 0.016 35 / 0.55) 1px, transparent 0);
-  background-size: auto, auto, 28px 28px;
-  background-attachment: fixed, fixed, fixed;
-  background-position: 0 0, 0 0, 0 0;
+    radial-gradient(48rem 36rem at 92% 18%, oklch(0.55 0.14 38 / 0.08), transparent 65%);
+  background-size: auto, auto;
+  background-attachment: fixed, fixed;
+  background-position: 0 0, 0 0;
+}
+
+.cursor-dot-field {
+  opacity: 0.92;
+  mix-blend-mode: screen;
+  transition: opacity 240ms ease-out;
+}
+
+.cursor-dot-field[data-active="true"] {
+  opacity: 1;
 }
 
 .landing::before {
@@ -230,6 +239,20 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .landing {
+    background-image:
+      radial-gradient(60rem 40rem at 18% -8%, var(--copper-glow), transparent 60%),
+      radial-gradient(48rem 36rem at 92% 18%, oklch(0.55 0.14 38 / 0.08), transparent 65%),
+      radial-gradient(circle at 1px 1px, oklch(0.40 0.016 35 / 0.55) 1px, transparent 0);
+    background-size: auto, auto, 28px 28px;
+    background-attachment: fixed, fixed, fixed;
+    background-position: 0 0, 0 0, 0 0;
+  }
+
+  .cursor-dot-field {
+    display: none;
+  }
+
   .landing::before {
     animation: none;
   }
