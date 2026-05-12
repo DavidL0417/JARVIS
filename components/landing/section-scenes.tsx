@@ -48,6 +48,56 @@ const planBlocks = [
   { y: 526, h: 58, tone: "var(--signal-copper)", delay: 0.49 },
 ] as const
 
+const NOISE_TONES = [
+  "var(--signal-copper)",
+  "var(--signal-teal)",
+  "var(--signal-blue)",
+  "var(--signal-green)",
+] as const
+
+function noise(seed: number) {
+  const v = Math.sin(seed * 12.9898) * 43758.5453
+  return v - Math.floor(v)
+}
+
+const round = (value: number, digits = 3) => Number(value.toFixed(digits))
+
+const noiseLines = Array.from({ length: 22 }).map((_, i) => {
+  const cx = 620
+  const cy = 374
+  const a = noise(i * 1.31 + 4.7)
+  const b = noise(i * 0.91 + 17.3)
+  const c = noise(i * 2.13 + 31.7)
+  const d = noise(i * 0.57 + 53.1)
+
+  // Spread across the viewport, biased away from the centre so they have somewhere
+  // to consolidate from.
+  const radius = 220 + c * 360
+  const angle = a * Math.PI * 2
+  const x = cx + Math.cos(angle) * radius
+  const y = cy + Math.sin(angle) * radius * 0.7
+
+  // Each segment has its own random orientation and length.
+  const segAngle = b * Math.PI * 2
+  const segLen = 14 + d * 26
+  const dx = Math.cos(segAngle) * segLen * 0.5
+  const dy = Math.sin(segAngle) * segLen * 0.5
+
+  // Round all numeric values up-front so server and client serialize identically.
+  return {
+    id: `noise-${i}`,
+    x1: round(x - dx),
+    y1: round(y - dy),
+    x2: round(x + dx),
+    y2: round(y + dy),
+    tx: round((cx - x) * 0.92),
+    ty: round((cy - y) * 0.92),
+    rotate: round((b - 0.5) * 26),
+    tone: NOISE_TONES[i % NOISE_TONES.length],
+    bias: round(0.55 + c * 0.45),
+  }
+})
+
 function clamp01(value: number) {
   return Math.max(0, Math.min(1, value))
 }
@@ -56,9 +106,13 @@ export function SectionScenes({ motion }: SectionScenesProps) {
   const rootRef = useRef<HTMLDivElement | null>(null)
   const stage = useMemo(() => {
     const sp = motion.sceneProgress
-    const systemOpacity = clamp01((sp - 0.18) * 1.45)
-    const streamDraw = clamp01((sp - 0.45) * 0.48)
-    const gather = clamp01((sp - 1.55) * 0.42)
+    const systemOpacity = clamp01((sp - 0.16) * 1.58)
+    // Entropy noise lines have their own independent ramp so they peak in the
+    // hero-exit / early-problem window, before the curated curves appear.
+    const noiseDraw = clamp01((sp - 0.32) * 0.78)
+    // Streams now wait until the entropy has had its moment, then emerge.
+    const streamDraw = clamp01((sp - 1.5) * 0.55)
+    const gather = clamp01((sp - 1.85) * 0.42)
     const planDraw = clamp01((sp - 2.55) * 0.5)
     const finish = clamp01((motion.overallProgress - 0.78) / 0.22)
     const finalAct = clamp01(Math.max((sp - 4.15) * 0.95, finish))
@@ -73,6 +127,7 @@ export function SectionScenes({ motion }: SectionScenesProps) {
       "--scene-progress": sp.toFixed(4),
       "--system-opacity": systemOpacity.toFixed(4),
       "--overall-p": motion.overallProgress.toFixed(4),
+      "--noise-draw": noiseDraw.toFixed(4),
       "--stream-draw": streamDraw.toFixed(4),
       "--gather-p": gather.toFixed(4),
       "--plan-draw": planDraw.toFixed(4),
@@ -154,6 +209,29 @@ export function SectionScenes({ motion }: SectionScenesProps) {
           ))}
           {Array.from({ length: 8 }).map((_, index) => (
             <line key={`v-${index}`} y1="72" y2="728" x1={154 + index * 132} x2={154 + index * 132} />
+          ))}
+        </g>
+
+        <g className="source-noise">
+          {noiseLines.map((line) => (
+            <line
+              key={line.id}
+              className="source-noise-line"
+              x1={line.x1}
+              y1={line.y1}
+              x2={line.x2}
+              y2={line.y2}
+              stroke={line.tone}
+              style={
+                {
+                  ["--noise-tx"]: `${line.tx}px`,
+                  ["--noise-ty"]: `${line.ty}px`,
+                  ["--noise-rot"]: `${line.rotate}deg`,
+                  ["--noise-bias"]: String(line.bias),
+                  transformOrigin: `${round((line.x1 + line.x2) / 2)}px ${round((line.y1 + line.y2) / 2)}px`,
+                } as CSSProperties
+              }
+            />
           ))}
         </g>
 

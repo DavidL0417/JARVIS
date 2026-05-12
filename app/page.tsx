@@ -1,6 +1,5 @@
 import type { Metadata } from "next"
 
-import { DashboardPreview } from "@/components/landing/dashboard-preview"
 import { LandingFooter } from "@/components/landing/landing-footer"
 import { LandingHero } from "@/components/landing/landing-hero"
 import { LandingMotion } from "@/components/landing/landing-motion"
@@ -92,32 +91,6 @@ export default function LandingPage() {
 
       <div className="relative z-10 pl-[var(--landing-px)] pr-[var(--landing-px)] md:pl-[calc(var(--landing-px)+72px)]">
         <div className="mx-auto w-full max-w-[1180px]">
-          <SectionReveal oneShot>
-            <section
-              aria-label="Jarvis dashboard preview"
-              className="relative pb-[clamp(60px,9vw,120px)] pt-[clamp(48px,7vw,96px)]"
-            >
-              <div className="ml-auto w-full max-w-[940px] pl-0 lg:pl-[clamp(40px,8vw,140px)]">
-                <div className="relative">
-                  <span
-                    aria-hidden="true"
-                    className="pointer-events-none absolute -inset-4 -z-10 rounded-md"
-                    style={{
-                      background:
-                        "radial-gradient(60% 60% at 30% 40%, oklch(0.74 0.14 42 / 0.18), transparent 70%)",
-                    }}
-                  />
-                  <DashboardPreview />
-                  <p className="mt-3 max-w-[44ch] pl-1 text-[12px] leading-snug text-muted-foreground">
-                    Everything from every source, distilled into one view. You open it and start — nothing to figure out.
-                  </p>
-                </div>
-              </div>
-            </section>
-          </SectionReveal>
-
-          <hr className="border-t border-[var(--rule)]" aria-hidden="true" />
-
           <SectionReveal as="section">
             <section
               id="section-problem"
@@ -229,7 +202,7 @@ export default function LandingPage() {
             >
               <div id="waitlist" className="scroll-mt-24">
                 <SectionEyebrow index="05" label="Early access" />
-                <h2 className="landing-display mt-4 max-w-[18ch] text-[clamp(2rem,4.4vw,3.4rem)] font-semibold leading-[1.0] text-foreground">
+                <h2 className="landing-final-phrase landing-display mt-4 max-w-[18ch] text-[clamp(2rem,4.4vw,3.4rem)] font-semibold leading-[1.0] text-foreground">
                   Stop thinking. <span className="cta-accent-phrase">Start doing.</span>
                 </h2>
                 <p className="mt-4 max-w-[44ch] text-[clamp(1rem,1.4vw,1.125rem)] leading-[1.55] text-foreground/70">
@@ -248,6 +221,7 @@ export default function LandingPage() {
 
           <LandingFooter />
         </div>
+        <span aria-hidden="true" className="landing-content-scroll-fade" />
       </div>
     </main>
   )

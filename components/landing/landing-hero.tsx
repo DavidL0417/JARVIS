@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react"
 
+import { DashboardPreview } from "@/components/landing/dashboard-preview"
 import { WaitlistForm } from "@/components/landing/waitlist-form"
 
 export function LandingHero() {
@@ -10,13 +11,18 @@ export function LandingHero() {
   const headlineRef = useRef<HTMLHeadingElement | null>(null)
   const subheadRef = useRef<HTMLParagraphElement | null>(null)
   const formRef = useRef<HTMLDivElement | null>(null)
+  const previewRef = useRef<HTMLDivElement | null>(null)
   const keywordRef = useRef<HTMLSpanElement | null>(null)
 
   useEffect(() => {
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches
-    const targets = [eyebrowRef.current, headlineRef.current, subheadRef.current, formRef.current].filter(
-      Boolean,
-    ) as HTMLElement[]
+    const targets = [
+      eyebrowRef.current,
+      headlineRef.current,
+      subheadRef.current,
+      formRef.current,
+      previewRef.current,
+    ].filter(Boolean) as HTMLElement[]
     const keyword = keywordRef.current
 
     const revealNow = () => {
@@ -102,50 +108,69 @@ export function LandingHero() {
           <circle className="hero-ambient-core" cx="720" cy="330" r="4" />
         </svg>
       </div>
-      <div className="relative z-10 mx-auto flex min-h-[100svh] w-full max-w-[1180px] flex-col justify-center gap-7 px-[var(--landing-px)] pb-[clamp(72px,10vh,132px)] pt-[calc(56px+clamp(28px,5vh,76px))] md:pl-[calc(var(--landing-px)+72px)]">
-        <p
-          ref={eyebrowRef}
-          className="landing-mark flex items-center gap-2 text-[10.5px] text-muted-foreground opacity-0"
-        >
-          <span aria-hidden="true" className="inline-flex items-center text-[var(--copper)]">
-            <svg width="9" height="9" viewBox="0 0 9 9" fill="none">
-              <path d="M4.5 0v9M0 4.5h9" stroke="currentColor" strokeWidth="0.8" />
-            </svg>
-          </span>
-          <span className="text-[var(--copper)]">01</span>
-          <span aria-hidden="true">·</span>
-          <span>A secretary that connects to everything</span>
-        </p>
+      <div className="relative z-10 mx-auto flex min-h-[100svh] w-full max-w-[1440px] flex-col justify-center px-[var(--landing-px)] pb-[clamp(56px,8vh,104px)] pt-[calc(56px+clamp(28px,5vh,76px))] md:pl-[calc(var(--landing-px)+72px)]">
+        <div className="hero-layout">
+          <div className="hero-copy-block flex flex-col">
+            <p
+              ref={eyebrowRef}
+              className="landing-mark flex items-center gap-2 text-[10.5px] text-muted-foreground opacity-0"
+            >
+              <span aria-hidden="true" className="inline-flex items-center text-[var(--copper)]">
+                <svg width="9" height="9" viewBox="0 0 9 9" fill="none">
+                  <path d="M4.5 0v9M0 4.5h9" stroke="currentColor" strokeWidth="0.8" />
+                </svg>
+              </span>
+              <span className="text-[var(--copper)]">01</span>
+              <span aria-hidden="true">·</span>
+              <span>A secretary that connects to everything</span>
+            </p>
 
-        <h1
-          id="hero-heading"
-          ref={headlineRef}
-          className="landing-display max-w-[20ch] text-[clamp(2.6rem,8vw,6rem)] font-semibold leading-[0.96] text-foreground opacity-0"
-        >
-          Stop deciding{" "}
-          <span
-            ref={keywordRef}
-            data-bloom-dim
-            className="landing-keyword opacity-0"
-            style={{ clipPath: "inset(0 100% 0 0)" }}
-          >
-            what to do
-          </span>
-          .
-        </h1>
+            <h1
+              id="hero-heading"
+              ref={headlineRef}
+              className="landing-display mt-5 max-w-[20ch] text-[clamp(2.4rem,6vw,4.8rem)] font-semibold leading-[0.96] text-foreground opacity-0"
+            >
+              Stop deciding{" "}
+              <span
+                ref={keywordRef}
+                data-bloom-dim
+                className="landing-keyword opacity-0"
+                style={{ clipPath: "inset(0 100% 0 0)" }}
+              >
+                what to do
+              </span>
+              .
+            </h1>
 
-        <p
-          ref={subheadRef}
-          className="max-w-[52ch] text-[clamp(1.05rem,1.6vw,1.2rem)] leading-[1.5] text-foreground/75 opacity-0"
-        >
-          Jarvis connects to your Gmail, Canvas, Notion, and everything else — then autonomously decides what you should do next. Full context. Zero effort.
-        </p>
+            <p
+              ref={subheadRef}
+              className="mt-10 max-w-[52ch] text-[clamp(1rem,1.4vw,1.125rem)] leading-[1.5] text-foreground/75 opacity-0"
+            >
+              Jarvis connects to your Gmail, Canvas, Notion, and everything else — then autonomously decides what you should do next. Full context. Zero effort.
+            </p>
 
-        <div ref={formRef} className="flex flex-col gap-3 opacity-0">
-          <WaitlistForm variant="compact" id="hero-waitlist" />
-          <p className="landing-mark text-[10.5px] text-muted-foreground">
-            Invites in order. No spam. No setup. It just knows.
-          </p>
+            <div ref={formRef} className="mt-11 flex flex-col gap-3 opacity-0">
+              <WaitlistForm variant="compact" id="hero-waitlist" />
+              <p className="landing-mark text-[10.5px] text-muted-foreground">
+                Invites in order. No spam. No setup. It just knows.
+              </p>
+            </div>
+          </div>
+
+          <div ref={previewRef} className="hero-preview-stage opacity-0">
+            <div className="hero-preview-frame relative">
+              <span
+                aria-hidden="true"
+                className="pointer-events-none absolute -inset-5 -z-10 rounded-md"
+                style={{
+                  background:
+                    "radial-gradient(65% 60% at 32% 38%, oklch(0.74 0.14 42 / 0.22), transparent 72%)",
+                  filter: "blur(2px)",
+                }}
+              />
+              <DashboardPreview />
+            </div>
+          </div>
         </div>
       </div>
     </div>

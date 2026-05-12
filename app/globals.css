@@ -279,11 +279,11 @@
 .source-plan-aura {
   position: absolute;
   inset: -18%;
-  opacity: calc(0.42 + var(--plan-lock) * 0.22);
+  opacity: calc(0.48 + var(--plan-lock) * 0.24);
   background:
-    radial-gradient(48rem 32rem at 30% 16%, oklch(0.78 0.13 46 / 0.18), transparent 64%),
-    radial-gradient(42rem 34rem at 78% 40%, oklch(0.70 0.09 185 / 0.12), transparent 68%),
-    radial-gradient(38rem 28rem at 48% 76%, oklch(0.68 0.08 250 / 0.08), transparent 70%);
+    radial-gradient(48rem 32rem at 30% 16%, oklch(0.78 0.13 46 / 0.22), transparent 64%),
+    radial-gradient(42rem 34rem at 78% 40%, oklch(0.70 0.09 185 / 0.15), transparent 68%),
+    radial-gradient(38rem 28rem at 48% 76%, oklch(0.68 0.08 250 / 0.10), transparent 70%);
   filter: blur(18px);
   transform: translate3d(0, calc(var(--overall-p) * -26px), 0);
   will-change: transform, opacity;
@@ -302,12 +302,57 @@
   stroke: oklch(0.40 0.014 45 / 0.34);
   stroke-width: 0.45;
   vector-effect: non-scaling-stroke;
-  opacity: calc(0.16 + var(--scatter-p) * 0.22);
+  opacity: calc(0.2 + var(--scatter-p) * 0.24);
 }
 
 .source-streams {
-  opacity: calc(0.5 + var(--stream-draw) * 0.48 - var(--plan-lock) * 0.04);
+  /* Streams stay invisible until `--stream-draw` is non-zero, so the entropy
+     noise has the stage to itself during early scroll. */
+  opacity: calc(var(--stream-draw) * 1.08 - var(--plan-lock) * 0.02);
   transition: opacity 520ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* Entropy noise — scattered short segments that fade in during hero exit, peak
+   before the curated curves appear, drift toward the centre as `--gather-p`
+   advances, and dissolve as the streams take over. */
+.source-noise {
+  opacity: calc(
+    clamp(0, var(--system-opacity) * 1.2, 1) *
+    var(--noise-draw, 0) *
+    (1 - var(--gather-p) * 0.55) *
+    (1 - var(--stream-draw) * 0.6)
+  );
+  mix-blend-mode: screen;
+  transition: opacity 360ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.source-noise-line {
+  fill: none;
+  stroke-width: 0.75;
+  vector-effect: non-scaling-stroke;
+  opacity: var(--noise-bias, 0.7);
+  transform:
+    translate(
+      calc(var(--noise-tx) * var(--gather-p)),
+      calc(var(--noise-ty) * var(--gather-p))
+    )
+    rotate(calc(var(--noise-rot) * var(--gather-p)));
+  filter: drop-shadow(0 0 5px currentColor);
+  color: inherit;
+  animation: source-noise-flicker calc(2.6s + var(--noise-bias, 0.7) * 1.6s)
+    cubic-bezier(0.42, 0, 0.58, 1) infinite;
+  animation-delay: calc(var(--noise-bias, 0.7) * -3.4s);
+}
+
+@keyframes source-noise-flicker {
+  0%, 100% { stroke-opacity: 0.45; }
+  50% { stroke-opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .source-noise-line {
+    animation: none;
+  }
 }
 
 .source-channel {
@@ -324,7 +369,7 @@
 }
 
 .source-nodes {
-  opacity: calc(0.28 + var(--scatter-p) * 0.66 - var(--plan-lock) * 0.06);
+  opacity: calc(0.34 + var(--scatter-p) * 0.7 - var(--plan-lock) * 0.04);
 }
 
 .source-node {
@@ -456,7 +501,7 @@
 .source-plan-final-dim {
   position: absolute;
   inset: 0;
-  opacity: calc(var(--final-dim) * 0.86);
+  opacity: calc(var(--final-dim) * 0.68);
   background: oklch(0.05 0.005 32);
   will-change: opacity;
 }
@@ -470,18 +515,30 @@
     linear-gradient(180deg, oklch(0.135 0.012 35 / 0.46), transparent 36%, transparent 72%, oklch(0.135 0.012 35 / 0.55));
 }
 
-.section-scenes[data-active-scene="problem"] .source-streams {
-  opacity: 0.92;
+.landing-content-scroll-fade {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  pointer-events: none;
+  opacity: var(--landing-scroll-fade-opacity, 0);
+  background:
+    radial-gradient(46rem 30rem at 35% 35%, transparent 0 28%, oklch(0.018 0 0 / 0.46) 78%),
+    linear-gradient(180deg, oklch(0.018 0 0 / 0.94), oklch(0.018 0 0 / 0.98));
+  will-change: opacity;
 }
 
-.section-scenes[data-active-scene="how"] .convergence-core,
-.section-scenes[data-active-scene="cta"] .convergence-core {
-  opacity: 0.9;
+.landing-final-phrase {
+  position: relative;
+  z-index: 25;
+  text-shadow:
+    0 0 24px oklch(0.02 0 0 / 0.9),
+    0 0 56px oklch(0.74 0.14 42 / 0.16);
 }
 
-.section-scenes[data-active-scene="not"] .source-streams {
-  opacity: 0.42;
-}
+/* Scene-attribute opacity overrides removed — they caused a hard step at section
+   boundaries (the "sun" appearing to flip color when the active scene changed).
+   `.convergence-core`, `.source-streams`, etc. now derive opacity solely from the
+   continuous `--gather-p`, `--stream-draw`, and `--plan-lock` values. */
 
 @keyframes signal-packet-breathe {
   0%, 100% { opacity: 0.28; }
@@ -496,6 +553,75 @@
 /* ---------------- Hero ambient field ---------------- */
 .landing-hero {
   isolation: isolate;
+}
+
+/* Hero stagger layout */
+.hero-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: center;
+  gap: 1.75rem;
+}
+
+.hero-copy-block {
+  width: min(100%, 36rem);
+}
+
+.hero-preview-stage {
+  width: 100%;
+  margin-top: clamp(0.25rem, 1.5vh, 1rem);
+}
+
+.hero-preview-frame {
+  width: 100%;
+  transform: rotate(-0.65deg);
+  transform-origin: left center;
+}
+
+@media (min-width: 1100px) {
+  .hero-layout {
+    grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.15fr);
+    column-gap: clamp(36px, 4vw, 72px);
+    row-gap: 0;
+    align-items: start;
+  }
+
+  .hero-copy-block {
+    width: 100%;
+    max-width: none;
+    transform: translateY(clamp(-176px, -15vh, -116px));
+  }
+
+  .hero-preview-stage {
+    margin-top: clamp(152px, 18vh, 212px);
+  }
+
+  .hero-preview-frame {
+    transform: rotate(-0.5deg);
+    transform-origin: center center;
+  }
+
+  .hero-preview-frame::after {
+    content: '';
+    position: absolute;
+    inset: auto 0 -1px 0;
+    height: 80px;
+    background: linear-gradient(to top, oklch(0.135 0.012 35) 10%, transparent);
+    pointer-events: none;
+    z-index: 2;
+  }
+}
+
+@media (max-width: 860px) {
+  .hero-copy-block {
+    margin-left: 0;
+  }
+}
+
+@media (max-width: 560px) {
+  .hero-preview-stage {
+    display: none;
+  }
 }
 
 .hero-ambient-field {

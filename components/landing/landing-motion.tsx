@@ -220,6 +220,25 @@ export function LandingMotion() {
     <>
       <SectionScenes motion={stableMotion} />
       <TimeSpine motion={stableMotion} />
+      <ScrollFade overallProgress={stableMotion.overallProgress} />
     </>
   )
+}
+
+interface ScrollFadeProps {
+  overallProgress: number
+}
+
+function ScrollFade({ overallProgress }: ScrollFadeProps) {
+  const fadeProgress = smoothstep(clamp01((overallProgress - 0.79) / 0.19))
+  const opacity = fadeProgress * 0.84
+
+  useEffect(() => {
+    document.documentElement.style.setProperty("--landing-scroll-fade-opacity", opacity.toFixed(4))
+    return () => {
+      document.documentElement.style.removeProperty("--landing-scroll-fade-opacity")
+    }
+  }, [opacity])
+
+  return null
 }
