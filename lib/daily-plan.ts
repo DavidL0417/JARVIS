@@ -1,4 +1,5 @@
 import { generateSchedule } from "@/lib/ai/openai"
+import { loadLayeredSecretaryContext } from "@/lib/assistant/context"
 import {
   DAILY_PLAN_SELECT,
   mapDailyPlanRowToDailyPlan,
@@ -16,6 +17,7 @@ import {
   SOURCE_SNAPSHOT_SELECT,
   TASK_SELECT,
 } from "@/lib/data/mappers"
+import { refreshSourcesForUser } from "@/lib/sources/refresh"
 import type { requireAuthenticatedUser } from "@/lib/supabase/auth"
 import { TASKS_CALENDAR_ID } from "@/lib/task-calendar-constants"
 import type {
@@ -600,11 +602,29 @@ export async function buildDailyPlan(input: {
 }): Promise<{ dailyPlan: DailyPlan; schedule: SchedulePlanResult; taskCount: number }> {
   const now = new Date()
   const horizonEnd = addDays(now, HORIZON_DAYS)
+  const sourceRefresh = await refreshSourcesForUser({
+    adminClient: input.adminClient,
+    userId: input.userId,
+    mode: "pre_plan",
+    force: true,
+  })
+  const layeredContext = await loadLayeredSecretaryContext(input.adminClient, input.userId)
   const loaded = await loadScheduleContext({
     adminClient: input.adminClient,
     userId: input.userId,
     hardEvents: input.hardEvents,
   })
+  const command = input.command?.trim() || null
+  loaded.context.memoryEntries = layeredContext.memoryEntries
+  loaded.context.sourceSnapshots = layeredContext.sourceSnapshots
+  loaded.context.command = command
+  loaded.context.layeredContextMarkdown = layeredContext.layeredContextMarkdown
+  loaded.context.sourceStatus = loaded.sourceCoverage
+  loaded.context.plannerTradeoffContext = [
+    command ? `User planning command: ${command}` : null,
+    ...sourceRefresh.items.map((item) => `${item.source}: ${item.status} - ${item.summary}`),
+    ...layeredContext.recentChangeLogSummaries.slice(0, 5).map((summary) => `Recent schedule feedback: ${summary}`),
+  ].filter((item): item is string => Boolean(item))
   const schedule = await generateSchedule(loaded.context)
   const proposedEvents = schedule.proposedEvents
   const nowItem = deriveNowItem({
@@ -622,10 +642,11 @@ export async function buildDailyPlan(input: {
     horizonEnd,
   })
   const tradeoffs = [
+    ...schedule.tradeoffNotes,
     schedule.unscheduledTaskIds.length > 0
       ? `${schedule.unscheduledTaskIds.length} task${schedule.unscheduledTaskIds.length === 1 ? "" : "s"} could not be placed without breaking constraints.`
       : null,
-    input.command ? `Replanned around command: ${input.command}` : null,
+    command ? `Replanned around command: ${command}` : null,
   ].filter((item): item is string => Boolean(item))
 
   await input.adminClient
@@ -650,7 +671,7 @@ export async function buildDailyPlan(input: {
       risk_items: riskItems,
       tradeoffs,
       source_coverage: loaded.sourceCoverage,
-      command: input.command?.trim() || null,
+      command,
       model: DEFAULT_MODEL_NAME,
     })
     .select(DAILY_PLAN_SELECT)

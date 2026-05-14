@@ -12,6 +12,8 @@ import {
   updateGoogleLastSyncedAt,
 } from "@/lib/supabase/google-calendar-integration"
 import { createSupabaseAdminClient } from "@/lib/supabase/server"
+import { recordGoogleCalendarTaskFeedback } from "@/lib/sources/calendar-feedback"
+import { TASKS_CALENDAR_ID } from "@/lib/task-calendar-constants"
 import type { GoogleCalendarSyncResponse, ScheduleEvent, ScheduleEventRow, UserCalendar, UserCalendarRow } from "@/types"
 
 const DAY_IN_MS = 24 * 60 * 60 * 1000
@@ -47,6 +49,13 @@ interface GoogleCalendarEventItem {
   start?: GoogleCalendarEventDateTime
   end?: GoogleCalendarEventDateTime
   status?: string
+  extendedProperties?: {
+    private?: {
+      jarvisEventId?: string
+      jarvisTaskId?: string
+      source?: string
+    }
+  }
 }
 
 interface GoogleCalendarEventsResponse {
@@ -102,24 +111,27 @@ function mapGoogleEventToScheduleEvent(
     return null
   }
 
+  const privateProperties = item.extendedProperties?.private
+  const isJarvisTaskEvent = privateProperties?.source === "jarvis_task"
+
   return {
     id: crypto.randomUUID(),
     userId,
-    taskId: null,
+    taskId: isJarvisTaskEvent ? privateProperties?.jarvisTaskId || null : null,
     title: item.summary?.trim() || "Untitled event",
     start,
     end,
-    source: "calendar",
+    source: isJarvisTaskEvent ? "task" : "calendar",
     priority: "medium",
-    status: null,
+    status: isJarvisTaskEvent ? "scheduled" : null,
     location: item.location?.trim() || null,
     externalEventId: `${googleCalendarId}:${item.id}`,
     gcalEventId: `${googleCalendarId}:${item.id}`,
     lastSyncedFrom: "gcal",
-    isImmutable: true,
+    isImmutable: !isJarvisTaskEvent,
     isCheckedIn: true,
     allDay: isAllDay,
-    calendarId: toCalendarKey(googleCalendarId),
+    calendarId: isJarvisTaskEvent ? TASKS_CALENDAR_ID : toCalendarKey(googleCalendarId),
     planId: null,
   }
 }
@@ -252,7 +264,6 @@ async function persistGoogleEvents(userId: string, events: ScheduleEvent[]) {
     .from("schedule_events")
     .select("gcal_event_id, priority, is_immutable")
     .eq("user_id", userId)
-    .eq("last_synced_from", "gcal")
     .not("gcal_event_id", "is", null)
 
   if (existingEventsError) {
@@ -520,8 +531,8 @@ export async function syncGoogleCalendarEventsForUser(userId: string): Promise<G
       .flatMap((result) => (result.status === "fulfilled" ? result.value : []))
       .sort((left, right) => new Date(left.start).getTime() - new Date(right.start).getTime())
 
+    await recordGoogleCalendarTaskFeedback(userId, events)
     await persistGoogleEvents(userId, events)
-    await syncTaskEventsToGoogleForUser(userId)
     await recordGoogleSourceSnapshot(userId, events.length, calendars.length)
     await updateGoogleLastSyncedAt(userId)
 

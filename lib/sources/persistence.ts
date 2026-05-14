@@ -95,9 +95,12 @@ function candidateToTaskInsert(candidate: SourceCandidate, userId: string): Task
 }
 
 function candidateToMemoryInsert(candidate: SourceCandidate, userId: string): Omit<MemoryItemRow, "id" | "created_at" | "updated_at" | "supersedes_id" | "expires_at"> {
+  const layer = candidate.kind === "preference" ? "durable_preferences" : "candidate_memories"
+
   return {
     user_id: userId,
     kind: candidate.kind === "preference" ? "preference" : "source_observation",
+    layer,
     category: candidate.kind,
     content: [candidate.title, candidate.description, candidate.evidence]
       .filter((part): part is string => Boolean(part))
@@ -107,6 +110,12 @@ function candidateToMemoryInsert(candidate: SourceCandidate, userId: string): Om
     confidence: candidate.confidence,
     source_label: candidate.sourceSnapshotId ? "source_candidate" : "manual",
     source_ref: candidate.id,
+    payload: {
+      sourceCandidateId: candidate.id,
+      sourceSnapshotId: candidate.sourceSnapshotId,
+      sourceFileId: candidate.sourceFileId,
+      promotedLayer: layer,
+    },
     status: "active",
   }
 }

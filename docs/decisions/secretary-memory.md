@@ -4,11 +4,19 @@ The backend models layered secretary memory inspired by the local scheduler work
 
 ## Memory Layers
 
-- Durable preferences: stable scheduling rules and defaults.
-- Task context: short-lived facts about active tasks, deadlines, scope, and estimates.
-- Source observations: facts imported or observed from external systems.
-- Candidate inbox: possible memories that need repeated evidence or confirmation.
-- Audit/change history: what JARVIS proposed, changed, or chose not to change.
+Load memory in this order:
+
+1. Operating rules.
+2. Planning profile.
+3. Durable preferences.
+4. Task context.
+5. Deadline context.
+6. Calendar context.
+7. Source status.
+8. Feedback observations.
+9. Candidate memories.
+
+Each `memory_items` row stores both `layer` and structured `payload` so the backend can distinguish durable preference, temporary task context, source warning, behavioral observation, and reviewable candidate memory.
 
 ## Memory Rules
 
@@ -30,8 +38,11 @@ Scheduler and Master Input context should combine:
 - recent observations/change logs,
 - relevant memory items.
 
+`loadLayeredSecretaryContext` is the shared context loader for Master Input, daily planning, and future assistant tools. It renders a compact markdown context block for model calls and also returns typed rows for UI/backend logic.
+
 ## Review Boundary
 
 - Source extraction creates candidates, not automatic truth.
 - Approving task/deadline/event candidates may create scheduler tasks; approving preference/routine/note candidates may create memory.
 - Failed extraction or source refresh state should remain visible in source snapshots and daily-plan risk, not disappear behind an empty queue.
+- Google Calendar feedback starts as factual `change_logs`. After repeated similar observations within the review window, JARVIS creates a pending `source_candidates` preference instead of silently changing scheduling behavior.

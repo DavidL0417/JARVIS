@@ -1,12 +1,12 @@
 # JARVIS
 
-Production v1 secretary scheduler: authenticated Supabase state, migration-backed schema, DB-mirrored calendar events, durable memory, and a minimal command-deck UI.
+Production v1 secretary scheduler: authenticated Supabase state, migration-backed schema, DB-mirrored calendar events, layered durable memory, source refresh gates, approval-backed external writes, and a minimal command-deck UI.
 
 ## Current Source Of Truth
 
 - Agent instructions: `AGENTS.md`
 - Decision docs: `docs/decisions/`
-- Database schema: `supabase/migrations/20260505031630_production_reset.sql`
+- Database schema: `supabase/migrations/` (production reset plus follow-up migrations)
 - `sql/schema.sql` is reference-only.
 
 ## Stack
@@ -16,6 +16,7 @@ Production v1 secretary scheduler: authenticated Supabase state, migration-backe
 - Supabase Auth and Postgres
 - OpenAI API for secretary dialogue and scheduling
 - Google Calendar sync into the Supabase mirror
+- Hourly Vercel Cron source refresh through `/api/cron/source-refresh`
 
 ## Environment
 
@@ -28,6 +29,7 @@ SUPABASE_SERVICE_ROLE_KEY=
 
 OPENAI_API_KEY=
 OPENAI_MODEL=gpt-4.1
+CRON_SECRET=
 
 GOOGLE_CLIENT_ID=
 GOOGLE_CLIENT_SECRET=
@@ -61,3 +63,5 @@ Auth is Google OAuth through Supabase SSR cookies. Set Supabase Auth Site URL to
 Enable both Google Calendar API and Gmail API on the Google Cloud project behind `GOOGLE_CLIENT_ID`; OAuth can succeed even while Gmail API calls are blocked at the project level.
 
 Notion source intake uses a public Notion connection. Add `http://localhost:3000/api/integrations/notion/callback` as a redirect URI for local development, add the production equivalent for deploys, then copy the connection's OAuth client ID and secret into `.env.local`.
+
+Set `CRON_SECRET` in Vercel and locally before using the hourly source refresh route. Vercel sends it as `Authorization: Bearer <CRON_SECRET>` for the configured cron path.

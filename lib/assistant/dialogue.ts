@@ -69,8 +69,12 @@ function buildDialoguePayload(input: GenerateSecretaryDialogueReplyInput) {
     openTasks: buildTaskSnapshot(input.runtime),
     upcomingEvents: buildEventSnapshot(input.runtime),
     memorySummary: input.runtime.context.memorySummary,
+    layeredContextMarkdown: input.runtime.layeredContextMarkdown,
     memoryEntries: input.runtime.context.memoryEntries.slice(0, 8),
     sourceSnapshots: input.runtime.context.sourceSnapshots.slice(0, 8),
+    pendingCandidateCount: input.runtime.pendingCandidateCount,
+    latestDailyPlan: input.runtime.latestDailyPlan,
+    recentChangeLogSummaries: input.runtime.recentChangeLogSummaries,
   }
 }
 

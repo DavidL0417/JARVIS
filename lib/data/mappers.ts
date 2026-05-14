@@ -56,7 +56,7 @@ export const USER_CALENDAR_SELECT =
 export const USER_INTEGRATION_SELECT =
   "id, user_id, provider, provider_account_email, provider_user_id, status, selected_calendar_id, last_synced_at, created_at, updated_at"
 export const MEMORY_ITEM_SELECT =
-  "id, user_id, kind, category, content, importance, importance_note, confidence, source_label, source_ref, status, supersedes_id, expires_at, created_at, updated_at"
+  "id, user_id, kind, layer, category, content, importance, importance_note, confidence, source_label, source_ref, payload, status, supersedes_id, expires_at, created_at, updated_at"
 export const SOURCE_SNAPSHOT_SELECT =
   "id, user_id, source, source_ref, captured_at, freshness, summary, payload, created_at"
 export const SOURCE_FILE_SELECT =
@@ -65,6 +65,8 @@ export const SOURCE_CANDIDATE_SELECT =
   "id, user_id, source_snapshot_id, source_file_id, kind, title, description, course, due_at, duration_minutes, priority, confidence, evidence, payload, status, approved_task_id, created_at, updated_at"
 export const DAILY_PLAN_SELECT =
   "id, user_id, horizon_start, horizon_end, status, summary, now_item, next_items, risk_items, tradeoffs, source_coverage, command, model, error_message, created_at, updated_at"
+export const ASSISTANT_TOOL_RUN_SELECT =
+  "id, user_id, thread_id, message_id, tool_name, status, summary, payload, requires_approval, approved_at, executed_at, cancelled_at, error_message, created_at"
 
 function normalizeNullableText(value: string | null | undefined): string | null {
   if (!value) {
@@ -464,12 +466,14 @@ export function mapMemoryItemRowToSummary(row: MemoryItemRow): MemoryEntrySummar
   return {
     id: row.id,
     kind: row.kind,
+    layer: row.layer,
     category: row.category,
     insight: row.content,
     importance: normalizeMemoryImportance(row.importance),
     importanceNote: normalizeNullableText(row.importance_note),
     source: row.source_label,
     confidence: row.confidence,
+    payload: row.payload ?? {},
     createdAt: row.created_at,
   }
 }

@@ -14,6 +14,17 @@ export const integrationProviderSchema = z.enum(["google", "notion"])
 export const userIntegrationStatusSchema = z.enum(["connected", "needs_reauth", "disconnected", "error"])
 export const sourceConnectorIdSchema = z.enum(["notion", "gmail"])
 export const sourceConnectorStatusSchema = z.enum(["ready", "connected", "auth_needed", "missing_config", "failed"])
+export const memoryLayerSchema = z.enum([
+  "operating_rules",
+  "planning_profile",
+  "durable_preferences",
+  "task_context",
+  "deadline_context",
+  "calendar_context",
+  "source_status",
+  "feedback_observations",
+  "candidate_memories",
+])
 export const memoryKindSchema = z.enum([
   "preference",
   "task_context",
@@ -144,12 +155,14 @@ export const scheduleEventInputSchema = scheduleEventSchema.omit({ userId: true 
 export const memoryEntrySummarySchema = z.object({
   id: z.string().uuid(),
   kind: memoryKindSchema,
+  layer: memoryLayerSchema,
   category: z.string().min(1),
   insight: z.string().min(1),
   importance: memoryImportanceSchema,
   importanceNote: z.string().min(1).nullable(),
   source: z.string().min(1),
   confidence: z.number().nullable(),
+  payload: z.record(z.unknown()),
   createdAt: z.string().datetime({ offset: true }),
 })
 

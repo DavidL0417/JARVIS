@@ -25,6 +25,14 @@ export const schedulePreparationContextSchema = z.object({
   hardEvents: z.array(scheduleEventSchema),
   memoryEntries: z.array(memoryEntrySummarySchema).optional(),
   sourceSnapshots: z.array(sourceSnapshotSummarySchema).optional(),
+  command: z.string().trim().min(1).nullable().optional(),
+  layeredContextMarkdown: z.string().trim().min(1).nullable().optional(),
+  sourceStatus: z.array(z.object({
+    label: z.string().min(1),
+    status: z.union([z.enum(["fresh", "partial", "stale", "failed"]), z.enum(["connected", "missing"])]),
+    detail: z.string().min(1),
+  })).optional(),
+  plannerTradeoffContext: z.array(z.string().min(1)).optional(),
 })
 
 export const schedulePlanResultSchema = z.object({
@@ -32,6 +40,7 @@ export const schedulePlanResultSchema = z.object({
   proposedEvents: z.array(scheduleEventSchema),
   unscheduledTaskIds: z.array(z.string().uuid()),
   summary: z.string().min(1),
+  tradeoffNotes: z.array(z.string().min(1)).default([]),
 })
 
 export const scheduleResponseSchema = z.object({

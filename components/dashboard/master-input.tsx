@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import ReactMarkdown from "react-markdown"
 import remarkBreaks from "remark-breaks"
 import remarkGfm from "remark-gfm"
-import { ArrowUp, ChevronDown, Loader2 } from "lucide-react"
+import { ArrowUp, Check, ChevronDown, Loader2, X } from "lucide-react"
 
 import { Textarea } from "@/components/ui/textarea"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
@@ -16,6 +16,8 @@ import type {
 } from "@/types"
 
 type SubmitStatus = "idle" | "submitting" | "error"
+type ApprovalAction = "approve" | "cancel"
+type ToolCall = AssistantMessageResponse["toolCalls"][number]
 
 type TranscriptEntry = {
   id: string
@@ -61,7 +63,15 @@ function buildIntroFromTaskContext(tasks: Task[]) {
   return "Ready."
 }
 
-function ToolCallReceipt({ toolCalls }: { toolCalls: AssistantMessageResponse["toolCalls"] }) {
+function ToolCallReceipt({
+  toolCalls,
+  busyToolRunIds,
+  onApprovalAction,
+}: {
+  toolCalls: AssistantMessageResponse["toolCalls"]
+  busyToolRunIds: Set<string>
+  onApprovalAction: (toolCall: ToolCall, action: ApprovalAction) => void
+}) {
   if (toolCalls.length === 0) {
     return null
   }
@@ -77,7 +87,7 @@ function ToolCallReceipt({ toolCalls }: { toolCalls: AssistantMessageResponse["t
               : "text-destructive"
 
         return (
-          <div key={toolCall.id} className="flex items-baseline gap-2 text-[12px]">
+          <div key={toolCall.id} className="flex items-center gap-2 text-[12px]">
             <span className="num text-[10.5px] font-medium uppercase text-muted-foreground">
               {toolCall.tool}
             </span>
@@ -87,6 +97,42 @@ function ToolCallReceipt({ toolCalls }: { toolCalls: AssistantMessageResponse["t
             <span className="flex-1 truncate text-[12px] text-muted-foreground">
               {toolCall.summary}
             </span>
+            {toolCall.status === "pending_approval" && toolCall.requiresApproval ? (
+              <span className="flex shrink-0 items-center gap-1">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      aria-label="Approve external write"
+                      disabled={busyToolRunIds.has(toolCall.id)}
+                      onClick={() => onApprovalAction(toolCall, "approve")}
+                      className="flex h-6 w-6 items-center justify-center rounded-sm text-copper transition-colors hover:bg-copper-soft disabled:opacity-40"
+                    >
+                      {busyToolRunIds.has(toolCall.id) ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={1.8} />
+                      ) : (
+                        <Check className="h-3.5 w-3.5" strokeWidth={1.9} />
+                      )}
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="text-[11px]">Approve</TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      aria-label="Cancel external write"
+                      disabled={busyToolRunIds.has(toolCall.id)}
+                      onClick={() => onApprovalAction(toolCall, "cancel")}
+                      className="flex h-6 w-6 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-muted disabled:opacity-40"
+                    >
+                      <X className="h-3.5 w-3.5" strokeWidth={1.9} />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="text-[11px]">Cancel</TooltipContent>
+                </Tooltip>
+              </span>
+            ) : null}
           </div>
         )
       })}
@@ -141,6 +187,7 @@ export function MasterInput({ tasks = [] }: MasterInputProps) {
   const [status, setStatus] = useState<SubmitStatus>("idle")
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [context, setContext] = useState<AssistantContextResponse["context"] | null>(null)
+  const [busyToolRunIds, setBusyToolRunIds] = useState<Set<string>>(() => new Set())
   const [transcript, setTranscript] = useState<TranscriptEntry[]>([
     {
       id: "assistant-intro",
@@ -340,6 +387,47 @@ export function MasterInput({ tasks = [] }: MasterInputProps) {
     await submitMessage(message)
   }
 
+  async function handleApprovalAction(toolCall: ToolCall, action: ApprovalAction) {
+    setBusyToolRunIds((current) => new Set(current).add(toolCall.id))
+    setErrorMessage(null)
+
+    try {
+      const response = await fetch(`/api/assistant/tool-runs/${toolCall.id}/${action}`, {
+        method: "POST",
+      })
+      const payload = (await response.json().catch(() => null)) as {
+        ok?: boolean
+        error?: string
+        toolCall?: ToolCall
+      } | null
+
+      if (!payload?.toolCall) {
+        throw new Error(payload?.error || "The approval request returned an invalid response.")
+      }
+
+      setTranscript((current) =>
+        current.map((entry) => ({
+          ...entry,
+          toolCalls: entry.toolCalls?.map((item) => (item.id === toolCall.id ? payload.toolCall as ToolCall : item)),
+        })),
+      )
+
+      if (!response.ok || payload.ok === false) {
+        throw new Error(payload.error || payload.toolCall.errorMessage || "Approval action failed.")
+      }
+
+      window.dispatchEvent(new CustomEvent("jarvis-dashboard-refresh"))
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Approval action failed.")
+    } finally {
+      setBusyToolRunIds((current) => {
+        const next = new Set(current)
+        next.delete(toolCall.id)
+        return next
+      })
+    }
+  }
+
   const handleKeyDown = async (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault()
@@ -402,7 +490,13 @@ export function MasterInput({ tasks = [] }: MasterInputProps) {
                   {entry.clarification && (
                     <p className="mt-1 text-[12px] copper">{entry.clarification}</p>
                   )}
-                  {entry.toolCalls && <ToolCallReceipt toolCalls={entry.toolCalls} />}
+                  {entry.toolCalls && (
+                    <ToolCallReceipt
+                      toolCalls={entry.toolCalls}
+                      busyToolRunIds={busyToolRunIds}
+                      onApprovalAction={handleApprovalAction}
+                    />
+                  )}
                 </div>
               </article>
             ))}

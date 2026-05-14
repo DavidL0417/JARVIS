@@ -13,6 +13,16 @@ export type SyncOrigin = "local" | "gcal"
 export type CalendarSource = "local" | "google" | "imported" | "task"
 export type CalendarSyncPreference = "active" | "pending" | "ignored"
 export type MemoryKind = "preference" | "task_context" | "source_observation" | "candidate" | "observation" | "rule"
+export type MemoryLayer =
+  | "operating_rules"
+  | "planning_profile"
+  | "durable_preferences"
+  | "task_context"
+  | "deadline_context"
+  | "calendar_context"
+  | "source_status"
+  | "feedback_observations"
+  | "candidate_memories"
 export type MemoryImportance = "low" | "medium" | "high" | "critical"
 export type MemoryStatus = "active" | "candidate" | "stale" | "superseded" | "archived"
 export type SourceKind = "notion" | "gmail" | "caldav" | "google_calendar" | "manual" | "system"
@@ -21,7 +31,7 @@ export type SourceFileStatus = "uploading" | "ready" | "processing" | "processed
 export type SourceCandidateKind = "task" | "deadline" | "event" | "routine" | "preference" | "note"
 export type SourceCandidateStatus = "pending" | "approved" | "dismissed"
 export type DailyPlanStatus = "draft" | "ready" | "error" | "superseded"
-export type AssistantToolStatus = "completed" | "clarification" | "error" | "pending_approval"
+export type AssistantToolStatus = "completed" | "clarification" | "error" | "pending_approval" | "cancelled"
 
 export interface UserRow {
   id: string
@@ -165,6 +175,7 @@ export interface MemoryItemRow {
   id: string
   user_id: string
   kind: MemoryKind
+  layer: MemoryLayer
   category: string
   content: string
   importance: MemoryImportance
@@ -172,6 +183,7 @@ export interface MemoryItemRow {
   confidence: number | null
   source_label: string
   source_ref: string | null
+  payload: Record<string, unknown>
   status: MemoryStatus
   supersedes_id: string | null
   expires_at: string | null
@@ -259,6 +271,23 @@ export interface ChangeLogRow {
   before_value: Record<string, unknown> | null
   after_value: Record<string, unknown> | null
   source_label: string | null
+  created_at: string
+}
+
+export interface AssistantToolRunRow {
+  id: string
+  user_id: string
+  thread_id: string | null
+  message_id: string | null
+  tool_name: string
+  status: AssistantToolStatus
+  summary: string
+  payload: Record<string, unknown>
+  requires_approval: boolean
+  approved_at: string | null
+  executed_at: string | null
+  cancelled_at: string | null
+  error_message: string | null
   created_at: string
 }
 
@@ -400,12 +429,14 @@ export interface CheckIn {
 export interface MemoryEntrySummary {
   id: string
   kind: MemoryKind
+  layer: MemoryLayer
   category: string
   insight: string
   importance: MemoryImportance
   importanceNote: string | null
   source: string
   confidence: number | null
+  payload: Record<string, unknown>
   createdAt: string
 }
 
@@ -527,6 +558,10 @@ export interface AssistantContextData {
   memoryEntries: MemoryEntrySummary[]
   sourceSnapshots: SourceSnapshotSummary[]
   memorySummary: string
+  layeredContextMarkdown?: string
+  latestDailyPlan?: DailyPlan | null
+  pendingCandidateCount?: number
+  recentChangeLogSummaries?: string[]
 }
 
 export interface AssistantToolCallResult {
@@ -534,6 +569,8 @@ export interface AssistantToolCallResult {
   tool: string
   status: AssistantToolStatus
   summary: string
+  requiresApproval?: boolean
+  errorMessage?: string | null
 }
 
 export interface AssistantConversationEntry {
@@ -788,6 +825,10 @@ export interface SchedulePreparationContext {
   hardEvents: ScheduleEvent[]
   memoryEntries?: MemoryEntrySummary[]
   sourceSnapshots?: SourceSnapshotSummary[]
+  command?: string | null
+  layeredContextMarkdown?: string | null
+  sourceStatus?: SourceCoverageItem[]
+  plannerTradeoffContext?: string[]
 }
 
 export interface SchedulePlanResult {
@@ -795,6 +836,7 @@ export interface SchedulePlanResult {
   proposedEvents: ScheduleEvent[]
   unscheduledTaskIds: string[]
   summary: string
+  tradeoffNotes: string[]
 }
 
 export interface ScheduleResponse {

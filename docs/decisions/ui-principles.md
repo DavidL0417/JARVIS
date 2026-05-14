@@ -17,6 +17,7 @@
 - No placeholder data, demo counts, seeded tasks, or fake recommendations.
 - Avoid nested cards and marketing-style sections.
 - Treat the secretary panel as a transcript plus command line. Avoid filled chat boxes, decorative composer rules, and separators that do not map to a real region change.
+- Pending external assistant writes should render as compact receipt controls with approve/cancel actions. The UI should refresh dashboard state after execution and display the real execution error if approval fails.
 - Keep freeform natural-language commands inside the secretary surface. The schedule command strip may offer fixed quick replans, but it should not render another command input.
 - Do not show unused connectors as missing required context in the plan basis. Source setup may show available connectors with honest auth-needed, ready, connected, or failed states tied to real actions.
 - Source setup connector rows should pair text labels with a compact status icon so missing config, auth-needed, ready, connected, and failed states are scannable without reading every sentence.

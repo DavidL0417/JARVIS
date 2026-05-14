@@ -1,18 +1,21 @@
 import { z } from "zod"
 
 import {
+  dailyPlanSchema,
   memoryEntrySummarySchema,
   preferredCheckInModeSchema,
   sourceSnapshotSummarySchema,
 } from "@/schemas/common"
 
-export const assistantToolStatusSchema = z.enum(["completed", "clarification", "error", "pending_approval"])
+export const assistantToolStatusSchema = z.enum(["completed", "clarification", "error", "pending_approval", "cancelled"])
 
 export const assistantToolCallResultSchema = z.object({
   id: z.string().min(1),
   tool: z.string().min(1),
   status: assistantToolStatusSchema,
   summary: z.string().min(1),
+  requiresApproval: z.boolean().optional(),
+  errorMessage: z.string().min(1).nullable().optional(),
 })
 
 export const availabilityContextSchema = z.object({
@@ -42,6 +45,10 @@ export const assistantContextDataSchema = z.object({
   memoryEntries: z.array(memoryEntrySummarySchema),
   sourceSnapshots: z.array(sourceSnapshotSummarySchema),
   memorySummary: z.string().min(1),
+  layeredContextMarkdown: z.string().min(1).optional(),
+  latestDailyPlan: dailyPlanSchema.nullable().optional(),
+  pendingCandidateCount: z.number().int().nonnegative().optional(),
+  recentChangeLogSummaries: z.array(z.string().min(1)).optional(),
 })
 
 export const assistantConversationEntrySchema = z.object({

@@ -2,6 +2,13 @@ import type { SupabaseClient } from "@supabase/supabase-js"
 
 import { loadAssistantRuntimeContext } from "@/lib/assistant/context"
 import { generateSecretaryDialogueReply } from "@/lib/assistant/dialogue"
+import {
+  classifySecretaryIntent,
+  normalizeAssistantCommand,
+} from "@/lib/assistant/orchestrator"
+import { buildDailyPlan } from "@/lib/daily-plan"
+import { refreshSourcesForUser } from "@/lib/sources/refresh"
+import type { requireAuthenticatedUser } from "@/lib/supabase/auth"
 import { TASKS_CALENDAR_ID } from "@/lib/task-calendar-constants"
 import { assistantMessageResponseSchema } from "@/schemas/assistant"
 import type {
@@ -12,7 +19,7 @@ import type {
 } from "@/types"
 
 interface RunSecretaryTurnInput {
-  supabase: SupabaseClient
+  supabase: AdminClient
   userId: string
   message: string
   now: string | null
@@ -20,20 +27,24 @@ interface RunSecretaryTurnInput {
   history: AssistantConversationEntry[]
 }
 
+type AdminClient = Awaited<ReturnType<typeof requireAuthenticatedUser>>["adminClient"]
+
 function normalizeText(value: string) {
-  return value.trim().replace(/\s+/g, " ")
+  return normalizeAssistantCommand(value)
 }
 
 function makeReceipt(
   tool: string,
   status: AssistantToolCallResult["status"],
   summary: string,
+  options?: Pick<AssistantToolCallResult, "requiresApproval" | "errorMessage">,
 ): AssistantToolCallResult {
   return {
     id: crypto.randomUUID(),
     tool,
     status,
     summary,
+    ...options,
   }
 }
 
@@ -93,6 +104,7 @@ async function insertToolRun(
   },
 ) {
   const { error } = await supabase.from("assistant_tool_runs").insert({
+    id: input.receipt.id,
     user_id: input.userId,
     thread_id: input.threadId,
     message_id: input.messageId,
@@ -101,6 +113,7 @@ async function insertToolRun(
     summary: input.receipt.summary,
     payload: input.payload ?? {},
     requires_approval: input.requiresApproval ?? input.receipt.status === "pending_approval",
+    error_message: input.receipt.errorMessage ?? null,
   })
 
   if (error) {
@@ -136,66 +149,6 @@ async function insertChangeLog(
   }
 }
 
-function parseTaskTitle(message: string) {
-  const normalized = normalizeText(message)
-  const taskPatterns = [
-    /^(?:add|create)\s+(?:a\s+)?(?:task|todo|to-do)\s+(?:to\s+)?(?<title>.+)$/i,
-    /^(?:todo|task):\s*(?<title>.+)$/i,
-    /^remind me to\s+(?<title>.+)$/i,
-  ]
-
-  for (const pattern of taskPatterns) {
-    const match = normalized.match(pattern)
-    const title = match?.groups?.title?.trim()
-
-    if (title) {
-      return title
-    }
-  }
-
-  return null
-}
-
-function parsePriority(message: string): Priority {
-  const normalized = message.toLowerCase()
-
-  if (/\b(high|urgent|important|critical)\b/.test(normalized)) {
-    return "high"
-  }
-
-  if (/\b(low|someday|backlog)\b/.test(normalized)) {
-    return "low"
-  }
-
-  return "medium"
-}
-
-function parseMemoryContent(message: string) {
-  const normalized = normalizeText(message)
-  const memoryPatterns = [
-    /^remember(?: that)?\s+(?<content>.+)$/i,
-    /^note(?: that)?\s+(?<content>.+)$/i,
-  ]
-
-  for (const pattern of memoryPatterns) {
-    const match = normalized.match(pattern)
-    const content = match?.groups?.content?.trim()
-
-    if (content) {
-      return content
-    }
-  }
-
-  return null
-}
-
-function requiresExternalApproval(message: string) {
-  const normalized = message.toLowerCase()
-  const destructiveOrExternal = /\b(delete|remove|cancel|move|reschedule|send|invite|email)\b/.test(normalized)
-  const externalTarget = /\b(google|calendar|event|meeting|gmail|notion|caldav)\b/.test(normalized)
-  return destructiveOrExternal && externalTarget
-}
-
 async function handleRemember(
   supabase: SupabaseClient,
   input: {
@@ -213,7 +166,11 @@ async function handleRemember(
       category: "user_instruction",
       content: input.content,
       importance: "medium",
+      layer: "durable_preferences",
       source_label: "master_input",
+      payload: {
+        promotedFrom: "master_input",
+      },
       status: "active",
       confidence: 0.9,
     })
@@ -251,10 +208,9 @@ async function handleCreateTask(
     threadId: string
     assistantMessageId: string | null
     title: string
-    message: string
+    priority: Priority
   },
 ) {
-  const priority = parsePriority(input.message)
   const { data, error } = await supabase
     .from("tasks")
     .insert({
@@ -263,7 +219,7 @@ async function handleCreateTask(
       description: null,
       deadline: null,
       duration_minutes: null,
-      priority,
+      priority: input.priority,
       status: "todo",
       scheduled_for: null,
       is_immutable: false,
@@ -301,6 +257,12 @@ async function handleCreateTask(
 export async function runSecretaryTurn(input: RunSecretaryTurnInput): Promise<AssistantMessageResponse> {
   const cleanMessage = normalizeText(input.message)
   const runtimeBefore = await loadAssistantRuntimeContext(input.supabase, input.userId)
+  const intent = await classifySecretaryIntent({
+    message: cleanMessage,
+    now: input.now,
+    timezone: input.timezone,
+    history: input.history,
+  })
   const threadId = await createThread(input.supabase, input.userId, cleanMessage || "Master Input")
   await insertMessage(input.supabase, {
     userId: input.userId,
@@ -317,38 +279,89 @@ export async function runSecretaryTurn(input: RunSecretaryTurnInput): Promise<As
   let needsRefresh = false
   let clarification: string | null = null
 
-  if (requiresExternalApproval(cleanMessage)) {
-    const receipt = makeReceipt(
-      "approval_required",
-      "pending_approval",
-      "External or destructive calendar action requires an explicit approval plan.",
-    )
-    toolCalls.push(receipt)
-    reply = "I need an explicit approval step before changing external calendars or destructive events."
-    clarification = "Confirm the exact event, target time, and whether I should write to Google Calendar."
-  } else {
-    const memoryContent = parseMemoryContent(cleanMessage)
-    const taskTitle = parseTaskTitle(cleanMessage)
-
-    if (memoryContent) {
-      reply = "Remembered."
-      needsRefresh = true
-    } else if (taskTitle) {
-      reply = `Added "${taskTitle}".`
-      needsRefresh = true
+  if (intent.kind === "classification_error") {
+    ok = false
+    error = intent.error
+    reply = "I could not safely classify that secretary request."
+    toolCalls.push(makeReceipt("classify_intent", "error", "Intent classification failed.", { errorMessage: intent.error }))
+  } else if (intent.kind === "request_external_write") {
+    if (intent.action === "google_task_event_sync") {
+      const receipt = makeReceipt(
+        "google_task_event_sync",
+        "pending_approval",
+        "Prepared a Google Calendar task-block sync approval.",
+        { requiresApproval: true },
+      )
+      toolCalls.push(receipt)
+      reply = "I can sync the scheduled JARVIS task blocks to Google Calendar after approval."
+      clarification = "Approve this only if you want JARVIS to create or update task events on Google Calendar."
     } else {
-      const dialogue = await generateSecretaryDialogueReply({
-        message: cleanMessage,
-        now: input.now,
-        timezone: input.timezone,
-        history: input.history,
-        runtime: runtimeBefore,
-      })
-      reply = dialogue.reply
-      ok = dialogue.ok
-      error = dialogue.error
-      model = dialogue.model
+      ok = false
+      error = "That external write is not supported yet. Google Calendar task-block sync is the only executable external write currently enabled."
+      reply = "I cannot safely execute that external write yet."
+      toolCalls.push(makeReceipt("external_write", "error", "Unsupported external write.", { errorMessage: error }))
     }
+  } else if (intent.kind === "refresh_sources") {
+    const refresh = await refreshSourcesForUser({
+      userId: input.userId,
+      mode: "cron",
+    })
+    const failed = refresh.items.filter((item) => item.status === "failed")
+    ok = failed.length === 0
+    needsRefresh = true
+    reply = failed.length
+      ? `Source refresh hit ${failed.length} failure${failed.length === 1 ? "" : "s"}. ${failed.map((item) => item.error || item.summary).join(" ")}`
+      : "Sources refreshed."
+    toolCalls.push(
+      makeReceipt("refresh_sources", failed.length ? "error" : "completed", refresh.items.map((item) => `${item.source}: ${item.status}`).join("; "), {
+        errorMessage: failed.length ? failed.map((item) => item.error || item.summary).join("\n") : null,
+      }),
+    )
+    error = failed.length ? failed.map((item) => item.error || item.summary).join("\n") : undefined
+  } else if (intent.kind === "plan_day") {
+    try {
+      const planResult = await buildDailyPlan({
+        adminClient: input.supabase,
+        userId: input.userId,
+        hardEvents: [],
+        command: intent.command,
+      })
+      needsRefresh = true
+      reply = planResult.dailyPlan.summary
+      toolCalls.push(
+        makeReceipt(
+          "plan_day",
+          "completed",
+          `Built a daily plan with ${planResult.schedule.proposedEvents.length} event${planResult.schedule.proposedEvents.length === 1 ? "" : "s"}.`,
+        ),
+      )
+    } catch (planError) {
+      ok = false
+      error = planError instanceof Error ? planError.message : "Daily planning failed."
+      reply = "I could not build the plan because the planner or pre-plan source refresh failed."
+      toolCalls.push(makeReceipt("plan_day", "error", "Daily planning failed.", { errorMessage: error }))
+    }
+  } else if (intent.kind === "review_feedback") {
+    reply = "Feedback observations and candidate memories are waiting in the review queue; I will not promote them automatically."
+    toolCalls.push(makeReceipt("review_feedback", "completed", "Checked feedback review policy; promotion still requires review."))
+  } else if (intent.kind === "remember") {
+    reply = "Remembered."
+    needsRefresh = true
+  } else if (intent.kind === "create_task") {
+    reply = `Added "${intent.title}".`
+    needsRefresh = true
+  } else {
+    const dialogue = await generateSecretaryDialogueReply({
+      message: cleanMessage,
+      now: input.now,
+      timezone: input.timezone,
+      history: input.history,
+      runtime: runtimeBefore,
+    })
+    reply = dialogue.reply
+    ok = dialogue.ok
+    error = dialogue.error
+    model = dialogue.model
   }
 
   const assistantMessageId = await insertMessage(input.supabase, {
@@ -359,37 +372,53 @@ export async function runSecretaryTurn(input: RunSecretaryTurnInput): Promise<As
   })
 
   if (toolCalls.length > 0) {
-    await insertToolRun(input.supabase, {
-      userId: input.userId,
-      threadId,
-      messageId: assistantMessageId,
-      receipt: toolCalls[0],
-      requiresApproval: true,
-    })
-  } else {
-    const memoryContent = parseMemoryContent(cleanMessage)
-    const taskTitle = parseTaskTitle(cleanMessage)
-
-    if (memoryContent) {
-      toolCalls.push(
-        await handleRemember(input.supabase, {
-          userId: input.userId,
-          threadId,
-          assistantMessageId,
-          content: memoryContent,
-        }),
-      )
-    } else if (taskTitle) {
-      toolCalls.push(
-        await handleCreateTask(input.supabase, {
-          userId: input.userId,
-          threadId,
-          assistantMessageId,
-          title: taskTitle,
-          message: cleanMessage,
-        }),
-      )
+    for (const toolCall of toolCalls) {
+      await insertToolRun(input.supabase, {
+        userId: input.userId,
+        threadId,
+        messageId: assistantMessageId,
+        receipt: toolCall,
+        payload:
+          intent.kind === "request_external_write" &&
+          intent.action === "google_task_event_sync" &&
+          toolCall.tool === "google_task_event_sync"
+            ? {
+                action: intent.action,
+                command: intent.command,
+              }
+            : intent.kind === "plan_day" && toolCall.tool === "plan_day"
+              ? {
+                  command: intent.command,
+                }
+              : intent.kind === "refresh_sources" && toolCall.tool === "refresh_sources"
+                ? {
+                    command: intent.command,
+                  }
+                : undefined,
+        requiresApproval: toolCall.requiresApproval,
+      })
     }
+  }
+
+  if (intent.kind === "remember") {
+    toolCalls.push(
+      await handleRemember(input.supabase, {
+        userId: input.userId,
+        threadId,
+        assistantMessageId,
+        content: intent.content,
+      }),
+    )
+  } else if (intent.kind === "create_task") {
+    toolCalls.push(
+      await handleCreateTask(input.supabase, {
+        userId: input.userId,
+        threadId,
+        assistantMessageId,
+        title: intent.title,
+        priority: intent.priority,
+      }),
+    )
   }
 
   const runtimeAfter = needsRefresh
