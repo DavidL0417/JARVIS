@@ -4,6 +4,11 @@
 import Anthropic from "@anthropic-ai/sdk"
 import { z } from "zod"
 
+import {
+  DEFAULT_CLAUDE_PLANNER_MODEL_KEY,
+  getClaudePlannerModelOption,
+  type ClaudePlannerModelKey,
+} from "@/lib/ai/claude-models"
 import { schedulePlanResultSchema } from "@/schemas/schedule"
 import type { AvailabilityWindow, ReplanRequest, SchedulePlanResult, SchedulePreparationContext } from "@/types"
 
@@ -13,9 +18,8 @@ const DEFAULT_WORKDAY_END = "17:00"
 const DEFAULT_TASK_DURATION_MINUTES = 50
 const DEFAULT_BREAK_MINUTES = 10
 const MIN_SLOT_MINUTES = 15
-const FIVE_DAY_HORIZON_DAYS = 5
+const PLANNING_HORIZON_DAYS = 7
 const PLANNER_TOOL_NAME = "return_schedule_plan"
-const DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-4-6"
 const DEFAULT_TASKS_CALENDAR_ID = "cal-tasks"
 const IS_DEV = process.env.NODE_ENV !== "production"
 const SHOULD_LOG_SCHEDULER_DEBUG =
@@ -29,6 +33,7 @@ const MASTER_SCHEDULING_PROMPT = [
   "Use the provided availability windows as soft guidance, not as a hard boundary.",
   "Do not place tasks past a deadline or overlapping another event.",
   "Use the rendered memory summary to account for user-specific preferences, habits, and friction points.",
+  "If a natural-language scheduling command is supplied, treat it as a first-class planning constraint unless it conflicts with hard events, deadlines, or explicit memory rules.",
   `All planner-created task events must use calendarId "${DEFAULT_TASKS_CALENDAR_ID}".`,
   "Scheduling outside the preferred availability windows is allowed when needed. If you do that, mention the tradeoff in the summary.",
   "Prefer earlier placement for urgent tasks, align heavier work with stronger energy windows when possible, and leave tasks unscheduled if there is no valid slot.",
@@ -47,7 +52,8 @@ const plannerToolInputSchema = z.object({
     )
     .default([]),
   unscheduledTaskIds: z.array(z.string().uuid()).default([]),
-  summary: z.string().min(1).optional(),
+  summary: z.string().min(1),
+  tradeoffNotes: z.array(z.string().min(1)).default([]),
 })
 
 type PlannerToolInput = z.infer<typeof plannerToolInputSchema>
@@ -91,7 +97,10 @@ type PlanningContext = {
     localEndDay: string
   }
   memoryMarkdown: string
+  command: string | null
   preferences: PlanningPreferences
+  sourceStatus: SchedulePreparationContext["sourceStatus"]
+  plannerTradeoffContext: string[]
   hardEvents: SchedulePlanResult["proposedEvents"]
   fixedTaskEvents: SchedulePlanResult["proposedEvents"]
   fixedTaskIds: Set<string>
@@ -102,35 +111,49 @@ type PlanningContext = {
   taskMap: Map<string, PlanningTask>
 }
 
-export function getClaudeClient() {
+export function getClaudePlannerConfig(modelKey?: ClaudePlannerModelKey | null) {
   const apiKey = process.env.ANTHROPIC_API_KEY
 
   if (!apiKey) {
-    return null
-  }
-
-  return new Anthropic({ apiKey })
-}
-
-export async function generateSchedule(input: SchedulePreparationContext): Promise<SchedulePlanResult> {
-  const client = getClaudeClient()
-
-  if (!client) {
     throw new Error("ANTHROPIC_API_KEY is missing. Scheduling cannot run until the Claude client is configured.")
   }
 
+  const selectedModel = modelKey
+    ? getClaudePlannerModelOption(modelKey).model
+    : process.env.ANTHROPIC_MODEL || getClaudePlannerModelOption(DEFAULT_CLAUDE_PLANNER_MODEL_KEY).model
+
+  return {
+    apiKey,
+    model: selectedModel,
+  }
+}
+
+export function getClaudeClient(modelKey?: ClaudePlannerModelKey | null) {
+  const { apiKey } = getClaudePlannerConfig(modelKey)
+  return new Anthropic({ apiKey })
+}
+
+export async function generateSchedule(
+  input: SchedulePreparationContext,
+  options: { modelKey?: ClaudePlannerModelKey | null } = {},
+): Promise<SchedulePlanResult> {
+  const { apiKey, model } = getClaudePlannerConfig(options.modelKey)
+  const client = new Anthropic({ apiKey })
   const planningContext = buildPlanningContext(input)
-  planningContext.memoryMarkdown = buildMemorySummaryMarkdown({
-    preferences: planningContext.preferences,
-    memoryEntries: input.memoryEntries ?? [],
-  })
+  planningContext.memoryMarkdown =
+    input.layeredContextMarkdown?.trim() ||
+    buildMemorySummaryMarkdown({
+      preferences: planningContext.preferences,
+      memoryEntries: input.memoryEntries ?? [],
+    })
 
   if (planningContext.planningTaskIds.length === 0) {
     return schedulePlanResultSchema.parse({
       plannerStatus: "ready",
       proposedEvents: sortEventsByStart(planningContext.fixedTaskEvents),
       unscheduledTaskIds: [],
-      summary: "No active tasks fell inside the current five-day planning window.",
+      summary: "No active tasks fell inside the current seven-day planning window.",
+      tradeoffNotes: [],
     })
   }
 
@@ -140,10 +163,11 @@ export async function generateSchedule(input: SchedulePreparationContext): Promi
       proposedEvents: sortEventsByStart(planningContext.fixedTaskEvents),
       unscheduledTaskIds: [],
       summary: "All pending tasks were already fixed in time, so no new scheduling was needed.",
+      tradeoffNotes: [],
     })
   }
 
-  const plan = await requestClaudeSchedule(client, planningContext)
+  const plan = await requestClaudeSchedule(client, planningContext, model)
   const plannedEvents = materializeTaskPlacements(plan, planningContext)
   const proposedEvents = sortEventsByStart([...planningContext.fixedTaskEvents, ...plannedEvents])
   const unscheduledTaskIds = deriveUnscheduledTaskIds(plan, planningContext, plannedEvents)
@@ -155,7 +179,20 @@ export async function generateSchedule(input: SchedulePreparationContext): Promi
     proposedEvents,
     unscheduledTaskIds,
     summary: plan.summary,
+    tradeoffNotes: plan.tradeoffNotes,
   })
+}
+
+export function buildSchedulePromptPayloadForTest(input: SchedulePreparationContext) {
+  const planningContext = buildPlanningContext(input)
+  planningContext.memoryMarkdown =
+    input.layeredContextMarkdown?.trim() ||
+    buildMemorySummaryMarkdown({
+      preferences: planningContext.preferences,
+      memoryEntries: input.memoryEntries ?? [],
+    })
+
+  return buildPromptPayload(planningContext)
 }
 
 export function deriveAvailabilityWindowsFromScheduleContext(input: SchedulePreparationContext): AvailabilityWindow[] {
@@ -267,7 +304,10 @@ function buildPlanningContext(input: SchedulePreparationContext): PlanningContex
     timezone: preferences.timezone,
     planningWindow,
     memoryMarkdown: "",
+    command: input.command?.trim() || null,
     preferences,
+    sourceStatus: input.sourceStatus ?? [],
+    plannerTradeoffContext: input.plannerTradeoffContext ?? [],
     hardEvents,
     fixedTaskEvents,
     fixedTaskIds,
@@ -284,8 +324,11 @@ function buildPlanningContext(input: SchedulePreparationContext): PlanningContex
   }
 }
 
-async function requestClaudeSchedule(client: Anthropic, context: PlanningContext): Promise<PlannerToolInput> {
-  const model = process.env.ANTHROPIC_MODEL || DEFAULT_ANTHROPIC_MODEL
+async function requestClaudeSchedule(
+  client: Anthropic,
+  context: PlanningContext,
+  model: string,
+): Promise<PlannerToolInput> {
   const promptPayload = buildPromptPayload(context)
 
   logSchedulerDebug({
@@ -357,8 +400,12 @@ async function requestClaudeSchedule(client: Anthropic, context: PlanningContext
               items: { type: "string", format: "uuid" },
             },
             summary: { type: "string" },
+            tradeoffNotes: {
+              type: "array",
+              items: { type: "string" },
+            },
           },
-          required: ["placements", "unscheduledTaskIds"],
+          required: ["placements", "unscheduledTaskIds", "summary", "tradeoffNotes"],
         },
       },
     ],
@@ -381,59 +428,18 @@ async function requestClaudeSchedule(client: Anthropic, context: PlanningContext
   const toolInput =
     toolUseBlock.input && typeof toolUseBlock.input === "object" ? toolUseBlock.input : {}
 
-  return plannerToolInputSchema.parse({
-    ...toolInput,
-    summary: getPlannerSummary(toolInput),
-  })
-}
-
-function getPlannerSummary(input: unknown) {
-  if (
-    input &&
-    typeof input === "object" &&
-    "summary" in input &&
-    typeof input.summary === "string" &&
-    input.summary.trim().length > 0
-  ) {
-    return input.summary.trim()
-  }
-
-  const placements =
-    input &&
-    typeof input === "object" &&
-    "placements" in input &&
-    Array.isArray(input.placements)
-      ? input.placements.length
-      : 0
-  const unscheduled =
-    input &&
-    typeof input === "object" &&
-    "unscheduledTaskIds" in input &&
-    Array.isArray(input.unscheduledTaskIds)
-      ? input.unscheduledTaskIds.length
-      : 0
-
-  if (placements > 0 && unscheduled > 0) {
-    return `Scheduled ${placements} task${placements === 1 ? "" : "s"} and left ${unscheduled} unscheduled.`
-  }
-
-  if (placements > 0) {
-    return `Scheduled ${placements} task${placements === 1 ? "" : "s"}.`
-  }
-
-  if (unscheduled > 0) {
-    return `No valid placements were found; ${unscheduled} task${unscheduled === 1 ? "" : "s"} remained unscheduled.`
-  }
-
-  return "Claude returned an empty schedule plan."
+  return plannerToolInputSchema.parse(toolInput)
 }
 
 function buildPromptPayload(context: PlanningContext) {
   return {
     currentTime: context.nowIso,
     timezone: context.timezone,
+    command: context.command,
     planningWindow: context.planningWindow,
     memoryMarkdown: context.memoryMarkdown,
+    sourceStatus: context.sourceStatus,
+    plannerTradeoffContext: context.plannerTradeoffContext,
     preferences: {
       timezone: context.preferences.timezone,
       workdayStart: context.preferences.workdayStart,
@@ -564,7 +570,7 @@ function validateGeneratedEvents(
     }
 
     if (!isEventInsidePlanningWindow(event.start, event.end, context.planningWindow)) {
-      throw new Error(`Claude scheduled task ${task.id} outside the five-day planning horizon.`)
+      throw new Error(`Claude scheduled task ${task.id} outside the seven-day planning horizon.`)
     }
 
     if (task.deadline && endMs > new Date(task.deadline).getTime()) {
@@ -812,7 +818,7 @@ function buildAvailabilityWindows(args: {
   const { now, planningWindow, preferences, occupiedIntervals } = args
   const windows: AvailabilityWindow[] = []
 
-  for (let offset = 0; offset < FIVE_DAY_HORIZON_DAYS; offset += 1) {
+  for (let offset = 0; offset < PLANNING_HORIZON_DAYS; offset += 1) {
     const localDay = addDaysToDateKey(planningWindow.localStartDay, offset)
     const workStart = zonedDateTimeToUtc(localDay, preferences.workdayStart, preferences.timezone)
     const workEnd = zonedDateTimeToUtc(localDay, preferences.workdayEnd, preferences.timezone)
@@ -1016,7 +1022,7 @@ function getDateTimeFormatter(cacheKey: string, formatter: Intl.DateTimeFormat) 
 
 function getPlanningWindow(now: Date, timeZone: string) {
   const localStartDay = getLocalDateKey(now, timeZone)
-  const localEndDay = addDaysToDateKey(localStartDay, FIVE_DAY_HORIZON_DAYS - 1)
+  const localEndDay = addDaysToDateKey(localStartDay, PLANNING_HORIZON_DAYS - 1)
   const endOfDay = zonedDateTimeToUtc(localEndDay, "23:59", timeZone)
   const inclusiveEnd = new Date(endOfDay.getTime() + 59_999)
 

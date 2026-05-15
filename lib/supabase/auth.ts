@@ -1,5 +1,6 @@
 import type { User as SupabaseAuthUser } from "@supabase/supabase-js"
 
+import { ensureDefaultSecretaryMemoryForUser } from "@/lib/assistant/default-memory"
 import { mapUserRowToUserProfile, USER_PROFILE_SELECT } from "@/lib/data/mappers"
 import { createSupabaseAdminClient, createSupabaseServerClient } from "@/lib/supabase/server"
 import { ensureTaskCalendarForUser } from "@/lib/tasks-calendar"
@@ -83,6 +84,7 @@ export async function getOrCreateUserProfile(
 
   const profile = mapUserRowToUserProfile(data)
   await ensureTaskCalendarForUser(profile.id)
+  await ensureDefaultSecretaryMemoryForUser(adminClient, profile.id)
   return profile
 }
 

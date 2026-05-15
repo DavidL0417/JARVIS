@@ -1,10 +1,13 @@
+import Anthropic from "@anthropic-ai/sdk"
+
 import {
-  createOpenAIResponse,
-  getOpenAIConfig,
-  getOpenAIResponseText,
-} from "@/lib/ai/openai"
+  DEFAULT_CLAUDE_PLANNER_MODEL_KEY,
+  getClaudePlannerModelOption,
+} from "@/lib/ai/claude-models"
 import type { AssistantRuntimeContext } from "@/lib/assistant/context"
 import type { AssistantConversationEntry } from "@/types"
+
+const DEFAULT_DIALOGUE_MODEL = getClaudePlannerModelOption(DEFAULT_CLAUDE_PLANNER_MODEL_KEY).model
 
 const SECRETARY_DIALOGUE_PROMPT = [
   "You are JARVIS, a trusted personal secretary with access to the user's working context.",
@@ -12,6 +15,7 @@ const SECRETARY_DIALOGUE_PROMPT = [
   "Use the supplied tasks, events, availability, memory, source state, and available scheduling tools when relevant.",
   "You can discuss, plan, capture tasks, remember preferences, and help coordinate the next scheduling move.",
   "If the data is missing or stale, say what you cannot know instead of inventing it.",
+  "If asked what model, architecture, or provider you are running on, answer from the runtimeModels payload. Do not claim to be GPT or OpenAI unless the runtimeModels payload says this dialogue turn is OpenAI-backed.",
   "Do not claim to create, update, delete, sync, email, invite, or move anything unless tool results say it happened.",
   "Destructive actions and external calendar writes require explicit approval.",
   "Sound attentive and operational. Keep the reply spare and useful: one to three short sentences unless the user asks for detail.",
@@ -69,42 +73,86 @@ function buildDialoguePayload(input: GenerateSecretaryDialogueReplyInput) {
     openTasks: buildTaskSnapshot(input.runtime),
     upcomingEvents: buildEventSnapshot(input.runtime),
     memorySummary: input.runtime.context.memorySummary,
+    layeredContextMarkdown: input.runtime.layeredContextMarkdown,
     memoryEntries: input.runtime.context.memoryEntries.slice(0, 8),
     sourceSnapshots: input.runtime.context.sourceSnapshots.slice(0, 8),
+    pendingCandidateCount: input.runtime.pendingCandidateCount,
+    latestDailyPlan: input.runtime.latestDailyPlan,
+    recentChangeLogSummaries: input.runtime.recentChangeLogSummaries,
+    runtimeModels: {
+      secretaryDialogue: process.env.ANTHROPIC_DIALOGUE_MODEL || process.env.ANTHROPIC_MODEL || DEFAULT_DIALOGUE_MODEL,
+      schedulePlanner: "Claude, selected by the planner control when the user builds a plan.",
+      notes: [
+        "The visible Sonnet/Opus selector controls schedule planning.",
+        "This secretary dialogue turn is Claude-backed.",
+        "Some source extraction and intent helper paths may still use OpenAI until those are migrated.",
+      ],
+    },
   }
+}
+
+function getClaudeDialogueConfig() {
+  const apiKey = process.env.ANTHROPIC_API_KEY
+
+  if (!apiKey) {
+    throw new Error("ANTHROPIC_API_KEY is missing. Configure Claude before running secretary dialogue model calls.")
+  }
+
+  return {
+    apiKey,
+    model: process.env.ANTHROPIC_DIALOGUE_MODEL || process.env.ANTHROPIC_MODEL || DEFAULT_DIALOGUE_MODEL,
+  }
+}
+
+function getClaudeMessageText(message: Anthropic.Messages.Message) {
+  return message.content
+    .filter((block): block is Anthropic.TextBlock => block.type === "text")
+    .map((block) => block.text.trim())
+    .filter(Boolean)
+    .join("\n\n")
+    .trim()
 }
 
 export async function generateSecretaryDialogueReply(
   input: GenerateSecretaryDialogueReplyInput,
 ): Promise<SecretaryDialogueReply> {
   let model: string | undefined
+  let apiKey: string
 
   try {
-    model = process.env.OPENAI_DIALOGUE_MODEL || getOpenAIConfig().model
+    const config = getClaudeDialogueConfig()
+    apiKey = config.apiKey
+    model = config.model
   } catch (error) {
     return {
       ok: false,
       reply: "The secretary model is not configured.",
-      error: error instanceof Error ? error.message : "OPENAI_API_KEY is missing.",
+      error: error instanceof Error ? error.message : "ANTHROPIC_API_KEY is missing.",
     }
   }
 
   try {
     const payload = buildDialoguePayload(input)
-    const response = await createOpenAIResponse({
+    const client = new Anthropic({ apiKey })
+    const response = await client.messages.create({
       model,
-      instructions: SECRETARY_DIALOGUE_PROMPT,
-      input: JSON.stringify(payload, null, 2),
-      max_output_tokens: 420,
+      system: SECRETARY_DIALOGUE_PROMPT,
+      messages: [
+        {
+          role: "user",
+          content: JSON.stringify(payload, null, 2),
+        },
+      ],
+      max_tokens: 420,
       temperature: 0.3,
     })
-    const reply = getOpenAIResponseText(response)
+    const reply = getClaudeMessageText(response)
 
     if (!reply) {
       return {
         ok: false,
         reply: "The secretary model returned an empty response.",
-        error: "OpenAI returned no text for the secretary dialogue turn.",
+        error: "Claude returned no text for the secretary dialogue turn.",
         model,
       }
     }
@@ -118,7 +166,7 @@ export async function generateSecretaryDialogueReply(
     return {
       ok: false,
       reply: "The secretary model call failed.",
-      error: error instanceof Error ? error.message : "OpenAI dialogue request failed.",
+      error: error instanceof Error ? error.message : "Claude dialogue request failed.",
       model,
     }
   }

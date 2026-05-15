@@ -1,4 +1,10 @@
-import { generateSchedule } from "@/lib/ai/openai"
+import { generateSchedule } from "@/lib/ai/claude"
+import {
+  DEFAULT_CLAUDE_PLANNER_MODEL_KEY,
+  getClaudePlannerModelOption,
+  type ClaudePlannerModelKey,
+} from "@/lib/ai/claude-models"
+import { loadLayeredSecretaryContext } from "@/lib/assistant/context"
 import {
   DAILY_PLAN_SELECT,
   mapDailyPlanRowToDailyPlan,
@@ -16,6 +22,7 @@ import {
   SOURCE_SNAPSHOT_SELECT,
   TASK_SELECT,
 } from "@/lib/data/mappers"
+import { refreshSourcesForUser } from "@/lib/sources/refresh"
 import type { requireAuthenticatedUser } from "@/lib/supabase/auth"
 import { TASKS_CALENDAR_ID } from "@/lib/task-calendar-constants"
 import type {
@@ -40,7 +47,7 @@ import type {
 type AdminClient = Awaited<ReturnType<typeof requireAuthenticatedUser>>["adminClient"]
 
 const HORIZON_DAYS = 7
-const DEFAULT_MODEL_NAME = process.env.OPENAI_MODEL || "gpt-4.1"
+const DEFAULT_MODEL_NAME = getClaudePlannerModelOption(DEFAULT_CLAUDE_PLANNER_MODEL_KEY).model
 
 function addDays(date: Date, days: number) {
   const next = new Date(date)
@@ -597,15 +604,38 @@ export async function buildDailyPlan(input: {
   userId: string
   hardEvents: ScheduleEventInput[]
   command?: string | null
+  plannerModel?: ClaudePlannerModelKey | null
 }): Promise<{ dailyPlan: DailyPlan; schedule: SchedulePlanResult; taskCount: number }> {
   const now = new Date()
   const horizonEnd = addDays(now, HORIZON_DAYS)
+  const sourceRefresh = await refreshSourcesForUser({
+    adminClient: input.adminClient,
+    userId: input.userId,
+    mode: "pre_plan",
+    force: true,
+  })
+  const layeredContext = await loadLayeredSecretaryContext(input.adminClient, input.userId)
   const loaded = await loadScheduleContext({
     adminClient: input.adminClient,
     userId: input.userId,
     hardEvents: input.hardEvents,
   })
-  const schedule = await generateSchedule(loaded.context)
+  const command = input.command?.trim() || null
+  loaded.context.memoryEntries = layeredContext.memoryEntries
+  loaded.context.sourceSnapshots = layeredContext.sourceSnapshots
+  loaded.context.command = command
+  loaded.context.layeredContextMarkdown = layeredContext.layeredContextMarkdown
+  loaded.context.sourceStatus = loaded.sourceCoverage
+  loaded.context.plannerTradeoffContext = [
+    command ? `User planning command: ${command}` : null,
+    ...sourceRefresh.items.map((item) => `${item.source}: ${item.status} - ${item.summary}`),
+    ...layeredContext.recentChangeLogSummaries.slice(0, 5).map((summary) => `Recent schedule feedback: ${summary}`),
+  ].filter((item): item is string => Boolean(item))
+  const plannerModel = input.plannerModel ?? DEFAULT_CLAUDE_PLANNER_MODEL_KEY
+  const schedule = await generateSchedule(loaded.context, {
+    modelKey: plannerModel,
+  })
+  const plannerModelName = getClaudePlannerModelOption(plannerModel).model
   const proposedEvents = schedule.proposedEvents
   const nowItem = deriveNowItem({
     tasks: loaded.context.tasks,
@@ -622,10 +652,11 @@ export async function buildDailyPlan(input: {
     horizonEnd,
   })
   const tradeoffs = [
+    ...schedule.tradeoffNotes,
     schedule.unscheduledTaskIds.length > 0
       ? `${schedule.unscheduledTaskIds.length} task${schedule.unscheduledTaskIds.length === 1 ? "" : "s"} could not be placed without breaking constraints.`
       : null,
-    input.command ? `Replanned around command: ${input.command}` : null,
+    command ? `Replanned around command: ${command}` : null,
   ].filter((item): item is string => Boolean(item))
 
   await input.adminClient
@@ -650,8 +681,8 @@ export async function buildDailyPlan(input: {
       risk_items: riskItems,
       tradeoffs,
       source_coverage: loaded.sourceCoverage,
-      command: input.command?.trim() || null,
-      model: DEFAULT_MODEL_NAME,
+      command,
+      model: plannerModelName || DEFAULT_MODEL_NAME,
     })
     .select(DAILY_PLAN_SELECT)
     .single<DailyPlanRow>()

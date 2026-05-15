@@ -21,6 +21,7 @@ This repo is now a production scheduler/secretary product, not a hackathon coord
 - JARVIS is a secretary-second-brain scheduler: it should combine tasks, calendar context, preferences, source snapshots, memory, and explicit tradeoffs before planning.
 - Priorities are relative. Prefer zero-tradeoff plans that preserve due work, routines, sleep, and commitments when feasible.
 - External sources beyond Google Calendar are modeled for now but not fully integrated in this pass.
+- Treat exploratory product/design comments from the user as hypotheses to evaluate against the app's goals, not as automatic implementation directives. If the user clearly gives a correction or direct task, follow it; otherwise, reason through tradeoffs and choose the product-safe path.
 
 ## UI Direction
 

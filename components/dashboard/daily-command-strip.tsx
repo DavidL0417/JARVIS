@@ -1,9 +1,15 @@
 "use client"
 
-import { CalendarClock, Clock3, Loader2, Moon, RefreshCw, Zap } from "lucide-react"
+import { Brain, CalendarClock, Clock3, Loader2, Moon, RefreshCw, Zap } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
+import {
+  CLAUDE_PLANNER_MODEL_OPTIONS,
+  type ClaudePlannerModelKey,
+} from "@/lib/ai/claude-models"
+import { cn } from "@/lib/utils"
 import type { DailyPlan } from "@/types"
 
 const QUICK_REPLANS = [
@@ -39,11 +45,57 @@ function severityCount(plan: DailyPlan | null, severity: "high" | "medium" | "lo
   return plan?.riskItems.filter((risk) => risk.severity === severity).length ?? 0
 }
 
+function PlannerModelSelector({
+  value,
+  disabled,
+  onChange,
+}: {
+  value: ClaudePlannerModelKey
+  disabled?: boolean
+  onChange: (value: ClaudePlannerModelKey) => void
+}) {
+  return (
+    <div
+      className="inline-flex h-7 shrink-0 items-center rounded-sm border border-rule bg-secondary/30 p-0.5"
+      role="radiogroup"
+      aria-label="Planner model"
+    >
+      <Brain className="mx-1 h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" strokeWidth={1.75} />
+      {CLAUDE_PLANNER_MODEL_OPTIONS.map((option) => (
+        <Tooltip key={option.key}>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              role="radio"
+              aria-checked={value === option.key}
+              disabled={disabled}
+              onClick={() => onChange(option.key)}
+              className={cn(
+                "h-[22px] min-w-[52px] rounded-[3px] px-2 text-[10.5px] font-medium uppercase leading-none transition-colors disabled:pointer-events-none disabled:opacity-50",
+                value === option.key
+                  ? "bg-copper-soft text-copper"
+                  : "text-muted-foreground hover:bg-accent hover:text-foreground",
+              )}
+            >
+              {option.label}
+            </button>
+          </TooltipTrigger>
+          <TooltipContent sideOffset={6} className="max-w-56 text-[11px]">
+            {option.description}
+          </TooltipContent>
+        </Tooltip>
+      ))}
+    </div>
+  )
+}
+
 export function DailyCommandStrip({
   dailyPlan,
   isPlanning,
   plannerSummary,
   plannerStatus,
+  plannerModel,
+  onPlannerModelChange,
   onBuild,
   onReplan,
   placement = "top",
@@ -52,6 +104,8 @@ export function DailyCommandStrip({
   isPlanning: boolean
   plannerSummary: string
   plannerStatus: "Idle" | "Scheduling" | "Ready" | "Error"
+  plannerModel: ClaudePlannerModelKey
+  onPlannerModelChange: (value: ClaudePlannerModelKey) => void
   onBuild: () => void
   onReplan: (command: string) => Promise<void>
   placement?: "top" | "side"
@@ -80,6 +134,11 @@ export function DailyCommandStrip({
             )}
             Build Today
           </Button>
+          <PlannerModelSelector
+            value={plannerModel}
+            onChange={onPlannerModelChange}
+            disabled={isPlanning}
+          />
           <Badge variant="outline" className="rounded-sm border-copper/30 bg-copper-soft text-copper">
             <Zap aria-hidden="true" />
             Now

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 
-import { generateSchedule } from "@/lib/ai/openai"
+import { generateSchedule } from "@/lib/ai/claude"
 import {
   mapMemoryItemRowToSummary,
   mapPreferencesRowToPreferences,
@@ -273,7 +273,9 @@ export async function POST(request: Request) {
       )
     }
 
-    const plannerResult = await generateSchedule(parsedContext.data)
+    const plannerResult = await generateSchedule(parsedContext.data, {
+      modelKey: parsedBody.data.plannerModel,
+    })
     const parsedPlannerResult = schedulePlanResultSchema.safeParse(plannerResult)
 
     if (!parsedPlannerResult.success) {

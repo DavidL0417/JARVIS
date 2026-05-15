@@ -3,6 +3,7 @@
 
 import { z } from "zod"
 
+import { CLAUDE_PLANNER_MODEL_OPTIONS } from "@/lib/ai/claude-models"
 import {
   memoryEntrySummarySchema,
   prioritySchema,
@@ -13,9 +14,17 @@ import {
   userPreferencesSchema,
 } from "@/schemas/common"
 
+const claudePlannerModelKeys = CLAUDE_PLANNER_MODEL_OPTIONS.map((option) => option.key) as [
+  (typeof CLAUDE_PLANNER_MODEL_OPTIONS)[number]["key"],
+  ...(typeof CLAUDE_PLANNER_MODEL_OPTIONS)[number]["key"][],
+]
+
+export const claudePlannerModelSchema = z.enum(claudePlannerModelKeys)
+
 export const scheduleRequestSchema = z.object({
   taskIds: z.array(z.string().uuid()).optional().default([]),
   hardEvents: z.array(scheduleEventInputSchema).optional().default([]),
+  plannerModel: claudePlannerModelSchema.optional(),
 })
 
 export const schedulePreparationContextSchema = z.object({
@@ -25,6 +34,14 @@ export const schedulePreparationContextSchema = z.object({
   hardEvents: z.array(scheduleEventSchema),
   memoryEntries: z.array(memoryEntrySummarySchema).optional(),
   sourceSnapshots: z.array(sourceSnapshotSummarySchema).optional(),
+  command: z.string().trim().min(1).nullable().optional(),
+  layeredContextMarkdown: z.string().trim().min(1).nullable().optional(),
+  sourceStatus: z.array(z.object({
+    label: z.string().min(1),
+    status: z.union([z.enum(["fresh", "partial", "stale", "failed"]), z.enum(["connected", "missing"])]),
+    detail: z.string().min(1),
+  })).optional(),
+  plannerTradeoffContext: z.array(z.string().min(1)).optional(),
 })
 
 export const schedulePlanResultSchema = z.object({
@@ -32,6 +49,7 @@ export const schedulePlanResultSchema = z.object({
   proposedEvents: z.array(scheduleEventSchema),
   unscheduledTaskIds: z.array(z.string().uuid()),
   summary: z.string().min(1),
+  tradeoffNotes: z.array(z.string().min(1)).default([]),
 })
 
 export const scheduleResponseSchema = z.object({

@@ -19,15 +19,18 @@
 
 - Public: `profiles`, `preferences`, `calendars`, `tasks`, `schedule_events`, `checkins`, `integrations`, `assistant_threads`, `assistant_messages`, `assistant_tool_runs`, `memory_items`, `source_snapshots`, `source_files`, `source_candidates`, `daily_plans`, `change_logs`.
 - Private: `app_private.integration_tokens`.
+- `memory_items` carries ordered assistant context with `layer` plus structured `payload`; context loaders must respect the layer contract instead of treating memory as a flat list.
+- `assistant_tool_runs.payload` stores executable approval plans. Tool runs can move through `pending_approval`, `completed`, `error`, or `cancelled`, with approval/execution/cancellation timestamps and preserved error messages.
 
 ## Calendar Source Of Truth
 
 - `schedule_events` is the canonical app event store.
 - Imported Google events are mirrored into `schedule_events`.
-- JARVIS-created task/focus blocks are persisted first, then synced outward when Google is connected.
+- JARVIS-created task/focus blocks are persisted first. Syncing task blocks outward to Google Calendar is an approval-backed assistant tool run, not part of normal calendar reads.
 - Google app sign-in and Google source authorization are separate OAuth intents. Plain sign-in uses the provider for identity only; Calendar/Gmail authorization requests the offline source scopes and captures provider tokens from the callback exchange result immediately.
 - Sync responses expose an explicit authorization-required state instead of a generic failure.
 - Source connector readiness is derived on the server from public integration rows, private token presence, known OAuth scopes, and required environment variables. The UI must not treat a public `connected` row as runnable unless the private token/scope check also passes.
+- Hourly Vercel Cron calls `/api/cron/source-refresh` with `CRON_SECRET`. Cron isolates per-user failures and records failed source snapshots instead of hiding refresh problems.
 
 ## Source Intake And Plans
 
@@ -38,3 +41,5 @@
 - Notion source intake uses a public OAuth connection, stores tokens in `app_private.integration_tokens`, and requires a user-selected authoritative tasks database on the integration row before importing. Imports query that database directly instead of broad workspace search.
 - `daily_plans` records the current command-deck plan: horizon, summary, now item, next items, risk items, source coverage, tradeoffs, model, and command.
 - Planner-created task blocks may reference `daily_plans.id` through `tasks.plan_id` and `schedule_events.plan_id`.
+- Daily planning performs a forced pre-plan refresh for every connected/runnable source. Missing or never-configured sources are coverage gaps; connected/runnable source failures are hard planning failures.
+- Master Input and the daily command deck share the same daily-plan service, so natural-language commands are passed into the scheduling prompt and persisted on `daily_plans.command`.

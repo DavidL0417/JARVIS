@@ -17,6 +17,7 @@
 - No placeholder data, demo counts, seeded tasks, or fake recommendations.
 - Avoid nested cards and marketing-style sections.
 - Treat the secretary panel as a transcript plus command line. Avoid filled chat boxes, decorative composer rules, and separators that do not map to a real region change.
+- Pending external assistant writes should render as compact receipt controls with approve/cancel actions. The UI should refresh dashboard state after execution and display the real execution error if approval fails.
 - Keep freeform natural-language commands inside the secretary surface. The schedule command strip may offer fixed quick replans, but it should not render another command input.
 - Do not show unused connectors as missing required context in the plan basis. Source setup may show available connectors with honest auth-needed, ready, connected, or failed states tied to real actions.
 - Source setup connector rows should pair text labels with a compact status icon so missing config, auth-needed, ready, connected, and failed states are scannable without reading every sentence.
@@ -25,6 +26,7 @@
 - Source counts should represent distinct active source types, not historical refresh snapshots.
 - Candidate review should favor a compact deadline calendar grouping over a long checkbox-card list; undated items should stay compact and secondary.
 - On wide screens, the daily command strip belongs beside the schedule as a left command panel so it does not push the calendar down.
+- The Claude Sonnet/Opus planner choice belongs beside the daily planning controls as a compact segmented control, not in a modal or settings detour.
 - In the right rail, prefer spacing and muted surfaces for local grouping. Reserve strong rules for major region breaks so the panel does not become a stack of equal dividers.
 - Imported Google events default to medium priority and fixed in place. Do not expose the full backlog as a review queue; event-level changes belong on the calendar event context menu.
 

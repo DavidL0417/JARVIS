@@ -22,6 +22,10 @@ const explicitDenyPoliciesMigration = readFileSync(
   "supabase/migrations/20260509170508_explicit_waitlist_deny_policies.sql",
   "utf8",
 )
+const universalAssistantMigration = readFileSync(
+  "supabase/migrations/20260514183328_universal_assistant_orchestrator.sql",
+  "utf8",
+)
 
 describe("production Supabase migration", () => {
   it("keeps OAuth tokens outside public tables", () => {
@@ -98,5 +102,25 @@ describe("production Supabase migration", () => {
     expect(explicitDenyPoliciesMigration).toContain("to anon, authenticated")
     expect(explicitDenyPoliciesMigration).toContain("create policy integration_tokens_deny_anon_authenticated")
     expect(explicitDenyPoliciesMigration).toContain("on app_private.integration_tokens")
+  })
+
+  it("adds layered memory fields without weakening RLS or private token boundaries", () => {
+    expect(universalAssistantMigration).toContain("alter table public.memory_items")
+    expect(universalAssistantMigration).toContain("add column if not exists layer text")
+    expect(universalAssistantMigration).toContain("add column if not exists payload jsonb")
+    expect(universalAssistantMigration).toContain("memory_items_layer_check")
+    expect(universalAssistantMigration).toContain("'operating_rules'")
+    expect(universalAssistantMigration).toContain("'candidate_memories'")
+    expect(universalAssistantMigration).not.toContain("disable row level security")
+    expect(universalAssistantMigration).not.toContain("app_private.integration_tokens")
+  })
+
+  it("extends assistant approvals for resumable execution and cancellation", () => {
+    expect(universalAssistantMigration).toContain("add column if not exists approved_at timestamptz")
+    expect(universalAssistantMigration).toContain("add column if not exists executed_at timestamptz")
+    expect(universalAssistantMigration).toContain("add column if not exists cancelled_at timestamptz")
+    expect(universalAssistantMigration).toContain("add column if not exists error_message text")
+    expect(universalAssistantMigration).toContain("'cancelled'")
+    expect(universalAssistantMigration).toContain("Pending approvals store the executable action plan")
   })
 })

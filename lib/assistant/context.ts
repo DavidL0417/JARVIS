@@ -1,8 +1,11 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 
-import { buildMemorySummaryMarkdown, deriveAvailabilityWindowsFromScheduleContext } from "@/lib/ai/openai"
+import { ensureDefaultSecretaryMemoryForUser } from "@/lib/assistant/default-memory"
+import { buildMemorySummaryMarkdown, deriveAvailabilityWindowsFromScheduleContext } from "@/lib/ai/claude"
 import {
+  DAILY_PLAN_SELECT,
   mapMemoryItemRowToSummary,
+  mapDailyPlanRowToDailyPlan,
   mapPreferencesRowToPreferences,
   mapScheduleEventRowToScheduleEvent,
   mapSourceSnapshotRowToSummary,
@@ -25,6 +28,9 @@ import type {
   TaskRow,
   UserPreferences,
   UserPreferencesRow,
+  DailyPlanRow,
+  DailyPlan,
+  MemoryLayer,
 } from "@/types"
 
 const DEFAULT_TIMEZONE = "America/Chicago"
@@ -52,8 +58,24 @@ export interface AssistantRuntimeContext {
   events: ScheduleEvent[]
   memoryEntries: MemoryEntrySummary[]
   sourceSnapshots: SourceSnapshotSummary[]
+  latestDailyPlan: DailyPlan | null
+  pendingCandidateCount: number
+  recentChangeLogSummaries: string[]
+  layeredContextMarkdown: string
   context: AssistantContextData
 }
+
+export const MEMORY_LAYER_ORDER: MemoryLayer[] = [
+  "operating_rules",
+  "planning_profile",
+  "durable_preferences",
+  "task_context",
+  "deadline_context",
+  "calendar_context",
+  "source_status",
+  "feedback_observations",
+  "candidate_memories",
+]
 
 function buildAvailabilitySummary(
   preferences: UserPreferences,
@@ -110,11 +132,105 @@ function buildMemorySummary(memoryEntries: MemoryEntrySummary[]) {
     .join("\n")
 }
 
+function titleCaseLayer(layer: MemoryLayer) {
+  return layer
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ")
+}
+
+function buildLayeredMemoryMarkdown(input: {
+  preferences: UserPreferences
+  memoryEntries: MemoryEntrySummary[]
+  sourceSnapshots: SourceSnapshotSummary[]
+  latestDailyPlan: DailyPlan | null
+  pendingCandidateCount: number
+  recentChangeLogSummaries: string[]
+}) {
+  const lines: string[] = [
+    "# Layered Secretary Context",
+    "",
+    "## Structured Preferences",
+    `- Timezone: ${input.preferences.timezone}`,
+    `- Workday: ${input.preferences.workdayStart} to ${input.preferences.workdayEnd}`,
+    `- Default block: ${input.preferences.defaultTaskDurationMinutes} minutes`,
+    `- Break: ${input.preferences.breakDurationMinutes} minutes`,
+  ]
+
+  if (input.preferences.sleepPattern) {
+    lines.push(`- Sleep: ${input.preferences.sleepPattern}`)
+  }
+
+  if (input.preferences.peakEnergyWindow) {
+    lines.push(`- Peak energy: ${input.preferences.peakEnergyWindow}`)
+  }
+
+  if (input.preferences.procrastinationPattern) {
+    lines.push(`- Planning friction: ${input.preferences.procrastinationPattern}`)
+  }
+
+  for (const layer of MEMORY_LAYER_ORDER) {
+    const entries = input.memoryEntries.filter((entry) => entry.layer === layer)
+
+    if (entries.length === 0) {
+      continue
+    }
+
+    lines.push("", `## ${titleCaseLayer(layer)}`)
+
+    for (const entry of entries) {
+      const meta = [
+        entry.importance,
+        entry.importanceNote,
+        entry.source,
+      ].filter(Boolean).join("; ")
+      lines.push(meta ? `- ${entry.insight} (${meta})` : `- ${entry.insight}`)
+    }
+  }
+
+  if (input.sourceSnapshots.length > 0) {
+    lines.push("", "## Source Status")
+
+    for (const snapshot of input.sourceSnapshots.slice(0, 8)) {
+      lines.push(`- ${snapshot.source}: ${snapshot.freshness}. ${snapshot.summary}`)
+    }
+  }
+
+  if (input.pendingCandidateCount > 0) {
+    lines.push("", "## Review Queue", `- ${input.pendingCandidateCount} source candidate${input.pendingCandidateCount === 1 ? "" : "s"} await approval.`)
+  }
+
+  if (input.latestDailyPlan) {
+    lines.push("", "## Latest Daily Plan", `- ${input.latestDailyPlan.summary}`)
+  }
+
+  if (input.recentChangeLogSummaries.length > 0) {
+    lines.push("", "## Recent Assistant Changes")
+
+    for (const summary of input.recentChangeLogSummaries.slice(0, 6)) {
+      lines.push(`- ${summary}`)
+    }
+  }
+
+  return lines.join("\n").trim()
+}
+
 export async function loadAssistantRuntimeContext(
   supabase: SupabaseClient,
   userId: string,
 ): Promise<AssistantRuntimeContext> {
-  const [preferencesResult, tasksResult, eventsResult, memoryResult, sourceResult] = await Promise.all([
+  await ensureDefaultSecretaryMemoryForUser(supabase, userId)
+
+  const [
+    preferencesResult,
+    tasksResult,
+    eventsResult,
+    memoryResult,
+    sourceResult,
+    dailyPlanResult,
+    candidateCountResult,
+    changeLogResult,
+  ] = await Promise.all([
     supabase
       .from("preferences")
       .select(PREFERENCES_SELECT)
@@ -142,7 +258,26 @@ export async function loadAssistantRuntimeContext(
       .select(SOURCE_SNAPSHOT_SELECT)
       .eq("user_id", userId)
       .order("captured_at", { ascending: false })
-      .limit(10),
+      .limit(16),
+    supabase
+      .from("daily_plans")
+      .select(DAILY_PLAN_SELECT)
+      .eq("user_id", userId)
+      .neq("status", "superseded")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle<DailyPlanRow>(),
+    supabase
+      .from("source_candidates")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", userId)
+      .eq("status", "pending"),
+    supabase
+      .from("change_logs")
+      .select("summary, created_at")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(8),
   ])
 
   const firstError =
@@ -150,7 +285,10 @@ export async function loadAssistantRuntimeContext(
     tasksResult.error ||
     eventsResult.error ||
     memoryResult.error ||
-    sourceResult.error
+    sourceResult.error ||
+    dailyPlanResult.error ||
+    candidateCountResult.error ||
+    changeLogResult.error
 
   if (firstError) {
     throw new Error(firstError.message)
@@ -171,6 +309,11 @@ export async function loadAssistantRuntimeContext(
   const sourceSnapshots = (sourceResult.data || []).map((row) =>
     mapSourceSnapshotRowToSummary(row as SourceSnapshotRow),
   )
+  const latestDailyPlan = dailyPlanResult.data ? mapDailyPlanRowToDailyPlan(dailyPlanResult.data) : null
+  const pendingCandidateCount = candidateCountResult.count ?? 0
+  const recentChangeLogSummaries = (changeLogResult.data || [])
+    .map((row) => row.summary)
+    .filter((summary): summary is string => Boolean(summary))
   const availabilityWindows = deriveAvailabilityWindowsFromScheduleContext({
     userId,
     tasks,
@@ -180,7 +323,7 @@ export async function loadAssistantRuntimeContext(
     sourceSnapshots,
   })
 
-  const memorySummaryMarkdown = buildMemorySummaryMarkdown({
+  const legacyMemorySummaryMarkdown = buildMemorySummaryMarkdown({
     preferences: {
       timezone: preferences.timezone,
       workdayStart: preferences.workdayStart,
@@ -201,6 +344,14 @@ export async function loadAssistantRuntimeContext(
       source: entry.source,
     })),
   })
+  const layeredContextMarkdown = buildLayeredMemoryMarkdown({
+    preferences,
+    memoryEntries,
+    sourceSnapshots,
+    latestDailyPlan,
+    pendingCandidateCount,
+    recentChangeLogSummaries,
+  })
 
   return {
     userId,
@@ -210,6 +361,10 @@ export async function loadAssistantRuntimeContext(
     events,
     memoryEntries,
     sourceSnapshots,
+    latestDailyPlan,
+    pendingCandidateCount,
+    recentChangeLogSummaries,
+    layeredContextMarkdown,
     context: {
       availability: {
         timezone: preferences.timezone,
@@ -227,7 +382,13 @@ export async function loadAssistantRuntimeContext(
       availabilityWindows,
       memoryEntries,
       sourceSnapshots,
-      memorySummary: buildMemorySummary(memoryEntries) || memorySummaryMarkdown,
+      memorySummary: buildMemorySummary(memoryEntries) || legacyMemorySummaryMarkdown,
+      layeredContextMarkdown,
+      latestDailyPlan,
+      pendingCandidateCount,
+      recentChangeLogSummaries,
     },
   }
 }
+
+export const loadLayeredSecretaryContext = loadAssistantRuntimeContext

@@ -37,8 +37,8 @@ describe("secretary dialogue", () => {
     vi.unstubAllEnvs()
   })
 
-  it("fails clearly when OpenAI is not configured instead of using a local dialogue fallback", async () => {
-    vi.stubEnv("OPENAI_API_KEY", "")
+  it("fails clearly when Claude is not configured instead of using a local dialogue fallback", async () => {
+    vi.stubEnv("ANTHROPIC_API_KEY", "")
 
     const result = await generateSecretaryDialogueReply({
       message: "How are you?",
@@ -50,7 +50,7 @@ describe("secretary dialogue", () => {
 
     expect(result.ok).toBe(false)
     expect(result.reply).toBe("The secretary model is not configured.")
-    expect(result.error).toContain("OPENAI_API_KEY")
+    expect(result.error).toContain("ANTHROPIC_API_KEY")
     expect(result.reply).not.toContain("schedule, tasks, and memory in front of me")
   })
 })

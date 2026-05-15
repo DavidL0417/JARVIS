@@ -28,6 +28,7 @@ const MASTER_SCHEDULING_PROMPT = [
   "Use the provided availability windows as soft guidance, not as a hard boundary.",
   "Do not place tasks past a deadline or overlapping another event.",
   "Use the rendered memory summary to account for user-specific preferences, habits, and friction points.",
+  "If a natural-language scheduling command is supplied, treat it as a first-class planning constraint unless it conflicts with hard events, deadlines, or explicit memory rules.",
   `All planner-created task events must use calendarId "${DEFAULT_TASKS_CALENDAR_ID}".`,
   "Scheduling outside the preferred availability windows is allowed when needed. If you do that, mention the tradeoff in the summary.",
   "Prefer earlier placement for urgent tasks, align heavier work with stronger energy windows when possible, and leave tasks unscheduled if there is no valid slot.",
@@ -47,6 +48,7 @@ const plannerToolInputSchema = z.object({
     .default([]),
   unscheduledTaskIds: z.array(z.string().uuid()).default([]),
   summary: z.string().min(1),
+  tradeoffNotes: z.array(z.string().min(1)).default([]),
 })
 
 type PlannerToolInput = z.infer<typeof plannerToolInputSchema>
@@ -108,7 +110,10 @@ type PlanningContext = {
     localEndDay: string
   }
   memoryMarkdown: string
+  command: string | null
   preferences: PlanningPreferences
+  sourceStatus: SchedulePreparationContext["sourceStatus"]
+  plannerTradeoffContext: string[]
   hardEvents: SchedulePlanResult["proposedEvents"]
   fixedTaskEvents: SchedulePlanResult["proposedEvents"]
   fixedTaskIds: Set<string>
@@ -123,7 +128,7 @@ export function getOpenAIConfig() {
   const apiKey = process.env.OPENAI_API_KEY
 
   if (!apiKey) {
-    throw new Error("OPENAI_API_KEY is missing. Configure OpenAI before running secretary or scheduling model calls.")
+    throw new Error("OPENAI_API_KEY is missing. Configure OpenAI before running source extraction or classification model calls.")
   }
 
   return {
@@ -172,10 +177,12 @@ export function getOpenAIResponseText(payload: OpenAIResponsePayload) {
 
 export async function generateSchedule(input: SchedulePreparationContext): Promise<SchedulePlanResult> {
   const planningContext = buildPlanningContext(input)
-  planningContext.memoryMarkdown = buildMemorySummaryMarkdown({
-    preferences: planningContext.preferences,
-    memoryEntries: input.memoryEntries ?? [],
-  })
+  planningContext.memoryMarkdown =
+    input.layeredContextMarkdown?.trim() ||
+    buildMemorySummaryMarkdown({
+      preferences: planningContext.preferences,
+      memoryEntries: input.memoryEntries ?? [],
+    })
 
   if (planningContext.planningTaskIds.length === 0) {
     return schedulePlanResultSchema.parse({
@@ -183,6 +190,7 @@ export async function generateSchedule(input: SchedulePreparationContext): Promi
       proposedEvents: sortEventsByStart(planningContext.fixedTaskEvents),
       unscheduledTaskIds: [],
       summary: "No active tasks fell inside the current seven-day planning window.",
+      tradeoffNotes: [],
     })
   }
 
@@ -192,6 +200,7 @@ export async function generateSchedule(input: SchedulePreparationContext): Promi
       proposedEvents: sortEventsByStart(planningContext.fixedTaskEvents),
       unscheduledTaskIds: [],
       summary: "All pending tasks were already fixed in time, so no new scheduling was needed.",
+      tradeoffNotes: [],
     })
   }
 
@@ -207,7 +216,20 @@ export async function generateSchedule(input: SchedulePreparationContext): Promi
     proposedEvents,
     unscheduledTaskIds,
     summary: plan.summary,
+    tradeoffNotes: plan.tradeoffNotes,
   })
+}
+
+export function buildSchedulePromptPayloadForTest(input: SchedulePreparationContext) {
+  const planningContext = buildPlanningContext(input)
+  planningContext.memoryMarkdown =
+    input.layeredContextMarkdown?.trim() ||
+    buildMemorySummaryMarkdown({
+      preferences: planningContext.preferences,
+      memoryEntries: input.memoryEntries ?? [],
+    })
+
+  return buildPromptPayload(planningContext)
 }
 
 export function deriveAvailabilityWindowsFromScheduleContext(input: SchedulePreparationContext): AvailabilityWindow[] {
@@ -319,7 +341,10 @@ function buildPlanningContext(input: SchedulePreparationContext): PlanningContex
     timezone: preferences.timezone,
     planningWindow,
     memoryMarkdown: "",
+    command: input.command?.trim() || null,
     preferences,
+    sourceStatus: input.sourceStatus ?? [],
+    plannerTradeoffContext: input.plannerTradeoffContext ?? [],
     hardEvents,
     fixedTaskEvents,
     fixedTaskIds,
@@ -407,8 +432,13 @@ async function requestOpenAISchedule(context: PlanningContext): Promise<PlannerT
               items: { type: "string" },
             },
             summary: { type: "string", description: "Short operational explanation of the schedule tradeoffs." },
+            tradeoffNotes: {
+              type: "array",
+              description: "Concrete tradeoffs made to satisfy deadlines, routines, user command, and hard events.",
+              items: { type: "string" },
+            },
           },
-          required: ["placements", "unscheduledTaskIds", "summary"],
+          required: ["placements", "unscheduledTaskIds", "summary", "tradeoffNotes"],
         },
       },
     },
@@ -426,8 +456,11 @@ function buildPromptPayload(context: PlanningContext) {
   return {
     currentTime: context.nowIso,
     timezone: context.timezone,
+    command: context.command,
     planningWindow: context.planningWindow,
     memoryMarkdown: context.memoryMarkdown,
+    sourceStatus: context.sourceStatus,
+    plannerTradeoffContext: context.plannerTradeoffContext,
     preferences: {
       timezone: context.preferences.timezone,
       workdayStart: context.preferences.workdayStart,

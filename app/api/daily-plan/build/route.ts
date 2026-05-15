@@ -32,6 +32,7 @@ export async function POST(request: Request) {
       userId: user.id,
       hardEvents: parsedBody.data.hardEvents,
       command: parsedBody.data.command,
+      plannerModel: parsedBody.data.plannerModel,
     })
     const responsePayload: DailyPlanResponse = {
       success: true,

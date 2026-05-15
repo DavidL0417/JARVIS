@@ -342,7 +342,7 @@ export async function GET() {
         .eq("user_id", user.id)
         .eq("status", "active")
         .order("created_at", { ascending: false })
-        .limit(8),
+        .limit(60),
       adminClient
         .from("source_snapshots")
         .select(SOURCE_SNAPSHOT_SELECT)
