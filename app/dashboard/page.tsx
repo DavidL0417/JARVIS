@@ -35,6 +35,7 @@ import { TaskManager } from "@/components/dashboard/task-manager"
 import { Button } from "@/components/ui/button"
 import { Kbd } from "@/components/ui/kbd"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import { cn } from "@/lib/utils"
 import type {
   CalendarListResponse,
   CreateTaskRequest,
@@ -193,6 +194,7 @@ function RailButton({
   active,
   spinning,
   badge,
+  badgeTone = "copper",
 }: {
   label: string
   icon: LucideIcon
@@ -201,6 +203,7 @@ function RailButton({
   active?: boolean
   spinning?: boolean
   badge?: boolean
+  badgeTone?: "copper" | "destructive"
 }) {
   return (
     <Tooltip>
@@ -210,11 +213,10 @@ function RailButton({
           aria-label={label}
           onClick={onClick}
           disabled={disabled}
-          className={`group relative flex h-10 w-10 items-center justify-center rounded-sm transition-colors disabled:opacity-40 ${
-            active
-              ? "bg-copper-soft text-copper"
-              : "text-muted-foreground hover:bg-accent hover:text-foreground"
-          }`}
+          className={cn(
+            "group relative flex h-10 w-10 items-center justify-center rounded-sm transition-colors disabled:opacity-40",
+            active ? "bg-copper-soft text-copper" : "text-muted-foreground hover:bg-accent hover:text-foreground",
+          )}
         >
           {spinning ? (
             <Loader2 className="h-[18px] w-[18px] animate-spin" aria-hidden="true" strokeWidth={1.75} />
@@ -223,7 +225,10 @@ function RailButton({
           )}
           {badge ? (
             <span
-              className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-copper"
+              className={cn(
+                "absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full",
+                badgeTone === "destructive" ? "bg-destructive" : "bg-copper",
+              )}
               aria-hidden="true"
             />
           ) : null}
@@ -498,6 +503,7 @@ export default function DashboardPage() {
 
   const stats = dashboard?.stats
   const pendingCandidates = dashboard?.sourceCandidates.filter((candidate) => candidate.status === "pending").length ?? 0
+  const failedSources = dashboard?.sources.filter((source) => source.freshness === "failed").length ?? 0
 
   return (
     <TooltipProvider delayDuration={250} skipDelayDuration={400}>
@@ -511,10 +517,12 @@ export default function DashboardPage() {
               active={calendarsSidebarOpen}
             />
             <RailButton
-              label="Sources"
+              label={failedSources > 0 ? `Sources · ${failedSources} refresh issue${failedSources === 1 ? "" : "s"}` : "Sources"}
               icon={Database}
               onClick={() => setSourcesSheetOpen(true)}
               active={sourcesSheetOpen}
+              badge={failedSources > 0}
+              badgeTone="destructive"
             />
             <RailButton
               label={pendingCandidates > 0 ? `Inbox · ${pendingCandidates} pending` : "Inbox"}
@@ -615,7 +623,7 @@ export default function DashboardPage() {
           isOpen={sourcesSheetOpen}
           onClose={() => setSourcesSheetOpen(false)}
           title="Sources"
-          width={420}
+          width={980}
         >
           {dashboard ? (
             <SourceSetupPanel

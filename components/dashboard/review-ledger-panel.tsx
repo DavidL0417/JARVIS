@@ -163,7 +163,6 @@ export function ReviewLedgerPanel({
     () => latestSourcePerKind(sources).slice(0, 3),
     [sources],
   )
-  const failedSourceCount = sources.filter((source) => source.source !== "google_calendar" && source.freshness === "failed").length
 
   async function mutateCandidate(candidateId: string, action: "approve" | "dismiss") {
     setBusyId(candidateId)
@@ -200,12 +199,6 @@ export function ReviewLedgerPanel({
           {pendingCandidates.length}
         </Badge>
       </div>
-
-      {failedSourceCount > 0 ? (
-        <p className="text-[12px] leading-5 text-destructive">
-          {failedSourceCount} source refresh issue{failedSourceCount === 1 ? "" : "s"} need attention.
-        </p>
-      ) : null}
 
       {pendingCandidates.length === 0 && recentSources.length > 0 ? (
         <div className="flex flex-col gap-2">

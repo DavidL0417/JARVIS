@@ -45,8 +45,8 @@ export function RailSheet({
       />
 
       <aside
-        className="fixed left-0 top-0 z-50 h-full border-r border-rule bg-background animate-in slide-in-from-left duration-200"
-        style={{ width: `${width}px` }}
+        className="fixed left-0 top-0 z-50 h-full max-w-full border-r border-rule bg-background animate-in slide-in-from-left duration-200"
+        style={{ width: `min(${width}px, 100vw)` }}
         aria-label={title}
       >
         <div className="flex h-full flex-col">
