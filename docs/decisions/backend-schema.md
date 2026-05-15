@@ -30,7 +30,7 @@
 - Google app sign-in and Google source authorization are separate OAuth intents. Plain sign-in uses the provider for identity only; Calendar/Gmail authorization requests the offline source scopes and captures provider tokens from the callback exchange result immediately.
 - Sync responses expose an explicit authorization-required state instead of a generic failure.
 - Source connector readiness is derived on the server from public integration rows, private token presence, known OAuth scopes, and required environment variables. The UI must not treat a public `connected` row as runnable unless the private token/scope check also passes.
-- Hourly Vercel Cron calls `/api/cron/source-refresh` with `CRON_SECRET`. Cron isolates per-user failures and records failed source snapshots instead of hiding refresh problems.
+- Daily Vercel Cron calls `/api/cron/source-refresh` with `CRON_SECRET`. The daily cadence keeps Hobby deployments valid; manual refreshes and forced pre-plan refreshes cover fresh planning needs. Cron isolates per-user failures and records failed source snapshots instead of hiding refresh problems.
 
 ## Source Intake And Plans
 

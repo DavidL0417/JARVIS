@@ -464,8 +464,9 @@ export function MemoryPanel({
     }
   }
 
-  const activeEntries =
-    (selectedCategory && grouped.find(([key]) => key === selectedCategory)?.[1]) ?? []
+  const activeEntries = selectedCategory
+    ? grouped.find(([key]) => key === selectedCategory)?.[1] ?? []
+    : []
 
   function renderDetail() {
     if (totalEntries === 0) {
