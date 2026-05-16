@@ -90,6 +90,31 @@ function isSameCalendarDay(left: Date, right: Date) {
   )
 }
 
+function getDayIndicesInRange(
+  start: Date,
+  end: Date,
+  displayDates: Date[],
+): number[] {
+  if (displayDates.length === 0) return []
+  const startMs = start.getTime()
+  const endMs = end.getTime()
+  if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) {
+    const single = displayDates.findIndex((date) => isSameCalendarDay(date, start))
+    return single === -1 ? [] : [single]
+  }
+  const indices: number[] = []
+  displayDates.forEach((date, idx) => {
+    const dayStart = new Date(date)
+    dayStart.setHours(0, 0, 0, 0)
+    const dayEnd = new Date(date)
+    dayEnd.setHours(23, 59, 59, 999)
+    if (dayEnd.getTime() >= startMs && dayStart.getTime() <= endMs) {
+      indices.push(idx)
+    }
+  })
+  return indices
+}
+
 const DEFAULT_BACKEND_CALENDAR_ID = "calendar-main"
 const fallbackColors: CalendarEvent["color"][] = ["mint", "blue", "yellow", "orange", "purple", "cyan"]
 
@@ -111,29 +136,39 @@ function mapScheduleEventsToCalendarEvents(
   return scheduleEvents.flatMap((event) => {
     const start = new Date(event.start)
     const end = new Date(event.end)
-    const day = displayDates.findIndex((date) => isSameCalendarDay(date, start))
-
-    if (day === -1) {
-      return []
+    const source = event.lastSyncedFrom === "gcal" || Boolean(event.gcalEventId) ? ("google" as const) : ("local" as const)
+    const base = {
+      title: event.title,
+      start: event.start,
+      end: event.end,
+      source,
+      isReadOnly: event.isImmutable,
+      calendarId: event.calendarId || DEFAULT_BACKEND_CALENDAR_ID,
+      allDay: event.allDay,
+      location: event.location || undefined,
+      color: getFallbackColor(event.calendarId),
+      priority: event.priority,
+      startHour: start.getHours() + start.getMinutes() / 60,
+      duration: Math.max((end.getTime() - start.getTime()) / 3_600_000, 0.25),
+      canEdit: true,
     }
 
+    if (event.allDay) {
+      const days = getDayIndicesInRange(start, end, displayDates)
+      return days.map((day) => ({
+        ...base,
+        id: days.length > 1 ? `${event.id}::${day}` : event.id,
+        day,
+      }))
+    }
+
+    const day = displayDates.findIndex((date) => isSameCalendarDay(date, start))
+    if (day === -1) return []
     return [
       {
+        ...base,
         id: event.id,
-        title: event.title,
-        start: event.start,
-        end: event.end,
-        source: event.lastSyncedFrom === "gcal" || Boolean(event.gcalEventId) ? ("google" as const) : ("local" as const),
-        isReadOnly: event.isImmutable,
-        calendarId: event.calendarId || DEFAULT_BACKEND_CALENDAR_ID,
-        allDay: event.allDay,
-        location: event.location || undefined,
-        color: getFallbackColor(event.calendarId),
-        priority: event.priority,
         day,
-        startHour: start.getHours() + start.getMinutes() / 60,
-        duration: Math.max((end.getTime() - start.getTime()) / 3_600_000, 0.25),
-        canEdit: true,
       },
     ]
   })
@@ -215,32 +250,40 @@ function mapTasksToCalendarEvents(
 
     const durationHours = Math.max((task.durationMinutes ?? 60) / 60, 0.25)
     const anchorStart = new Date(task.scheduledFor)
-    const day = displayDates.findIndex((date) => isSameCalendarDay(date, anchorStart))
-
-    if (day === -1) {
-      return []
+    const endDate = new Date(anchorStart.getTime() + durationHours * 3_600_000)
+    const startHour = anchorStart.getHours() + anchorStart.getMinutes() / 60
+    const base = {
+      title: task.title,
+      start: anchorStart.toISOString(),
+      end: endDate.toISOString(),
+      source: "task" as const,
+      isReadOnly: task.isImmutable,
+      calendarId: task.calendarId || "cal-tasks",
+      allDay: task.allDay,
+      location: undefined,
+      color: getFallbackColor(task.calendarId || "cal-tasks"),
+      priority: task.priority,
+      startHour,
+      duration: durationHours,
+      canEdit: false,
     }
 
-    const startHour = anchorStart.getHours() + anchorStart.getMinutes() / 60
-    const end = new Date(anchorStart.getTime() + durationHours * 3_600_000).toISOString()
+    if (task.allDay) {
+      const days = getDayIndicesInRange(anchorStart, endDate, displayDates)
+      return days.map((day) => ({
+        ...base,
+        id: days.length > 1 ? `task-${task.id}::${day}` : `task-${task.id}`,
+        day,
+      }))
+    }
 
+    const day = displayDates.findIndex((date) => isSameCalendarDay(date, anchorStart))
+    if (day === -1) return []
     return [
       {
+        ...base,
         id: `task-${task.id}`,
-        title: task.title,
-        start: anchorStart.toISOString(),
-        end,
-        source: "task" as const,
-        isReadOnly: task.isImmutable,
-        calendarId: task.calendarId || "cal-tasks",
-        allDay: false,
-        location: undefined,
-        color: getFallbackColor(task.calendarId || "cal-tasks"),
-        priority: task.priority,
         day,
-        startHour,
-        duration: durationHours,
-        canEdit: false,
       },
     ]
   })
