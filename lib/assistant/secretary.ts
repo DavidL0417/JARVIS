@@ -33,6 +33,10 @@ function normalizeText(value: string) {
   return normalizeAssistantCommand(value)
 }
 
+function hasSchedulingImplication(text: string) {
+  return /\b(schedule|reschedule|replan|plan|extend|shorten|spread|space|defer|move|once per|twice per|every|weekly|daily|monthly|hours?|hrs?|minutes?|mins?|monday|tuesday|wednesday|thursday|friday|saturday|sunday|today|tomorrow|next week|this week|due)\b/i.test(text)
+}
+
 function makeReceipt(
   tool: string,
   status: AssistantToolCallResult["status"],
@@ -419,6 +423,60 @@ export async function runSecretaryTurn(input: RunSecretaryTurnInput): Promise<As
         priority: intent.priority,
       }),
     )
+  }
+
+  const schedulingChainContent =
+    intent.kind === "remember" && hasSchedulingImplication(intent.content)
+      ? intent.content
+      : null
+
+  if (schedulingChainContent) {
+    try {
+      const planResult = await buildDailyPlan({
+        adminClient: input.supabase,
+        userId: input.userId,
+        hardEvents: [],
+        command: `Applying user preference: ${schedulingChainContent}`,
+      })
+      const eventCount = planResult.schedule.proposedEvents.length
+      const planReceipt = makeReceipt(
+        "plan_day",
+        "completed",
+        `Auto-replanned after remember; ${eventCount} event${eventCount === 1 ? "" : "s"} placed.`,
+      )
+      await insertToolRun(input.supabase, {
+        userId: input.userId,
+        threadId,
+        messageId: assistantMessageId,
+        receipt: planReceipt,
+        payload: { command: schedulingChainContent, trigger: "remember_chain" },
+      })
+      toolCalls.push(planReceipt)
+      reply = `${reply} Replanned around it: ${planResult.dailyPlan.summary}`
+      needsRefresh = true
+      await input.supabase
+        .from("assistant_messages")
+        .update({ content: reply })
+        .eq("id", assistantMessageId)
+    } catch (chainError) {
+      const chainMessage = chainError instanceof Error ? chainError.message : "Replan failed."
+      const planReceipt = makeReceipt("plan_day", "error", "Auto-replan after remember failed.", {
+        errorMessage: chainMessage,
+      })
+      await insertToolRun(input.supabase, {
+        userId: input.userId,
+        threadId,
+        messageId: assistantMessageId,
+        receipt: planReceipt,
+        payload: { command: schedulingChainContent, trigger: "remember_chain" },
+      })
+      toolCalls.push(planReceipt)
+      reply = `${reply} (Tried to replan but it failed: ${chainMessage})`
+      await input.supabase
+        .from("assistant_messages")
+        .update({ content: reply })
+        .eq("id", assistantMessageId)
+    }
   }
 
   const runtimeAfter = needsRefresh
