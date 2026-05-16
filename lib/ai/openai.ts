@@ -594,8 +594,14 @@ function validateGeneratedEvents(
       throw new Error(`OpenAI scheduled task ${task.id} outside the seven-day planning horizon.`)
     }
 
-    if (task.deadline && endMs > new Date(task.deadline).getTime()) {
-      throw new Error(`OpenAI scheduled task ${task.id} past its deadline.`)
+    if (task.deadline) {
+      const deadlineMs = new Date(task.deadline).getTime()
+      const nowMs = new Date(context.nowIso).getTime()
+      const isOverdue = deadlineMs < nowMs
+
+      if (!isOverdue && endMs > deadlineMs) {
+        throw new Error(`OpenAI scheduled task ${task.id} past its deadline.`)
+      }
     }
 
     const overlap = occupiedIntervals.find(
