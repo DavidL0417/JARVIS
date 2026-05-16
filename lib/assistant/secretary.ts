@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 
+import { normalizeMemoryContent } from "@/lib/ai/memory-normalize"
 import { loadAssistantRuntimeContext } from "@/lib/assistant/context"
 import { generateSecretaryDialogueReply } from "@/lib/assistant/dialogue"
 import {
@@ -162,18 +163,49 @@ async function handleRemember(
     content: string
   },
 ) {
+  const rawContent = input.content
+  const normalizedContent = await normalizeMemoryContent(rawContent)
+
+  const { data: existing, error: existingError } = await supabase
+    .from("memory_items")
+    .select("id")
+    .eq("user_id", input.userId)
+    .eq("status", "active")
+    .eq("layer", "durable_preferences")
+    .eq("content", normalizedContent)
+    .limit(1)
+    .maybeSingle<{ id: string }>()
+
+  if (existingError) {
+    throw new Error(existingError.message)
+  }
+
+  if (existing) {
+    const dedupeReceipt = makeReceipt("remember", "completed", "Memory already saved; no duplicate added.")
+    await insertToolRun(supabase, {
+      userId: input.userId,
+      threadId: input.threadId,
+      messageId: input.assistantMessageId,
+      receipt: dedupeReceipt,
+      payload: { memoryId: existing.id, content: normalizedContent, deduped: true },
+    })
+    return dedupeReceipt
+  }
+
   const { data, error } = await supabase
     .from("memory_items")
     .insert({
       user_id: input.userId,
       kind: "preference",
       category: "user_instruction",
-      content: input.content,
+      content: normalizedContent,
       importance: "medium",
       layer: "durable_preferences",
       source_label: "master_input",
       payload: {
         promotedFrom: "master_input",
+        rawContent,
+        normalized: normalizedContent !== rawContent,
       },
       status: "active",
       confidence: 0.9,
@@ -191,7 +223,7 @@ async function handleRemember(
     threadId: input.threadId,
     messageId: input.assistantMessageId,
     receipt,
-    payload: { memoryId: data.id, content: input.content },
+    payload: { memoryId: data.id, content: normalizedContent, rawContent },
   })
   await insertChangeLog(supabase, {
     userId: input.userId,
@@ -199,7 +231,7 @@ async function handleRemember(
     targetTable: "memory_items",
     targetId: data.id,
     summary: "Saved memory from Master Input.",
-    afterValue: { content: input.content },
+    afterValue: { content: normalizedContent, rawContent },
   })
 
   return receipt

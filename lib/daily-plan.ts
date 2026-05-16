@@ -496,6 +496,11 @@ async function persistSchedulePlan(input: {
   const mutableEventIds = (existingTaskEvents ?? [])
     .filter((event) => event.is_immutable === false)
     .map((event) => event.id)
+  const immutableTaskIds = new Set(
+    (existingTaskEvents ?? [])
+      .filter((event) => event.is_immutable === true && event.task_id)
+      .map((event) => event.task_id as string),
+  )
 
   if (mutableEventIds.length > 0) {
     const { error } = await input.adminClient
@@ -508,25 +513,40 @@ async function persistSchedulePlan(input: {
     }
   }
 
-  const rowsToInsert: ScheduleEventInsertRow[] = taskEvents.map((event) => ({
-    user_id: input.userId,
-    task_id: event.taskId,
-    title: event.title,
-    starts_at: event.start,
-    ends_at: event.end,
-    source: "task",
-    priority: event.priority,
-    status: "scheduled",
-    location: event.location,
-    external_event_id: event.externalEventId,
-    gcal_event_id: event.gcalEventId,
-    last_synced_from: event.lastSyncedFrom,
-    is_immutable: event.isImmutable,
-    is_checked_in: event.isCheckedIn,
-    all_day: false,
-    calendar_id: event.calendarId ?? TASKS_CALENDAR_ID,
-    plan_id: input.planId,
-  }))
+  const seenInsertKeys = new Set<string>()
+  const rowsToInsert: ScheduleEventInsertRow[] = []
+
+  for (const event of taskEvents) {
+    if (!event.taskId || immutableTaskIds.has(event.taskId)) {
+      continue
+    }
+
+    const key = `${event.taskId}::task`
+    if (seenInsertKeys.has(key)) {
+      continue
+    }
+    seenInsertKeys.add(key)
+
+    rowsToInsert.push({
+      user_id: input.userId,
+      task_id: event.taskId,
+      title: event.title,
+      starts_at: event.start,
+      ends_at: event.end,
+      source: "task",
+      priority: event.priority,
+      status: "scheduled",
+      location: event.location,
+      external_event_id: event.externalEventId,
+      gcal_event_id: event.gcalEventId,
+      last_synced_from: event.lastSyncedFrom,
+      is_immutable: event.isImmutable,
+      is_checked_in: event.isCheckedIn,
+      all_day: false,
+      calendar_id: event.calendarId ?? TASKS_CALENDAR_ID,
+      plan_id: input.planId,
+    })
+  }
 
   if (rowsToInsert.length > 0) {
     const { error } = await input.adminClient.from("schedule_events").insert(rowsToInsert)
