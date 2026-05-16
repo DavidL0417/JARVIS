@@ -525,7 +525,14 @@ export default function DashboardPage() {
           </div>
 
           <div className="rail-scroll flex min-h-0 min-w-0 flex-col gap-5 overflow-y-auto pb-2 pt-6 xl:pb-2 xl:pl-6 xl:pr-1 xl:pt-0">
-            <ContextRailPanel dailyPlan={dashboardData.dailyPlan} sources={dashboardData.sources} />
+            <ContextRailPanel
+              dailyPlan={dashboardData.dailyPlan}
+              sources={dashboardData.sources}
+              planStatus={plannerStatus}
+              planError={plannerStatus === "Error" ? plannerSummary : ""}
+              onRetry={() => void handleDailyPlan()}
+              isRetrying={isScheduling}
+            />
             <AutoImportDigest
               candidates={dashboardData.sourceCandidates}
               onUndo={handleUndoAutoImport}

@@ -203,9 +203,29 @@ export function DailyCommandStrip({
         </div>
 
         {plannerSummary ? (
-          <p className={`line-clamp-2 text-[12px] leading-5 ${plannerStatus === "Error" ? "text-destructive" : "text-muted-foreground"}`}>
-            {plannerSummary}
-          </p>
+          plannerStatus === "Error" ? (
+            <div className="flex flex-col gap-2 rounded-sm border border-destructive/50 bg-destructive/10 p-2">
+              <p className="line-clamp-3 text-[12px] leading-5 text-destructive">{plannerSummary}</p>
+              <Button
+                size="sm"
+                variant="destructive"
+                onClick={onBuild}
+                disabled={isPlanning}
+                className="h-7 w-fit gap-1.5 rounded-sm px-2 text-[11px] font-medium"
+              >
+                {isPlanning ? (
+                  <Loader2 className="animate-spin" aria-hidden="true" />
+                ) : (
+                  <RefreshCw aria-hidden="true" />
+                )}
+                {isPlanning ? "Retrying" : "Retry build"}
+              </Button>
+            </div>
+          ) : (
+            <p className="line-clamp-2 text-[12px] leading-5 text-muted-foreground">
+              {plannerSummary}
+            </p>
+          )
         ) : null}
       </div>
     </section>

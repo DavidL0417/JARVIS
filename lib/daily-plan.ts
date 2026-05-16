@@ -445,9 +445,13 @@ async function loadScheduleContext(input: {
     },
     persistedEvents,
     pendingCandidateCount: candidates.filter((candidate) => candidate.status === "pending").length,
-    failedSourceSummaries: sources
-      .filter((source) => source.freshness === "failed")
-      .map((source) => source.summary),
+    failedSourceSummaries: Array.from(
+      new Set(
+        sources
+          .filter((source) => source.freshness === "failed")
+          .map((source) => source.summary),
+      ),
+    ),
     sourceCoverage: deriveSourceCoverage({
       sources,
       integrations: (integrationResult.data || []) as Array<{ provider: string; status: string | null }>,
