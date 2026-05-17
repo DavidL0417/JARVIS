@@ -25,6 +25,15 @@ describe("production response schemas", () => {
         integrations: [],
         sourceConnectors: [
           {
+            id: "google_calendar",
+            status: "auth_needed",
+            detail: "Authorize Google Calendar read access before planning from current commitments.",
+            account: null,
+            canRun: false,
+            selectedSourceId: null,
+            selectedSourceName: null,
+          },
+          {
             id: "notion",
             status: "missing_config",
             detail: "Notion OAuth is not configured for this app. Add NOTION_CLIENT_ID and NOTION_CLIENT_SECRET on the server before users can connect a workspace.",
@@ -37,6 +46,15 @@ describe("production response schemas", () => {
             id: "gmail",
             status: "auth_needed",
             detail: "Authorize Google with Gmail read-only access before scanning mail.",
+            account: null,
+            canRun: false,
+            selectedSourceId: null,
+            selectedSourceName: null,
+          },
+          {
+            id: "canvas",
+            status: "auth_needed",
+            detail: "Connect Canvas with a base URL and a personal access token from Canvas settings.",
             account: null,
             canRun: false,
             selectedSourceId: null,

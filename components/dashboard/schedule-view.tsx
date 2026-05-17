@@ -56,6 +56,7 @@ export interface CalendarEvent {
   color: "mint" | "blue" | "yellow" | "orange" | "purple" | "cyan"
   priority: Priority
   day: number
+  daySpanEnd?: number
   startHour: number
   duration: number
   canEdit: boolean
@@ -155,11 +156,15 @@ function mapScheduleEventsToCalendarEvents(
 
     if (event.allDay) {
       const days = getDayIndicesInRange(start, end, displayDates)
-      return days.map((day) => ({
-        ...base,
-        id: days.length > 1 ? `${event.id}::${day}` : event.id,
-        day,
-      }))
+      if (days.length === 0) return []
+      return [
+        {
+          ...base,
+          id: event.id,
+          day: days[0],
+          daySpanEnd: days[days.length - 1],
+        },
+      ]
     }
 
     const day = displayDates.findIndex((date) => isSameCalendarDay(date, start))
@@ -270,11 +275,15 @@ function mapTasksToCalendarEvents(
 
     if (task.allDay) {
       const days = getDayIndicesInRange(anchorStart, endDate, displayDates)
-      return days.map((day) => ({
-        ...base,
-        id: days.length > 1 ? `task-${task.id}::${day}` : `task-${task.id}`,
-        day,
-      }))
+      if (days.length === 0) return []
+      return [
+        {
+          ...base,
+          id: `task-${task.id}`,
+          day: days[0],
+          daySpanEnd: days[days.length - 1],
+        },
+      ]
     }
 
     const day = displayDates.findIndex((date) => isSameCalendarDay(date, anchorStart))
@@ -348,6 +357,31 @@ function getTimedEventBounds(event: CalendarEvent) {
   const end = start + Math.max(event.duration * 60, 1)
 
   return { start, end }
+}
+
+function assignAllDayLanes(events: CalendarEvent[]): Map<string, number> {
+  const sorted = [...events].sort((a, b) => {
+    if (a.day !== b.day) return a.day - b.day
+    const aEnd = a.daySpanEnd ?? a.day
+    const bEnd = b.daySpanEnd ?? b.day
+    if (aEnd !== bEnd) return bEnd - aEnd
+    return a.title.localeCompare(b.title)
+  })
+  const lanesEnd: number[] = []
+  const result = new Map<string, number>()
+  for (const event of sorted) {
+    const start = event.day
+    const end = event.daySpanEnd ?? event.day
+    let lane = lanesEnd.findIndex((prevEnd) => prevEnd < start)
+    if (lane === -1) {
+      lane = lanesEnd.length
+      lanesEnd.push(end)
+    } else {
+      lanesEnd[lane] = end
+    }
+    result.set(event.id, lane)
+  }
+  return result
 }
 
 function buildTimedEventLayoutMap(events: CalendarEvent[]) {
@@ -670,6 +704,17 @@ export function ScheduleView({
   )
   const timedEvents = useMemo(() => events.filter((event) => !event.allDay), [events])
   const timedEventLayouts = useMemo(() => buildTimedEventLayoutMap(timedEvents), [timedEvents])
+  const allDayLanes = useMemo(
+    () => assignAllDayLanes([...taskReminderEvents, ...regularAllDayEvents]),
+    [regularAllDayEvents, taskReminderEvents],
+  )
+  const allDayLaneCount = useMemo(() => {
+    let max = 0
+    for (const lane of allDayLanes.values()) {
+      if (lane + 1 > max) max = lane + 1
+    }
+    return max
+  }, [allDayLanes])
   const hasVisibleEvents = events.length > 0
 
   useEffect(() => {
@@ -1108,44 +1153,69 @@ export function ScheduleView({
             <div className="num flex min-h-9 items-start justify-end px-2 py-1.5 text-[11px] font-medium uppercase text-muted-foreground">
               All
             </div>
-            {displayDates.map((_, dayIndex) => {
-              const dayReminderEvents = taskReminderEvents.filter((event) => event.day === dayIndex)
-              const dayAllDayEvents = regularAllDayEvents.filter((event) => event.day === dayIndex)
-
-              return (
-                <div
-                  key={`all-day-${dayIndex}`}
-                  className="min-h-9 border-l border-rule px-1 py-1"
-                >
-                  <div className="space-y-0.5">
-                    {dayReminderEvents.map((event) => (
-                      <button
-                        type="button"
-                        key={event.id}
-                        onClick={() => setSelectedTaskReminder(event)}
-                        className="num flex w-full items-center gap-1 rounded-sm bg-copper-soft px-1.5 py-0.5 text-left text-[10px] uppercase text-foreground hover:bg-copper-soft hover:brightness-110"
-                      >
-                        <span className="copper">●</span>
-                        <span className="truncate">{event.title}</span>
-                      </button>
-                    ))}
-                    {dayAllDayEvents.map((event) => (
-                      <Fragment key={event.id}>
-                        {renderEventContextMenu(
-                          event,
-                          <div
-                            className="overflow-hidden rounded-sm px-1.5 py-0.5 text-[10px] font-medium leading-tight"
-                            style={getAllDayPillStyle(event)}
-                          >
-                            <p className="truncate">{event.title}</p>
-                          </div>,
-                        )}
-                      </Fragment>
-                    ))}
-                  </div>
-                </div>
-              )
-            })}
+            <div
+              className="relative col-span-full"
+              style={{ gridColumnStart: 2, gridColumnEnd: displayDates.length + 2 }}
+            >
+              <div
+                className="absolute inset-0 grid"
+                style={{ gridTemplateColumns: `repeat(${displayDates.length}, minmax(0, 1fr))` }}
+              >
+                {displayDates.map((_, i) => (
+                  <div key={`all-day-bg-${i}`} className="border-l border-rule" />
+                ))}
+              </div>
+              <div
+                className="relative grid px-0 py-1"
+                style={{
+                  gridTemplateColumns: `repeat(${displayDates.length}, minmax(0, 1fr))`,
+                  gridAutoRows: "20px",
+                  rowGap: 2,
+                  minHeight: `${Math.max(allDayLaneCount, 1) * 22 + 8}px`,
+                }}
+              >
+                {taskReminderEvents.map((event) => {
+                  const lane = allDayLanes.get(event.id) ?? 0
+                  return (
+                    <button
+                      type="button"
+                      key={event.id}
+                      onClick={() => setSelectedTaskReminder(event)}
+                      style={{
+                        gridColumnStart: event.day + 1,
+                        gridColumnEnd: (event.daySpanEnd ?? event.day) + 2,
+                        gridRowStart: lane + 1,
+                      }}
+                      className="num mx-1 flex items-center gap-1 overflow-hidden rounded-sm bg-copper-soft px-1.5 py-0.5 text-left text-[10px] uppercase text-foreground hover:bg-copper-soft hover:brightness-110"
+                    >
+                      <span className="copper shrink-0">●</span>
+                      <span className="truncate">{event.title}</span>
+                    </button>
+                  )
+                })}
+                {regularAllDayEvents.map((event) => {
+                  const lane = allDayLanes.get(event.id) ?? 0
+                  return (
+                    <Fragment key={event.id}>
+                      {renderEventContextMenu(
+                        event,
+                        <div
+                          style={{
+                            gridColumnStart: event.day + 1,
+                            gridColumnEnd: (event.daySpanEnd ?? event.day) + 2,
+                            gridRowStart: lane + 1,
+                            ...getAllDayPillStyle(event),
+                          }}
+                          className="mx-1 overflow-hidden rounded-sm px-1.5 py-0.5 text-[10px] font-medium leading-tight"
+                        >
+                          <p className="truncate">{event.title}</p>
+                        </div>,
+                      )}
+                    </Fragment>
+                  )
+                })}
+              </div>
+            </div>
           </div>
 
           {/* Time grid */}

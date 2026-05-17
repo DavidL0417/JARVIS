@@ -10,9 +10,9 @@ export const checkInEnergySchema = z.enum(["low", "medium", "high"])
 export const syncOriginSchema = z.enum(["local", "gcal"])
 export const calendarSourceSchema = z.enum(["local", "google", "imported", "task"])
 export const calendarSyncPreferenceSchema = z.enum(["active", "pending", "ignored"])
-export const integrationProviderSchema = z.enum(["google", "notion"])
+export const integrationProviderSchema = z.enum(["google", "notion", "canvas"])
 export const userIntegrationStatusSchema = z.enum(["connected", "needs_reauth", "disconnected", "error"])
-export const sourceConnectorIdSchema = z.enum(["notion", "gmail"])
+export const sourceConnectorIdSchema = z.enum(["google_calendar", "notion", "gmail", "canvas"])
 export const sourceConnectorStatusSchema = z.enum(["ready", "connected", "auth_needed", "missing_config", "failed"])
 export const memoryLayerSchema = z.enum([
   "operating_rules",
@@ -35,7 +35,7 @@ export const memoryKindSchema = z.enum([
 ])
 export const memoryImportanceSchema = z.enum(["low", "medium", "high", "critical"])
 export const memoryStatusSchema = z.enum(["active", "candidate", "stale", "superseded", "archived"])
-export const sourceKindSchema = z.enum(["notion", "gmail", "caldav", "google_calendar", "manual", "system"])
+export const sourceKindSchema = z.enum(["notion", "gmail", "caldav", "google_calendar", "manual", "system", "canvas"])
 export const sourceFreshnessSchema = z.enum(["fresh", "partial", "stale", "failed"])
 export const sourceFileStatusSchema = z.enum(["uploading", "ready", "processing", "processed", "failed"])
 export const sourceCandidateKindSchema = z.enum(["task", "deadline", "event", "routine", "preference", "note"])
@@ -202,6 +202,7 @@ export const sourceCandidateSchema = z.object({
   priority: prioritySchema,
   confidence: z.number().min(0).max(1).nullable(),
   evidence: z.string().min(1).nullable(),
+  payload: z.record(z.unknown()),
   status: sourceCandidateStatusSchema,
   approvedTaskId: z.string().uuid().nullable(),
   createdAt: z.string().datetime({ offset: true }),

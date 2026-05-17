@@ -48,6 +48,7 @@ import type {
 
 type ActionStatus = "idle" | "busy" | "error"
 type SourcePanelId =
+  | "google_calendar"
   | "gmail"
   | "notion"
   | "canvas"
@@ -75,6 +76,13 @@ type ConnectorDefinition = {
 }
 
 const CONNECTOR_DEFINITIONS: ConnectorDefinition[] = [
+  {
+    id: "google_calendar",
+    title: "Google Calendar",
+    group: "configured",
+    icon: CalendarDays,
+    summary: "Mirror calendar commitments for planning constraints, conflicts, and task-block sync.",
+  },
   {
     id: "gmail",
     title: "Gmail",
@@ -194,7 +202,9 @@ function getConnector(connectors: SourceConnector[], id: SourceConnectorId): Sou
         ? "Authorize a Notion workspace before importing scheduling context."
         : id === "canvas"
           ? "Connect Canvas with a base URL and personal access token."
-        : "Authorize Google with Gmail read-only access before scanning mail context.",
+          : id === "google_calendar"
+            ? "Authorize Google Calendar read access before planning from current commitments."
+            : "Authorize Google with Gmail read-only access before scanning mail context.",
   }
 }
 
@@ -378,6 +388,18 @@ function InlineError({ message }: { message: string }) {
   )
 }
 
+function DetailNote({ message }: { message: string }) {
+  if (!message) {
+    return null
+  }
+
+  return (
+    <div className="rounded-sm border border-rule bg-secondary/15 px-3 py-2 text-[12px] leading-5 text-muted-foreground [overflow-wrap:anywhere]">
+      {message}
+    </div>
+  )
+}
+
 function DetailHeader({
   connector,
   state,
@@ -462,10 +484,12 @@ export function SourceSetupPanel({
   onSourcesChanged: () => Promise<void>
 }) {
   const notionConnector = getConnector(sourceConnectors, "notion")
+  const googleCalendarConnector = getConnector(sourceConnectors, "google_calendar")
   const gmailConnector = getConnector(sourceConnectors, "gmail")
   const canvasConnector = getConnector(sourceConnectors, "canvas")
+  const googleCalendarConfigMissing = googleCalendarConnector.status === "missing_config"
   const gmailConfigMissing = gmailConnector.status === "missing_config"
-  const [selectedId, setSelectedId] = useState<SourcePanelId>("gmail")
+  const [selectedId, setSelectedId] = useState<SourcePanelId>("google_calendar")
   const [pasteText, setPasteText] = useState("")
   const [notionDatabaseInput, setNotionDatabaseInput] = useState(notionConnector.selectedSourceId ?? "")
   const [canvasBaseUrlInput, setCanvasBaseUrlInput] = useState(canvasConnector.selectedSourceId ?? "")
@@ -504,24 +528,44 @@ export function SourceSetupPanel({
       return "developing"
     }
 
-    if (connector.id === "gmail" && failedSourcesByKind.gmail?.length) {
-      return "refresh_issue"
-    }
+    if (connector.id === "google_calendar") {
+      if (
+        (googleCalendarConnector.status === "ready" || googleCalendarConnector.status === "connected") &&
+        failedSourcesByKind.google_calendar?.length
+      ) {
+        return "refresh_issue"
+      }
 
-    if (connector.id === "notion" && failedSourcesByKind.notion?.length) {
-      return "refresh_issue"
-    }
-
-    if (connector.id === "canvas" && failedSourcesByKind.canvas?.length) {
-      return "refresh_issue"
+      return googleCalendarConnector.status
     }
 
     if (connector.id === "gmail") {
+      if (
+        (gmailConnector.status === "ready" || gmailConnector.status === "connected") &&
+        failedSourcesByKind.gmail?.length
+      ) {
+        return "refresh_issue"
+      }
+
       return gmailConnector.status
     }
 
     if (connector.id === "canvas") {
+      if (
+        (canvasConnector.status === "ready" || canvasConnector.status === "connected") &&
+        failedSourcesByKind.canvas?.length
+      ) {
+        return "refresh_issue"
+      }
+
       return canvasConnector.status
+    }
+
+    if (
+      (notionConnector.status === "ready" || notionConnector.status === "connected") &&
+      failedSourcesByKind.notion?.length
+    ) {
+      return "refresh_issue"
     }
 
     return notionConnector.status
@@ -674,6 +718,19 @@ export function SourceSetupPanel({
     })
   }
 
+  async function handleGoogleCalendarSync() {
+    await runAction(async () => {
+      const response = await fetch("/api/google-calendar/events", {
+        method: "POST",
+      })
+      const payload = (await response.json().catch(() => null)) as ActionPayload | null
+
+      if (!response.ok || !payload) {
+        throw new Error(getPayloadMessage(payload, "Google Calendar refresh failed."))
+      }
+    })
+  }
+
   async function handleGmailScan() {
     await runAction(async () => {
       const response = await fetch("/api/gmail/sync", {
@@ -775,15 +832,54 @@ export function SourceSetupPanel({
       )
     }
 
+    if (selectedConnector.id === "google_calendar") {
+      return (
+        <div className="flex min-w-0 flex-col gap-5">
+          <DetailHeader connector={selectedConnector} state={state} />
+          <FailedSourceAlert sources={failedSourcesByKind.google_calendar ?? []} />
+          <DetailNote message={googleCalendarConnector.detail} />
+          <div className="flex flex-wrap gap-2">
+            <ActionButton
+              icon={googleCalendarConnector.canRun ? RefreshCw : CalendarDays}
+              label={
+                googleCalendarConnector.canRun
+                  ? "Refresh Calendar"
+                  : googleCalendarConnector.account
+                    ? "Reconnect Google"
+                    : "Authorize Google"
+              }
+              onClick={googleCalendarConnector.canRun ? handleGoogleCalendarSync : handleGoogleAuthorize}
+              disabled={busy || googleCalendarConfigMissing}
+            />
+          </div>
+          <div className="flex flex-col">
+            <InfoLine label="Account" value={googleCalendarConnector.account} />
+            <InfoLine label="Status" value={connectorStatusLabel(state)} />
+            <InfoLine
+              label="Calendar"
+              value={googleCalendarConnector.selectedSourceId ?? (googleCalendarConnector.canRun ? "primary" : null)}
+            />
+          </div>
+        </div>
+      )
+    }
+
     if (selectedConnector.id === "gmail") {
       return (
         <div className="flex min-w-0 flex-col gap-5">
           <DetailHeader connector={selectedConnector} state={state} />
           <FailedSourceAlert sources={failedSourcesByKind.gmail ?? []} />
+          <DetailNote message={gmailConnector.detail} />
           <div className="flex flex-wrap gap-2">
             <ActionButton
               icon={gmailConnector.canRun ? RefreshCw : Mail}
-              label={gmailConnector.canRun ? "Scan Gmail" : "Authorize Gmail"}
+              label={
+                gmailConnector.canRun
+                  ? "Scan Gmail"
+                  : gmailConnector.account
+                    ? "Reconnect Google"
+                    : "Authorize Gmail"
+              }
               onClick={gmailConnector.canRun ? handleGmailScan : handleGoogleAuthorize}
               disabled={busy || gmailConfigMissing}
             />

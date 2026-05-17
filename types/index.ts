@@ -5,9 +5,9 @@ export type ScheduleEventSource = "task" | "calendar" | "focus"
 export type CheckInMood = "good" | "okay" | "stuck"
 export type CheckInOutcome = "completed" | "missed" | "partial"
 export type CheckInEnergy = "low" | "medium" | "high"
-export type IntegrationProvider = "google" | "notion"
+export type IntegrationProvider = "google" | "notion" | "canvas"
 export type UserIntegrationStatus = "connected" | "needs_reauth" | "disconnected" | "error"
-export type SourceConnectorId = "notion" | "gmail"
+export type SourceConnectorId = "google_calendar" | "notion" | "gmail" | "canvas"
 export type SourceConnectorStatus = "ready" | "connected" | "auth_needed" | "missing_config" | "failed"
 export type SyncOrigin = "local" | "gcal"
 export type CalendarSource = "local" | "google" | "imported" | "task"
@@ -25,7 +25,7 @@ export type MemoryLayer =
   | "candidate_memories"
 export type MemoryImportance = "low" | "medium" | "high" | "critical"
 export type MemoryStatus = "active" | "candidate" | "stale" | "superseded" | "archived"
-export type SourceKind = "notion" | "gmail" | "caldav" | "google_calendar" | "manual" | "system"
+export type SourceKind = "notion" | "gmail" | "caldav" | "google_calendar" | "manual" | "system" | "canvas"
 export type SourceFreshness = "fresh" | "partial" | "stale" | "failed"
 export type SourceFileStatus = "uploading" | "ready" | "processing" | "processed" | "failed"
 export type SourceCandidateKind = "task" | "deadline" | "event" | "routine" | "preference" | "note"
@@ -476,6 +476,7 @@ export interface SourceCandidate {
   priority: Priority
   confidence: number | null
   evidence: string | null
+  payload: Record<string, unknown>
   status: SourceCandidateStatus
   approvedTaskId: string | null
   createdAt: string
@@ -699,6 +700,12 @@ export interface UpdateTaskRequest {
 export interface TaskMutationResponse {
   success: true
   task: Task
+  externalWrite?: {
+    source: "canvas"
+    status: "completed" | "failed" | "skipped"
+    summary: string
+    error?: string | null
+  } | null
 }
 
 export interface DeleteTaskResponse {

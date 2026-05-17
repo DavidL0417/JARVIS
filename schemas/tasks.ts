@@ -48,6 +48,15 @@ export const updateTaskRequestSchema = z
 export const taskMutationResponseSchema = z.object({
   success: z.literal(true),
   task: taskSchema,
+  externalWrite: z
+    .object({
+      source: z.literal("canvas"),
+      status: z.enum(["completed", "failed", "skipped"]),
+      summary: z.string().min(1),
+      error: z.string().min(1).nullable().optional(),
+    })
+    .nullable()
+    .optional(),
 })
 
 export const deleteTaskResponseSchema = z.object({

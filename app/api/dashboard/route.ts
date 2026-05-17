@@ -19,7 +19,7 @@ import {
   TASK_SELECT,
   USER_INTEGRATION_SELECT,
 } from "@/lib/data/mappers"
-import { GMAIL_READONLY_SCOPE, hasOAuthScope } from "@/lib/google-oauth"
+import { GMAIL_READONLY_SCOPE, GOOGLE_CALENDAR_READONLY_SCOPE, hasOAuthScope } from "@/lib/google-oauth"
 import { isExcludedScheduleEventTitle } from "@/lib/task-calendar-constants"
 import {
   isAuthenticationRequiredError,
@@ -188,6 +188,7 @@ function deriveSourceConnectors(input: {
   const googleIntegration = getIntegration(input.integrations, "google")
   const notionIntegration = getIntegration(input.integrations, "notion")
   const canvasPublicIntegration = getIntegration(input.integrations, "canvas")
+  const googleCalendarSource = getLatestSource(input.sources, "google_calendar")
   const gmailSource = getLatestSource(input.sources, "gmail")
   const notionSource = getLatestSource(input.sources, "notion")
   const canvasSource = getLatestSource(input.sources, "canvas")
@@ -247,6 +248,15 @@ function deriveSourceConnectors(input: {
 
   if (missingGoogleEnv.length > 0) {
     sourceConnectors.push({
+      id: "google_calendar",
+      status: "missing_config",
+      account: googleAccount,
+      canRun: false,
+      detail: `Google OAuth is not configured for this app. Add ${missingGoogleEnv.join(" and ")} on the server before users can authorize Calendar.`,
+      selectedSourceId: googleIntegration?.selectedCalendarId ?? null,
+      selectedSourceName: null,
+    })
+    sourceConnectors.push({
       id: "gmail",
       status: "missing_config",
       account: googleAccount,
@@ -256,6 +266,15 @@ function deriveSourceConnectors(input: {
       selectedSourceName: null,
     })
   } else if (!googleIntegration || googleIntegration.status === "disconnected") {
+    sourceConnectors.push({
+      id: "google_calendar",
+      status: "auth_needed",
+      account: googleAccount,
+      canRun: false,
+      detail: "Authorize Google Calendar read access before planning from current commitments.",
+      selectedSourceId: googleIntegration?.selectedCalendarId ?? null,
+      selectedSourceName: null,
+    })
     sourceConnectors.push({
       id: "gmail",
       status: "auth_needed",
@@ -267,6 +286,15 @@ function deriveSourceConnectors(input: {
     })
   } else if (googleIntegration.status === "error") {
     sourceConnectors.push({
+      id: "google_calendar",
+      status: "failed",
+      account: googleAccount,
+      canRun: false,
+      detail: googleCalendarSource?.summary || "Google Calendar authorization failed. Reconnect Google before refreshing calendar context.",
+      selectedSourceId: googleIntegration.selectedCalendarId,
+      selectedSourceName: null,
+    })
+    sourceConnectors.push({
       id: "gmail",
       status: "failed",
       account: googleAccount,
@@ -277,6 +305,15 @@ function deriveSourceConnectors(input: {
     })
   } else if (googleIntegration.status === "needs_reauth" || !hasRunnableGoogleToken(input.googleIntegration)) {
     sourceConnectors.push({
+      id: "google_calendar",
+      status: "auth_needed",
+      account: googleAccount,
+      canRun: false,
+      detail: `${googleAccount ? `${googleAccount}. ` : ""}Reconnect Google; the connected row exists, but the private OAuth token is missing or expired.`,
+      selectedSourceId: googleIntegration.selectedCalendarId,
+      selectedSourceName: null,
+    })
+    sourceConnectors.push({
       id: "gmail",
       status: "auth_needed",
       account: googleAccount,
@@ -285,7 +322,44 @@ function deriveSourceConnectors(input: {
       selectedSourceId: null,
       selectedSourceName: null,
     })
+  } else if (!hasOAuthScope(input.googleIntegration?.scope, GOOGLE_CALENDAR_READONLY_SCOPE)) {
+    const gmailScopeReady = hasOAuthScope(input.googleIntegration?.scope, GMAIL_READONLY_SCOPE)
+    const gmailRefreshFailed = gmailScopeReady && gmailSource?.freshness === "failed"
+
+    sourceConnectors.push({
+      id: "google_calendar",
+      status: "auth_needed",
+      account: googleAccount,
+      canRun: false,
+      detail: `${googleAccount ? `${googleAccount}. ` : ""}Reconnect Google once so JARVIS can confirm Calendar read access.`,
+      selectedSourceId: googleIntegration.selectedCalendarId,
+      selectedSourceName: null,
+    })
+    sourceConnectors.push({
+      id: "gmail",
+      status: gmailRefreshFailed ? "failed" : gmailScopeReady ? "ready" : "auth_needed",
+      account: googleAccount,
+      canRun: gmailScopeReady,
+      detail: gmailRefreshFailed
+        ? gmailSource.summary
+        : gmailScopeReady
+          ? `${googleAccount ? `${googleAccount}. ` : ""}Ready to scan recent mail for planning context, small actions, logistics, and deadlines.`
+          : `${googleAccount ? `${googleAccount}. ` : ""}Reconnect Google once so JARVIS can confirm Gmail read-only scope.`,
+      selectedSourceId: null,
+      selectedSourceName: null,
+    })
   } else if (!hasOAuthScope(input.googleIntegration?.scope, GMAIL_READONLY_SCOPE)) {
+    sourceConnectors.push({
+      id: "google_calendar",
+      status: googleCalendarSource?.freshness === "failed" ? "failed" : "ready",
+      account: googleAccount,
+      canRun: true,
+      detail: googleCalendarSource?.freshness === "failed"
+        ? googleCalendarSource.summary
+        : `${googleAccount ? `${googleAccount}. ` : ""}Ready to refresh mirrored Google Calendar events for planning.`,
+      selectedSourceId: googleIntegration.selectedCalendarId,
+      selectedSourceName: null,
+    })
     sourceConnectors.push({
       id: "gmail",
       status: "auth_needed",
@@ -295,26 +369,40 @@ function deriveSourceConnectors(input: {
       selectedSourceId: null,
       selectedSourceName: null,
     })
-  } else if (gmailSource?.freshness === "failed") {
-    sourceConnectors.push({
-      id: "gmail",
-      status: "failed",
-      account: googleAccount,
-      canRun: true,
-      detail: gmailSource.summary,
-      selectedSourceId: null,
-      selectedSourceName: null,
-    })
   } else {
     sourceConnectors.push({
-      id: "gmail",
-      status: "ready",
+      id: "google_calendar",
+      status: googleCalendarSource?.freshness === "failed" ? "failed" : "ready",
       account: googleAccount,
       canRun: true,
-      detail: `${googleAccount ? `${googleAccount}. ` : ""}Ready to scan recent mail for planning context, small actions, logistics, and deadlines.`,
-      selectedSourceId: null,
+      detail: googleCalendarSource?.freshness === "failed"
+        ? googleCalendarSource.summary
+        : `${googleAccount ? `${googleAccount}. ` : ""}Ready to refresh mirrored Google Calendar events for planning.`,
+      selectedSourceId: googleIntegration.selectedCalendarId,
       selectedSourceName: null,
     })
+
+    if (gmailSource?.freshness === "failed") {
+      sourceConnectors.push({
+        id: "gmail",
+        status: "failed",
+        account: googleAccount,
+        canRun: true,
+        detail: gmailSource.summary,
+        selectedSourceId: null,
+        selectedSourceName: null,
+      })
+    } else {
+      sourceConnectors.push({
+        id: "gmail",
+        status: "ready",
+        account: googleAccount,
+        canRun: true,
+        detail: `${googleAccount ? `${googleAccount}. ` : ""}Ready to scan recent mail for planning context, small actions, logistics, and deadlines.`,
+        selectedSourceId: null,
+        selectedSourceName: null,
+      })
+    }
   }
 
   if (input.canvasIntegration?.status === "connected" && input.canvasIntegration.base_url && input.canvasIntegration.access_token) {

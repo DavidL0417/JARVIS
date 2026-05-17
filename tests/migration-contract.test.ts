@@ -26,6 +26,10 @@ const universalAssistantMigration = readFileSync(
   "supabase/migrations/20260514183328_universal_assistant_orchestrator.sql",
   "utf8",
 )
+const canvasAccessTokenMigration = readFileSync(
+  "supabase/migrations/20260516032701_canvas_access_token_integration.sql",
+  "utf8",
+)
 
 describe("production Supabase migration", () => {
   it("keeps OAuth tokens outside public tables", () => {
@@ -122,5 +126,13 @@ describe("production Supabase migration", () => {
     expect(universalAssistantMigration).toContain("add column if not exists error_message text")
     expect(universalAssistantMigration).toContain("'cancelled'")
     expect(universalAssistantMigration).toContain("Pending approvals store the executable action plan")
+  })
+
+  it("allows Canvas as a private token-backed source without exposing tokens", () => {
+    expect(canvasAccessTokenMigration).toContain("check (provider in ('google', 'notion', 'canvas'))")
+    expect(canvasAccessTokenMigration).toContain("'manual', 'system', 'canvas'")
+    expect(canvasAccessTokenMigration).toContain("token_provider in ('google', 'notion', 'canvas')")
+    expect(canvasAccessTokenMigration).toContain("revoke all on function public.get_integration_token(uuid, text) from public, anon, authenticated;")
+    expect(canvasAccessTokenMigration).not.toContain("disable row level security")
   })
 })

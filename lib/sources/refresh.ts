@@ -1,8 +1,10 @@
 import { GMAIL_READONLY_SCOPE, GOOGLE_CALENDAR_READONLY_SCOPE, hasOAuthScope } from "@/lib/google-oauth"
 import { syncGoogleCalendarEventsForUser } from "@/lib/google-calendar-events"
+import { refreshCanvasForUser } from "@/lib/sources/canvas-refresh"
 import { GMAIL_CONTEXT_SEARCH_QUERY, refreshGmailForUser } from "@/lib/sources/gmail-refresh"
 import { refreshNotionForUser } from "@/lib/sources/notion-refresh"
 import { insertSourceSnapshot } from "@/lib/sources/persistence"
+import { getStoredCanvasIntegration } from "@/lib/supabase/canvas-integration"
 import { getStoredGoogleIntegration } from "@/lib/supabase/google-calendar-integration"
 import { createSupabaseAdminClient } from "@/lib/supabase/server"
 import type { requireAuthenticatedUser } from "@/lib/supabase/auth"
@@ -50,6 +52,7 @@ function stripErrorPrefix(message: string) {
     .replace("NOTION_REAUTH_REQUIRED:", "")
     .replace("NOTION_DATABASE_NOT_SELECTED:", "")
     .replace("NOTION_DATABASE_NOT_FOUND:", "")
+    .replace("CANVAS_REAUTH_REQUIRED:", "")
     .trim()
 }
 
@@ -106,6 +109,7 @@ export async function refreshSourcesForUser(input: {
   const items: SourceRefreshItem[] = []
 
   const googleIntegration = await getStoredGoogleIntegration(input.userId)
+  const canvasIntegration = await getStoredCanvasIntegration(input.userId)
 
   if (googleIntegration?.status === "connected" && hasOAuthScope(googleIntegration.scope, GOOGLE_CALENDAR_READONLY_SCOPE)) {
     const result = await syncGoogleCalendarEventsForUser(input.userId)
@@ -210,6 +214,45 @@ export async function refreshSourcesForUser(input: {
       source: "notion",
       status: "skipped",
       summary: "Notion is not connected to an authoritative task database.",
+      runnable: false,
+    })
+  }
+
+  if (canvasIntegration?.status === "connected" && canvasIntegration.base_url && canvasIntegration.access_token) {
+    try {
+      const result = await refreshCanvasForUser(input.userId)
+      items.push({
+        source: "canvas",
+        status: "fresh",
+        summary: result.sourceSnapshot.summary,
+        runnable: true,
+      })
+    } catch (error) {
+      const rawMessage = error instanceof Error ? error.message : "Canvas refresh failed."
+      const message = stripErrorPrefix(rawMessage)
+      await recordRefreshFailure({
+        adminClient,
+        userId: input.userId,
+        source: "canvas",
+        sourceRef: canvasIntegration.base_url,
+        summary: message,
+        reason: rawMessage.startsWith("CANVAS_REAUTH_REQUIRED:")
+          ? "reauthorization_required"
+          : "refresh_failed",
+      })
+      items.push({
+        source: "canvas",
+        status: "failed",
+        summary: message,
+        runnable: true,
+        error: message,
+      })
+    }
+  } else {
+    items.push({
+      source: "canvas",
+      status: "skipped",
+      summary: "Canvas is not connected with a base URL and access token.",
       runnable: false,
     })
   }

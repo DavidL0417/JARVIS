@@ -367,11 +367,14 @@ export default function DashboardPage() {
     setTaskErrorMessage("")
 
     try {
-      await fetchJson<TaskMutationResponse>(`/api/tasks/${taskId}`, "Failed to update task.", {
+      const result = await fetchJson<TaskMutationResponse>(`/api/tasks/${taskId}`, "Failed to update task.", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(input),
       })
+      if (result.externalWrite?.status === "failed") {
+        setTaskErrorMessage(result.externalWrite.error || result.externalWrite.summary)
+      }
       await loadDashboard(true)
     } catch (error) {
       setTaskErrorMessage(error instanceof Error ? error.message : "Failed to update task.")

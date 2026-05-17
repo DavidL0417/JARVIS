@@ -14,6 +14,7 @@
 - OAuth tokens and provider secrets belong in `app_private`, not public tables.
 - Backend token reads and writes go through service-role-only RPC wrappers so `app_private` does not need to be exposed as a Supabase API schema.
 - Public integration rows may expose connection metadata only: provider, account email, status, selected calendar, and sync timestamps.
+- Canvas personal access tokens are a pilot-only integration secret. Store them only in `app_private.integration_tokens`; public integration rows may store the Canvas base URL/host and account metadata for readiness display.
 
 ## Production V1 Tables
 
@@ -39,6 +40,7 @@
 - Gmail scans are context refreshes first and task extraction second. Source snapshots should preserve a planning digest even when no candidate needs approval.
 - Gmail authorization and Gmail API availability are separate readiness checks. If the Cloud project has not enabled `gmail.googleapis.com`, record a failed Gmail source snapshot and do not treat it as a user reauthorization problem.
 - Notion source intake uses a public OAuth connection, stores tokens in `app_private.integration_tokens`, and requires a user-selected authoritative tasks database on the integration row before importing. Imports query that database directly instead of broad workspace search.
+- Canvas source intake uses a user-generated access token for the one-client pilot. It imports bounded planner items into auto-approved source candidates and linked tasks using Canvas plannable IDs for dedupe. Completing a Canvas-backed task may only write a planner override with `marked_complete`; it must not submit coursework, alter grades, upload files, or post comments.
 - `daily_plans` records the current command-deck plan: horizon, summary, now item, next items, risk items, source coverage, tradeoffs, model, and command.
 - Planner-created task blocks may reference `daily_plans.id` through `tasks.plan_id` and `schedule_events.plan_id`.
 - Daily planning performs a forced pre-plan refresh for every connected/runnable source. Missing or never-configured sources are coverage gaps; connected/runnable source failures are hard planning failures.

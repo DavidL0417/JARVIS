@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { z } from "zod"
 
 import { mapTaskRowToTask, mapTaskToUpdate, TASK_SELECT } from "@/lib/data/mappers"
+import { markCanvasTaskComplete } from "@/lib/sources/canvas-completion"
 import {
   isAuthenticationRequiredError,
   requireAuthenticatedUser,
@@ -79,9 +80,19 @@ export async function PATCH(
       return NextResponse.json({ error: "Task not found." }, { status: 404 })
     }
 
+    const externalWrite =
+      parsedBody.data.status === "completed"
+        ? await markCanvasTaskComplete({
+            adminClient,
+            userId: user.id,
+            task: data,
+          })
+        : null
+
     const responsePayload: TaskMutationResponse = {
       success: true,
       task: mapTaskRowToTask(data),
+      externalWrite,
     }
 
     const parsedResponse = taskMutationResponseSchema.safeParse(responsePayload)

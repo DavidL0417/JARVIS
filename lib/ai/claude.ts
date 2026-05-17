@@ -34,6 +34,7 @@ const MASTER_SCHEDULING_PROMPT = [
   "Do not place tasks past a deadline or overlapping another event.",
   "Use the rendered memory summary to account for user-specific preferences, habits, and friction points.",
   "If a natural-language scheduling command is supplied, treat it as a first-class planning constraint unless it conflicts with hard events, deadlines, or explicit memory rules.",
+  "Treat blockedIntervals as hard constraints. Never place a task over any blocked interval.",
   `All planner-created task events must use calendarId "${DEFAULT_TASKS_CALENDAR_ID}".`,
   "Scheduling outside the preferred availability windows is allowed when needed. If you do that, mention the tradeoff in the summary.",
   "Prefer earlier placement for urgent tasks, align heavier work with stronger energy windows when possible, and leave tasks unscheduled if there is no valid slot.",
@@ -168,9 +169,21 @@ export async function generateSchedule(
   }
 
   const plan = await requestClaudeSchedule(client, planningContext, model)
-  const plannedEvents = materializeTaskPlacements(plan, planningContext)
+  const schedule = buildScheduleResultFromPlan(plan, planningContext)
+
+  return schedulePlanResultSchema.parse(schedule)
+}
+
+function buildScheduleResultFromPlan(
+  plan: PlannerToolInput,
+  planningContext: PlanningContext,
+): SchedulePlanResult {
+  const { plannedEvents, rejectedPlacements } = materializeValidTaskPlacements(plan, planningContext)
   const proposedEvents = sortEventsByStart([...planningContext.fixedTaskEvents, ...plannedEvents])
   const unscheduledTaskIds = deriveUnscheduledTaskIds(plan, planningContext, plannedEvents)
+  const rejectionNotes = rejectedPlacements.map((rejection) =>
+    `Planner left ${rejection.title} unscheduled because ${rejection.reason}`,
+  )
 
   validateGeneratedEvents(plannedEvents, planningContext)
 
@@ -178,9 +191,24 @@ export async function generateSchedule(
     plannerStatus: "ready",
     proposedEvents,
     unscheduledTaskIds,
-    summary: plan.summary,
-    tradeoffNotes: plan.tradeoffNotes,
+    summary: appendRejectedPlacementSummary(plan.summary, rejectedPlacements.length),
+    tradeoffNotes: [...plan.tradeoffNotes, ...rejectionNotes],
   })
+}
+
+export function buildScheduleResultFromPlannerPlanForTest(
+  input: SchedulePreparationContext,
+  plan: PlannerToolInput,
+) {
+  const planningContext = buildPlanningContext(input)
+  planningContext.memoryMarkdown =
+    input.layeredContextMarkdown?.trim() ||
+    buildMemorySummaryMarkdown({
+      preferences: planningContext.preferences,
+      memoryEntries: input.memoryEntries ?? [],
+    })
+
+  return buildScheduleResultFromPlan(plan, planningContext)
 }
 
 export function buildSchedulePromptPayloadForTest(input: SchedulePreparationContext) {
@@ -461,6 +489,11 @@ function buildPromptPayload(context: PlanningContext) {
       end: event.end,
       calendarId: event.calendarId,
     })),
+    blockedIntervals: context.occupiedIntervals.map((interval) => ({
+      start: new Date(interval.startMs).toISOString(),
+      end: new Date(interval.endMs).toISOString(),
+      label: interval.label,
+    })),
     availabilityWindows: context.availabilityWindows,
     tasks: context.schedulableTasks.map((task) => ({
       id: task.id,
@@ -478,30 +511,55 @@ function buildPromptPayload(context: PlanningContext) {
   }
 }
 
-function materializeTaskPlacements(
+type PlacementRejection = {
+  taskId: string | null
+  title: string
+  reason: string
+}
+
+function materializeValidTaskPlacements(
   plan: PlannerToolInput,
   context: PlanningContext,
-): SchedulePlanResult["proposedEvents"] {
+): {
+  plannedEvents: SchedulePlanResult["proposedEvents"]
+  rejectedPlacements: PlacementRejection[]
+} {
   const seenTaskIds = new Set<string>()
+  const occupiedIntervals = [...context.occupiedIntervals]
+  const plannedEvents: SchedulePlanResult["proposedEvents"] = []
+  const rejectedPlacements: PlacementRejection[] = []
 
-  return plan.placements.map((placement) => {
+  for (const placement of plan.placements) {
     const task = context.taskMap.get(placement.taskId)
 
     if (!task) {
-      throw new Error(`Claude scheduled an unknown task id: ${placement.taskId}`)
+      rejectedPlacements.push({
+        taskId: placement.taskId,
+        title: placement.taskId,
+        reason: "that task id was not in the planning context.",
+      })
+      continue
     }
 
     if (context.fixedTaskIds.has(task.id)) {
-      throw new Error(`Claude attempted to reschedule immutable task ${task.id}.`)
+      rejectedPlacements.push({
+        taskId: task.id,
+        title: task.title,
+        reason: "it is already fixed in time.",
+      })
+      continue
     }
 
     if (seenTaskIds.has(task.id)) {
-      throw new Error(`Claude scheduled task ${task.id} more than once.`)
+      rejectedPlacements.push({
+        taskId: task.id,
+        title: task.title,
+        reason: "the planner returned more than one placement for it.",
+      })
+      continue
     }
 
-    seenTaskIds.add(task.id)
-
-    return {
+    const event = {
       id: crypto.randomUUID(),
       userId: context.userId,
       taskId: task.id,
@@ -521,7 +579,28 @@ function materializeTaskPlacements(
       calendarId: DEFAULT_TASKS_CALENDAR_ID,
       planId: null,
     }
-  })
+
+    const rejectionReason = getPlacementRejectionReason(event, task, context, occupiedIntervals)
+
+    if (rejectionReason) {
+      rejectedPlacements.push({
+        taskId: task.id,
+        title: task.title,
+        reason: rejectionReason,
+      })
+      continue
+    }
+
+    seenTaskIds.add(task.id)
+    plannedEvents.push(event)
+    occupiedIntervals.push({
+      startMs: new Date(event.start).getTime(),
+      endMs: new Date(event.end).getTime(),
+      label: `planned-task:${task.title}`,
+    })
+  }
+
+  return { plannedEvents, rejectedPlacements }
 }
 
 function deriveUnscheduledTaskIds(
@@ -597,6 +676,56 @@ function validateGeneratedEvents(
       label: `planned-task:${task.title}`,
     })
   }
+}
+
+function getPlacementRejectionReason(
+  event: SchedulePlanResult["proposedEvents"][number],
+  task: PlanningTask,
+  context: PlanningContext,
+  occupiedIntervals: Interval[],
+) {
+  const startMs = new Date(event.start).getTime()
+  const endMs = new Date(event.end).getTime()
+
+  if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) {
+    return "it had an invalid time range."
+  }
+
+  if (startMs < new Date(context.nowIso).getTime()) {
+    return "it was placed in the past."
+  }
+
+  if (!isEventInsidePlanningWindow(event.start, event.end, context.planningWindow)) {
+    return "it was outside the seven-day planning horizon."
+  }
+
+  if (task.deadline) {
+    const deadlineMs = new Date(task.deadline).getTime()
+    const nowMs = new Date(context.nowIso).getTime()
+    const isOverdue = deadlineMs < nowMs
+
+    if (!isOverdue && endMs > deadlineMs) {
+      return "it ended after the task deadline."
+    }
+  }
+
+  const overlap = occupiedIntervals.find(
+    (interval) => startMs < interval.endMs && endMs > interval.startMs,
+  )
+
+  if (overlap) {
+    return `it overlapped ${overlap.label}.`
+  }
+
+  return null
+}
+
+function appendRejectedPlacementSummary(summary: string, rejectedCount: number) {
+  if (rejectedCount === 0) {
+    return summary
+  }
+
+  return `${summary} JARVIS left ${rejectedCount} invalid planner placement${rejectedCount === 1 ? "" : "s"} unscheduled rather than breaking hard calendar constraints.`
 }
 
 function normalizePreferences(input: SchedulePreparationContext): PlanningPreferences {

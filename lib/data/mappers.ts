@@ -519,6 +519,7 @@ export function mapSourceCandidateRowToCandidate(row: SourceCandidateRow): Sourc
     priority: normalizePriority(row.priority),
     confidence: row.confidence,
     evidence: normalizeNullableText(row.evidence),
+    payload: row.payload ?? {},
     status: row.status,
     approvedTaskId: row.approved_task_id,
     createdAt: row.created_at,

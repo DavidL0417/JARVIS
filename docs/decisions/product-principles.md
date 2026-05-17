@@ -19,6 +19,7 @@ JARVIS is a secretary-second-brain scheduler. It should not merely place blocks 
 
 - Google Calendar is implemented as a DB mirror.
 - Notion and Gmail ingestion should create source snapshots and reviewable source candidates before changing the schedule.
+- Canvas is implemented as a personal-access-token pilot for a single client. Canvas planner items are trusted enough to auto-create/update local tasks, but token storage remains private and broad multi-user production should move to Canvas OAuth.
 - Uploaded syllabi/screenshots/text are first-class context sources: preserve the original file, extract candidate scheduling facts, then ask for approval.
 - The daily command deck should answer "what now, why, what next, what is at risk" from the latest plan rather than asking the user to maintain a planning system manually.
 - Default planning horizon is today plus the next seven days.
@@ -26,4 +27,6 @@ JARVIS is a secretary-second-brain scheduler. It should not merely place blocks 
 - CalDAV-style sources are modeled through source snapshots for future ingestion.
 - Source read failures must be surfaced clearly and must not be replaced with guessed content.
 - Connected/runnable source failures block pre-plan scheduling. Unconfigured sources are reported as missing coverage, not as failures.
-- Google Calendar task-block writes are the only supported external write in this pass, and they require explicit approve/cancel execution from the pending assistant tool run.
+- The Sources surface should show Google Calendar and Gmail as separate connector statuses even though they share the same Google OAuth token, so users can recover the exact source blocking planning.
+- Planner output is validated before persistence. Individual task placements that violate hard calendar constraints are left unscheduled with an explicit tradeoff/risk instead of causing the entire plan to fail.
+- Google Calendar task-block writes require explicit approve/cancel execution from the pending assistant tool run. Canvas writes are limited to direct user task completion syncing through planner overrides; no assignment submission, grading, file, or comment writes are supported.
