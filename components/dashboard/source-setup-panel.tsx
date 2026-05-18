@@ -5,9 +5,9 @@ import type { ReactNode } from "react"
 import {
   AlertTriangle,
   BookOpen,
+  Cable,
   CalendarDays,
   CheckCircle2,
-  Database,
   FileUp,
   Github,
   GraduationCap,
@@ -35,6 +35,12 @@ import {
   InputGroupInput,
   InputGroupTextarea,
 } from "@/components/ui/input-group"
+import { Switch } from "@/components/ui/switch"
+import {
+  APPLE_CALDAV_SERVER_URL,
+  getCalDavServerDisplayName,
+  isAppleCalDavServerUrl,
+} from "@/lib/caldav/constants"
 import { startGoogleSourceAuthorizationRedirect } from "@/lib/supabase/auth-actions"
 import { cn } from "@/lib/utils"
 import type {
@@ -47,8 +53,11 @@ import type {
 } from "@/types"
 
 type ActionStatus = "idle" | "busy" | "error"
+type CalDavSetupMode = "apple" | "custom"
 type SourcePanelId =
   | "google_calendar"
+  | "caldav"
+  | "outlook_calendar"
   | "gmail"
   | "notion"
   | "canvas"
@@ -66,11 +75,11 @@ type ActionPayload = {
   needsAuthorization?: boolean
   needsDatabaseSelection?: boolean
 }
-type ConnectorState = SourceConnectorStatus | "manual" | "developing" | "refresh_issue"
+type ConnectorState = SourceConnectorStatus | "manual" | "developing" | "refresh_issue" | "disabled"
 type ConnectorDefinition = {
   id: SourcePanelId
   title: string
-  group: "configured" | "manual" | "developing"
+  group: "calendar" | "tasks_courses" | "work_context" | "files" | "developing"
   icon: LucideIcon
   summary: string
 }
@@ -79,35 +88,49 @@ const CONNECTOR_DEFINITIONS: ConnectorDefinition[] = [
   {
     id: "google_calendar",
     title: "Google Calendar",
-    group: "configured",
+    group: "calendar",
     icon: CalendarDays,
     summary: "Mirror calendar commitments for planning constraints, conflicts, and task-block sync.",
   },
   {
+    id: "caldav",
+    title: "CalDAV",
+    group: "calendar",
+    icon: CalendarDays,
+    summary: "Mirror Apple, Fastmail, Nextcloud, and other CalDAV calendars as read-only planning constraints.",
+  },
+  {
+    id: "outlook_calendar",
+    title: "Outlook Calendar",
+    group: "calendar",
+    icon: CalendarDays,
+    summary: "Outlook calendar sync is being developed.",
+  },
+  {
     id: "gmail",
     title: "Gmail",
-    group: "configured",
+    group: "work_context",
     icon: Mail,
     summary: "Scan recent mail for planning context, replies, logistics, and deadlines.",
   },
   {
     id: "notion",
     title: "Notion",
-    group: "configured",
+    group: "tasks_courses",
     icon: BookOpen,
     summary: "Import tasks from the authoritative Notion tasks database.",
   },
   {
     id: "canvas",
     title: "Canvas",
-    group: "configured",
+    group: "tasks_courses",
     icon: GraduationCap,
     summary: "Import planner items from Canvas and sync completed planner items back.",
   },
   {
     id: "manual",
     title: "Manual context",
-    group: "manual",
+    group: "files",
     icon: FileUp,
     summary: "Upload or paste one-off source material.",
   },
@@ -149,14 +172,14 @@ const CONNECTOR_DEFINITIONS: ConnectorDefinition[] = [
   {
     id: "linear",
     title: "Linear",
-    group: "developing",
+    group: "work_context",
     icon: ListChecks,
     summary: "Issue context sync is being developed.",
   },
   {
     id: "github",
     title: "GitHub",
-    group: "developing",
+    group: "work_context",
     icon: Github,
     summary: "Repository and issue context sync is being developed.",
   },
@@ -195,6 +218,7 @@ function getConnector(connectors: SourceConnector[], id: SourceConnectorId): Sou
     status: "auth_needed",
     account: null,
     canRun: false,
+    enabled: true,
     selectedSourceId: null,
     selectedSourceName: null,
     detail:
@@ -202,6 +226,8 @@ function getConnector(connectors: SourceConnector[], id: SourceConnectorId): Sou
         ? "Authorize a Notion workspace before importing scheduling context."
         : id === "canvas"
           ? "Connect Canvas with a base URL and personal access token."
+          : id === "caldav"
+            ? "Connect Apple Calendar with your Apple ID email and app-specific password."
           : id === "google_calendar"
             ? "Authorize Google Calendar read access before planning from current commitments."
             : "Authorize Google with Gmail read-only access before scanning mail context.",
@@ -218,6 +244,7 @@ function formatCapturedAt(value: string) {
 }
 
 function connectorStatusLabel(state: ConnectorState) {
+  if (state === "disabled") return "off"
   if (state === "auth_needed") return "not connected"
   if (state === "missing_config") return "setup needed"
   if (state === "refresh_issue") return "refresh issue"
@@ -234,7 +261,7 @@ function connectorStatusDotTone(state: ConnectorState) {
     return "bg-destructive"
   }
 
-  if (state === "developing") {
+  if (state === "developing" || state === "disabled") {
     return "border border-muted-foreground/40 bg-transparent"
   }
 
@@ -403,18 +430,36 @@ function DetailNote({ message }: { message: string }) {
 function DetailHeader({
   connector,
   state,
+  sourceConnector,
+  onEnabledChange,
+  disabled,
 }: {
   connector: ConnectorDefinition
   state: ConnectorState
+  sourceConnector?: SourceConnector
+  onEnabledChange?: (enabled: boolean) => void
+  disabled?: boolean
 }) {
   const Icon = connector.icon
+  const showSwitch = Boolean(sourceConnector && onEnabledChange)
 
   return (
     <div className="flex flex-col gap-2 border-b border-rule pb-4">
       <div className="flex items-center gap-2.5">
         <Icon className="h-4 w-4 shrink-0 text-copper" aria-hidden="true" strokeWidth={1.75} />
         <h2 className="truncate text-[15px] font-semibold leading-none text-foreground">{connector.title}</h2>
-        <ConnectorStatusMark state={state} className="ml-auto" />
+        <div className="ml-auto flex shrink-0 items-center gap-3">
+          {showSwitch ? (
+            <Switch
+              checked={sourceConnector?.enabled ?? true}
+              onCheckedChange={onEnabledChange}
+              disabled={disabled}
+              aria-label={`${sourceConnector?.enabled ? "Turn off" : "Turn on"} ${connector.title}`}
+              className="scale-75"
+            />
+          ) : null}
+          <ConnectorStatusMark state={state} />
+        </div>
       </div>
       <p className="max-w-[64ch] text-[12px] leading-5 text-muted-foreground">{connector.summary}</p>
     </div>
@@ -485,10 +530,17 @@ export function SourceSetupPanel({
 }) {
   const notionConnector = getConnector(sourceConnectors, "notion")
   const googleCalendarConnector = getConnector(sourceConnectors, "google_calendar")
+  const calDavConnector = getConnector(sourceConnectors, "caldav")
   const gmailConnector = getConnector(sourceConnectors, "gmail")
   const canvasConnector = getConnector(sourceConnectors, "canvas")
   const googleCalendarConfigMissing = googleCalendarConnector.status === "missing_config"
   const gmailConfigMissing = gmailConnector.status === "missing_config"
+  const [calDavMode, setCalDavMode] = useState<CalDavSetupMode>(
+    !calDavConnector.selectedSourceId || isAppleCalDavServerUrl(calDavConnector.selectedSourceId) ? "apple" : "custom",
+  )
+  const [calDavServerUrlInput, setCalDavServerUrlInput] = useState(calDavConnector.selectedSourceId ?? APPLE_CALDAV_SERVER_URL)
+  const [calDavUsernameInput, setCalDavUsernameInput] = useState(calDavConnector.account ?? "")
+  const [calDavPasswordInput, setCalDavPasswordInput] = useState("")
   const [selectedId, setSelectedId] = useState<SourcePanelId>("google_calendar")
   const [pasteText, setPasteText] = useState("")
   const [notionDatabaseInput, setNotionDatabaseInput] = useState(notionConnector.selectedSourceId ?? "")
@@ -519,16 +571,30 @@ export function SourceSetupPanel({
     setCanvasBaseUrlInput(canvasConnector.selectedSourceId ?? "")
   }, [canvasConnector.selectedSourceId])
 
+  useEffect(() => {
+    const serverUrl = calDavConnector.selectedSourceId ?? APPLE_CALDAV_SERVER_URL
+    setCalDavServerUrlInput(serverUrl)
+    setCalDavMode(!calDavConnector.selectedSourceId || isAppleCalDavServerUrl(serverUrl) ? "apple" : "custom")
+  }, [calDavConnector.selectedSourceId])
+
+  useEffect(() => {
+    setCalDavUsernameInput(calDavConnector.account ?? "")
+  }, [calDavConnector.account])
+
   function stateForConnector(connector: ConnectorDefinition): ConnectorState {
     if (connector.id === "manual") {
       return "manual"
     }
 
-    if (connector.group === "developing") {
+    if (connector.group === "developing" || connector.id === "outlook_calendar" || connector.id === "linear" || connector.id === "github") {
       return "developing"
     }
 
     if (connector.id === "google_calendar") {
+      if (!googleCalendarConnector.enabled) {
+        return "disabled"
+      }
+
       if (
         (googleCalendarConnector.status === "ready" || googleCalendarConnector.status === "connected") &&
         failedSourcesByKind.google_calendar?.length
@@ -539,7 +605,26 @@ export function SourceSetupPanel({
       return googleCalendarConnector.status
     }
 
+    if (connector.id === "caldav") {
+      if (!calDavConnector.enabled) {
+        return "disabled"
+      }
+
+      if (
+        (calDavConnector.status === "ready" || calDavConnector.status === "connected") &&
+        failedSourcesByKind.caldav?.length
+      ) {
+        return "refresh_issue"
+      }
+
+      return calDavConnector.status
+    }
+
     if (connector.id === "gmail") {
+      if (!gmailConnector.enabled) {
+        return "disabled"
+      }
+
       if (
         (gmailConnector.status === "ready" || gmailConnector.status === "connected") &&
         failedSourcesByKind.gmail?.length
@@ -551,6 +636,10 @@ export function SourceSetupPanel({
     }
 
     if (connector.id === "canvas") {
+      if (!canvasConnector.enabled) {
+        return "disabled"
+      }
+
       if (
         (canvasConnector.status === "ready" || canvasConnector.status === "connected") &&
         failedSourcesByKind.canvas?.length
@@ -559,6 +648,10 @@ export function SourceSetupPanel({
       }
 
       return canvasConnector.status
+    }
+
+    if (!notionConnector.enabled) {
+      return "disabled"
     }
 
     if (
@@ -696,7 +789,7 @@ export function SourceSetupPanel({
     const database = notionDatabaseInput.trim()
 
     if (!database) {
-      setErrorMessage("Paste the authoritative Notion tasks database URL or ID.")
+      setErrorMessage("Paste the authoritative Notion tasks source URL or ID.")
       setStatus("error")
       return
     }
@@ -728,6 +821,58 @@ export function SourceSetupPanel({
       if (!response.ok || !payload) {
         throw new Error(getPayloadMessage(payload, "Google Calendar refresh failed."))
       }
+    })
+  }
+
+  async function handleCalDavConnect() {
+    const serverUrl = calDavMode === "apple" ? APPLE_CALDAV_SERVER_URL : calDavServerUrlInput.trim()
+    const username = calDavUsernameInput.trim()
+    const password = calDavPasswordInput.trim()
+
+    if (!username || !password || (calDavMode === "custom" && !serverUrl)) {
+      setErrorMessage(
+        calDavMode === "apple"
+          ? "Enter your Apple ID email and app-specific password."
+          : "Enter the CalDAV server URL, username, and app password.",
+      )
+      setStatus("error")
+      return
+    }
+
+    await runAction(async () => {
+      const response = await fetch("/api/integrations/caldav", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ serverUrl, username, password }),
+      })
+
+      await readJson(response, "CalDAV connection failed.")
+      setCalDavPasswordInput("")
+    })
+  }
+
+  async function handleCalDavImport() {
+    await runAction(async () => {
+      const response = await fetch("/api/integrations/caldav/import", {
+        method: "POST",
+      })
+      const payload = (await response.json().catch(() => null)) as ActionPayload | null
+
+      if (!response.ok || !payload) {
+        throw new Error(getPayloadMessage(payload, "CalDAV refresh failed."))
+      }
+    })
+  }
+
+  async function handleConnectorEnabled(connectorId: SourceConnectorId, enabled: boolean) {
+    await runAction(async () => {
+      const response = await fetch(`/api/integrations/connectors/${connectorId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled }),
+      })
+
+      await readJson(response, "Failed to update source setting.")
     })
   }
 
@@ -782,7 +927,7 @@ export function SourceSetupPanel({
   function renderDetail() {
     const state = stateForConnector(selectedConnector)
 
-    if (selectedConnector.group === "developing") {
+    if (state === "developing") {
       return <DevelopingDetail connector={selectedConnector} state={state} />
     }
 
@@ -835,7 +980,13 @@ export function SourceSetupPanel({
     if (selectedConnector.id === "google_calendar") {
       return (
         <div className="flex min-w-0 flex-col gap-5">
-          <DetailHeader connector={selectedConnector} state={state} />
+          <DetailHeader
+            connector={selectedConnector}
+            state={state}
+            sourceConnector={googleCalendarConnector}
+            onEnabledChange={(enabled) => void handleConnectorEnabled("google_calendar", enabled)}
+            disabled={busy}
+          />
           <FailedSourceAlert sources={failedSourcesByKind.google_calendar ?? []} />
           <DetailNote message={googleCalendarConnector.detail} />
           <div className="flex flex-wrap gap-2">
@@ -849,7 +1000,7 @@ export function SourceSetupPanel({
                     : "Authorize Google"
               }
               onClick={googleCalendarConnector.canRun ? handleGoogleCalendarSync : handleGoogleAuthorize}
-              disabled={busy || googleCalendarConfigMissing}
+              disabled={busy || googleCalendarConfigMissing || !googleCalendarConnector.enabled}
             />
           </div>
           <div className="flex flex-col">
@@ -864,10 +1015,153 @@ export function SourceSetupPanel({
       )
     }
 
+    if (selectedConnector.id === "caldav") {
+      const isConnected = calDavConnector.status === "ready" || calDavConnector.status === "connected"
+      const calDavServerName =
+        getCalDavServerDisplayName(calDavConnector.selectedSourceId) ??
+        calDavConnector.selectedSourceName ??
+        (calDavMode === "apple" ? "Apple Calendar" : null)
+
+      return (
+        <div className="flex min-w-0 flex-col gap-5">
+          <DetailHeader
+            connector={selectedConnector}
+            state={state}
+            sourceConnector={calDavConnector}
+            onEnabledChange={(enabled) => void handleConnectorEnabled("caldav", enabled)}
+            disabled={busy}
+          />
+          <FailedSourceAlert sources={failedSourcesByKind.caldav ?? []} />
+          <DetailNote message={calDavConnector.detail} />
+          <div className="inline-flex w-fit rounded-sm border border-rule bg-secondary/10 p-0.5">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              aria-pressed={calDavMode === "apple"}
+              className={cn(
+                "h-8 rounded-[2px] px-3 text-[12px] text-muted-foreground hover:bg-secondary/40 hover:text-foreground",
+                calDavMode === "apple" && "bg-secondary/70 text-foreground",
+              )}
+              onClick={() => {
+                setCalDavMode("apple")
+                setCalDavServerUrlInput(APPLE_CALDAV_SERVER_URL)
+              }}
+              disabled={busy}
+            >
+              Apple
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              aria-pressed={calDavMode === "custom"}
+              className={cn(
+                "h-8 rounded-[2px] px-3 text-[12px] text-muted-foreground hover:bg-secondary/40 hover:text-foreground",
+                calDavMode === "custom" && "bg-secondary/70 text-foreground",
+              )}
+              onClick={() => setCalDavMode("custom")}
+              disabled={busy}
+            >
+              Custom
+            </Button>
+          </div>
+          <FieldGroup className="gap-3">
+            {calDavMode === "custom" ? (
+              <Field className="gap-2">
+                <FieldLabel className="text-[12px]">Server URL</FieldLabel>
+                <InputGroup className="min-w-0 rounded-sm border-rule bg-secondary/20">
+                  <InputGroupInput
+                    value={calDavServerUrlInput}
+                    onChange={(event) => setCalDavServerUrlInput(event.target.value)}
+                    placeholder="https://caldav.example.com"
+                    disabled={busy}
+                    className="min-w-0 text-[12px]"
+                  />
+                </InputGroup>
+              </Field>
+            ) : null}
+            <Field className="gap-2">
+              <FieldLabel className="text-[12px]">
+                {calDavMode === "apple" ? "Apple ID Email" : "Username"}
+              </FieldLabel>
+              <InputGroup className="min-w-0 rounded-sm border-rule bg-secondary/20">
+                <InputGroupInput
+                  value={calDavUsernameInput}
+                  onChange={(event) => setCalDavUsernameInput(event.target.value)}
+                  placeholder="name@example.com"
+                  type={calDavMode === "apple" ? "email" : "text"}
+                  disabled={busy}
+                  className="min-w-0 text-[12px]"
+                />
+              </InputGroup>
+            </Field>
+            <Field className="gap-2">
+              <FieldLabel className="text-[12px]">
+                {calDavMode === "apple" ? "App-Specific Password" : "App Password"}
+              </FieldLabel>
+              <InputGroup className="min-w-0 rounded-sm border-rule bg-secondary/20">
+                <InputGroupInput
+                  value={calDavPasswordInput}
+                  onChange={(event) => setCalDavPasswordInput(event.target.value)}
+                  placeholder={calDavMode === "apple" ? "xxxx-xxxx-xxxx-xxxx" : "App password"}
+                  type="password"
+                  disabled={busy}
+                  className="min-w-0 text-[12px]"
+                />
+              </InputGroup>
+              <FieldDescription className="text-[11px]">
+                Stored privately. CalDAV sync is read-only in this version.
+              </FieldDescription>
+            </Field>
+          </FieldGroup>
+          <div className="flex flex-wrap gap-2">
+            <ActionButton
+              icon={CalendarDays}
+              label={
+                isConnected
+                  ? calDavMode === "apple"
+                    ? "Update Apple Calendar"
+                    : "Update CalDAV"
+                  : calDavMode === "apple"
+                    ? "Connect Apple Calendar"
+                    : "Connect CalDAV"
+              }
+              onClick={handleCalDavConnect}
+              disabled={
+                busy ||
+                !calDavConnector.enabled ||
+                (calDavMode === "custom" && calDavServerUrlInput.trim().length === 0) ||
+                calDavUsernameInput.trim().length === 0 ||
+                calDavPasswordInput.trim().length === 0
+              }
+            />
+            <ActionButton
+              icon={RefreshCw}
+              label={calDavMode === "apple" ? "Refresh Apple Calendar" : "Refresh CalDAV"}
+              onClick={handleCalDavImport}
+              disabled={busy || !calDavConnector.canRun}
+            />
+          </div>
+          <div className="rounded-sm border border-rule px-3">
+            <InfoLine label="Account" value={calDavConnector.account} />
+            <InfoLine label="Provider" value={calDavServerName} />
+            <InfoLine label="Status" value={connectorStatusLabel(state)} />
+          </div>
+        </div>
+      )
+    }
+
     if (selectedConnector.id === "gmail") {
       return (
         <div className="flex min-w-0 flex-col gap-5">
-          <DetailHeader connector={selectedConnector} state={state} />
+          <DetailHeader
+            connector={selectedConnector}
+            state={state}
+            sourceConnector={gmailConnector}
+            onEnabledChange={(enabled) => void handleConnectorEnabled("gmail", enabled)}
+            disabled={busy}
+          />
           <FailedSourceAlert sources={failedSourcesByKind.gmail ?? []} />
           <DetailNote message={gmailConnector.detail} />
           <div className="flex flex-wrap gap-2">
@@ -881,7 +1175,7 @@ export function SourceSetupPanel({
                     : "Authorize Gmail"
               }
               onClick={gmailConnector.canRun ? handleGmailScan : handleGoogleAuthorize}
-              disabled={busy || gmailConfigMissing}
+              disabled={busy || gmailConfigMissing || !gmailConnector.enabled}
             />
           </div>
           <div className="flex flex-col">
@@ -896,14 +1190,20 @@ export function SourceSetupPanel({
     if (selectedConnector.id === "canvas") {
       return (
         <div className="flex min-w-0 flex-col gap-5">
-          <DetailHeader connector={selectedConnector} state={state} />
+          <DetailHeader
+            connector={selectedConnector}
+            state={state}
+            sourceConnector={canvasConnector}
+            onEnabledChange={(enabled) => void handleConnectorEnabled("canvas", enabled)}
+            disabled={busy}
+          />
           <FailedSourceAlert sources={failedSourcesByKind.canvas ?? []} />
           <div className="flex flex-wrap gap-2">
             <ActionButton
               icon={GraduationCap}
               label={canvasConnector.status === "ready" || canvasConnector.status === "connected" ? "Update token" : "Connect Canvas"}
               onClick={handleCanvasConnect}
-              disabled={busy || canvasBaseUrlInput.trim().length === 0 || canvasTokenInput.trim().length === 0}
+              disabled={busy || !canvasConnector.enabled || canvasBaseUrlInput.trim().length === 0 || canvasTokenInput.trim().length === 0}
             />
             <ActionButton
               icon={RefreshCw}
@@ -953,31 +1253,37 @@ export function SourceSetupPanel({
 
     return (
       <div className="flex min-w-0 flex-col gap-5">
-        <DetailHeader connector={selectedConnector} state={state} />
+        <DetailHeader
+          connector={selectedConnector}
+          state={state}
+          sourceConnector={notionConnector}
+          onEnabledChange={(enabled) => void handleConnectorEnabled("notion", enabled)}
+          disabled={busy}
+        />
         <FailedSourceAlert sources={failedSourcesByKind.notion ?? []} />
         <div className="flex flex-wrap gap-2">
           <ActionButton
             icon={BookOpen}
             label={notionConnector.status === "connected" ? "Reconnect workspace" : "Connect workspace"}
             onClick={handleNotionConnect}
-            disabled={busy}
+            disabled={busy || !notionConnector.enabled}
           />
-          <ActionButton icon={CalendarDays} label="Import Notion" onClick={handleNotionImport} disabled={busy} />
+          <ActionButton icon={CalendarDays} label="Import Notion" onClick={handleNotionImport} disabled={busy || !notionConnector.enabled} />
         </div>
         <Field className="gap-2">
-          <FieldLabel className="text-[12px]">Tasks Database</FieldLabel>
+          <FieldLabel className="text-[12px]">Tasks Source</FieldLabel>
           <InputGroup className="min-w-0 rounded-sm border-rule bg-secondary/20">
             <InputGroupInput
               value={notionDatabaseInput}
               onChange={(event) => setNotionDatabaseInput(event.target.value)}
-              placeholder="Paste Notion database URL or ID"
-              disabled={busy || notionConnector.status === "missing_config"}
+              placeholder="Paste Notion source URL or ID"
+              disabled={busy || !notionConnector.enabled || notionConnector.status === "missing_config"}
               className="min-w-0 text-[12px]"
             />
             <InputGroupAddon align="inline-end">
               <InputGroupButton
                 onClick={handleSaveNotionDatabase}
-                disabled={busy || notionDatabaseInput.trim().length === 0 || notionConnector.status === "missing_config"}
+                disabled={busy || !notionConnector.enabled || notionDatabaseInput.trim().length === 0 || notionConnector.status === "missing_config"}
               >
                 <Save aria-hidden="true" />
                 Save
@@ -1004,9 +1310,9 @@ export function SourceSetupPanel({
       <div className="flex min-w-0 flex-col border-b border-rule bg-background md:border-b-0 md:border-r">
         <header className="flex flex-col gap-2 border-b border-rule px-3 py-4">
           <div className="flex items-center gap-2">
-            <Database className="h-4 w-4 shrink-0 text-copper" aria-hidden="true" strokeWidth={1.75} />
+            <Cable className="h-4 w-4 shrink-0 text-copper" aria-hidden="true" strokeWidth={1.75} />
             <h2 className="truncate text-[13px] font-semibold uppercase tracking-[0.08em] text-foreground">
-              Connectors
+              Sources
             </h2>
             {busy ? (
               <span className="ml-auto inline-flex items-center gap-1.5 text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
@@ -1020,8 +1326,8 @@ export function SourceSetupPanel({
           </p>
         </header>
 
-        <ConnectorGroup title="Configured">
-          {CONNECTOR_DEFINITIONS.filter((connector) => connector.group === "configured").map((connector) => (
+        <ConnectorGroup title="Calendar">
+          {CONNECTOR_DEFINITIONS.filter((connector) => connector.group === "calendar").map((connector) => (
             <ConnectorRow
               key={connector.id}
               connector={connector}
@@ -1032,8 +1338,8 @@ export function SourceSetupPanel({
           ))}
         </ConnectorGroup>
 
-        <ConnectorGroup title="Manual">
-          {CONNECTOR_DEFINITIONS.filter((connector) => connector.group === "manual").map((connector) => (
+        <ConnectorGroup title="Tasks & Courses">
+          {CONNECTOR_DEFINITIONS.filter((connector) => connector.group === "tasks_courses").map((connector) => (
             <ConnectorRow
               key={connector.id}
               connector={connector}
@@ -1044,7 +1350,31 @@ export function SourceSetupPanel({
           ))}
         </ConnectorGroup>
 
-        <ConnectorGroup title="In development">
+        <ConnectorGroup title="Work Context">
+          {CONNECTOR_DEFINITIONS.filter((connector) => connector.group === "work_context").map((connector) => (
+            <ConnectorRow
+              key={connector.id}
+              connector={connector}
+              state={stateForConnector(connector)}
+              active={selectedId === connector.id}
+              onSelect={() => setSelectedId(connector.id)}
+            />
+          ))}
+        </ConnectorGroup>
+
+        <ConnectorGroup title="Files">
+          {CONNECTOR_DEFINITIONS.filter((connector) => connector.group === "files").map((connector) => (
+            <ConnectorRow
+              key={connector.id}
+              connector={connector}
+              state={stateForConnector(connector)}
+              active={selectedId === connector.id}
+              onSelect={() => setSelectedId(connector.id)}
+            />
+          ))}
+        </ConnectorGroup>
+
+        <ConnectorGroup title="In Development">
           {CONNECTOR_DEFINITIONS.filter((connector) => connector.group === "developing").map((connector) => (
             <ConnectorRow
               key={connector.id}

@@ -21,6 +21,10 @@
 - Keep freeform natural-language commands inside the secretary surface. The schedule command strip may offer fixed quick replans, but it should not render another command input.
 - Do not show unused connectors as missing required context in the plan basis. Source setup may show available connectors with honest auth-needed, ready, connected, or failed states tied to real actions.
 - Source setup connector rows should pair text labels with a compact status icon so missing config, auth-needed, ready, connected, and failed states are scannable without reading every sentence.
+- Source setup is titled Sources, not Connectors. Group sources by user intent: Calendar, Tasks & Courses, Work Context, Files, and In Development.
+- Connector detail panes should expose a compact enabled switch. Off means the source stays connected but does not refresh or contribute to planning.
+- Connector setup should ask for the minimum human-known credentials. For CalDAV, default to Apple Calendar with Apple ID email plus app-specific password, and expose raw server URL only through the Custom CalDAV path.
+- Calendar visibility is the explicit duplicate-control mechanism for mirrored calendar providers. Group calendar display controls by provider so users can hide duplicated CalDAV/Google feeds while keeping provider-specific calendars visible.
 - Missing app-level connector config should not make connector entry points disappear or feel unavailable. Keep the action visible and surface the concrete setup error when invoked.
 - Treat Inbox as a context surface, not only an approval queue. If a source scan produced useful context but no pending task candidates, show the recent source digest instead of an empty-feeling review ledger.
 - Source counts should represent distinct active source types, not historical refresh snapshots.

@@ -15,6 +15,7 @@
 - Backend token reads and writes go through service-role-only RPC wrappers so `app_private` does not need to be exposed as a Supabase API schema.
 - Public integration rows may expose connection metadata only: provider, account email, status, selected calendar, and sync timestamps.
 - Canvas personal access tokens are a pilot-only integration secret. Store them only in `app_private.integration_tokens`; public integration rows may store the Canvas base URL/host and account metadata for readiness display.
+- CalDAV app passwords are integration secrets. Store them only in `app_private.integration_tokens`; public integration rows may store the CalDAV server URL/host, username/account label, status, and sync timestamps.
 
 ## Production V1 Tables
 
@@ -27,10 +28,13 @@
 
 - `schedule_events` is the canonical app event store.
 - Imported Google events are mirrored into `schedule_events`.
+- Imported CalDAV events are mirrored into `schedule_events` as read-only calendar events with `last_synced_from = 'caldav'` and stable `external_event_id` values.
+- Connector enablement lives in `connector_settings`. A connected but disabled source keeps credentials and mirrored rows, but source refresh and planning must skip it intentionally instead of treating it as a failure.
 - JARVIS-created task/focus blocks are persisted first. Syncing task blocks outward to Google Calendar is an approval-backed assistant tool run, not part of normal calendar reads.
 - Google app sign-in and Google source authorization are separate OAuth intents. Plain sign-in uses the provider for identity only; Calendar/Gmail authorization requests the offline source scopes and captures provider tokens from the callback exchange result immediately.
 - Sync responses expose an explicit authorization-required state instead of a generic failure.
 - Source connector readiness is derived on the server from public integration rows, private token presence, known OAuth scopes, and required environment variables. The UI must not treat a public `connected` row as runnable unless the private token/scope check also passes.
+- Remote calendar rows from Google and CalDAV are sync-managed for identity/name, but users may change local display fields such as visibility, color, and sync preference.
 - Daily Vercel Cron calls `/api/cron/source-refresh` with `CRON_SECRET`. The daily cadence keeps Hobby deployments valid; manual refreshes and forced pre-plan refreshes cover fresh planning needs. Cron isolates per-user failures and records failed source snapshots instead of hiding refresh problems.
 
 ## Source Intake And Plans

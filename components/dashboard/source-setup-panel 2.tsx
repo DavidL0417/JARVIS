@@ -88,6 +88,7 @@ function getConnector(connectors: SourceConnector[], id: SourceConnectorId): Sou
     status: "auth_needed",
     account: null,
     canRun: false,
+    enabled: true,
     selectedSourceId: null,
     selectedSourceName: null,
     detail:

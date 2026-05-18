@@ -522,6 +522,7 @@ export default function DashboardPage() {
                 plannerStatus={plannerStatus}
                 plannerSummary={plannerSummary}
                 onSchedule={() => void handleDailyPlan()}
+                onOpenCalendars={() => setCalendarsSidebarOpen(true)}
                 isScheduling={isScheduling}
               />
             </div>

@@ -224,21 +224,46 @@ async function persistGoogleCalendars(userId: string, calendars: GoogleCalendarL
   }
 
   const adminClient = createSupabaseAdminClient()
+  const calendarKeys = calendars
+    .filter((calendar): calendar is GoogleCalendarListItem & { id: string } => typeof calendar.id === "string")
+    .map((calendar) => toCalendarKey(calendar.id))
+
+  if (calendarKeys.length === 0) {
+    return
+  }
+
+  const { data: existingCalendars, error: existingCalendarsError } = await adminClient
+    .from("calendars")
+    .select(USER_CALENDAR_SELECT)
+    .eq("user_id", userId)
+    .in("calendar_key", calendarKeys)
+
+  if (existingCalendarsError) {
+    throw new Error(existingCalendarsError.message)
+  }
+
+  const existingByKey = new Map(
+    (existingCalendars ?? []).map((calendar) => [calendar.calendar_key as string, calendar as UserCalendarRow]),
+  )
+
   const rows = calendars
     .filter((calendar): calendar is GoogleCalendarListItem & { id: string } => typeof calendar.id === "string")
     .map((calendar) => {
       const summary = calendar.summary?.trim() || "Google Calendar"
+      const calendarKey = toCalendarKey(calendar.id)
+      const existing = existingByKey.get(calendarKey)
+
       return {
         user_id: userId,
-        calendar_key: toCalendarKey(calendar.id),
+        calendar_key: calendarKey,
         name: summary,
-        color: calendar.backgroundColor?.trim() || "#93c5fd",
+        color: existing?.color || calendar.backgroundColor?.trim() || "#93c5fd",
         source: "google" as const,
         google_calendar_id: calendar.id,
         remote_name: summary,
-        is_visible: true,
+        is_visible: existing?.is_visible ?? true,
         is_immutable: true,
-        sync_preference: "active" as const,
+        sync_preference: existing?.sync_preference ?? ("active" as const),
         is_task_calendar: false,
         updated_at: new Date().toISOString(),
       }

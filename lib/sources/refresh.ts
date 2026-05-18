@@ -1,10 +1,13 @@
 import { GMAIL_READONLY_SCOPE, GOOGLE_CALENDAR_READONLY_SCOPE, hasOAuthScope } from "@/lib/google-oauth"
+import { refreshCalDavForUser } from "@/lib/caldav/refresh"
 import { syncGoogleCalendarEventsForUser } from "@/lib/google-calendar-events"
 import { refreshCanvasForUser } from "@/lib/sources/canvas-refresh"
 import { GMAIL_CONTEXT_SEARCH_QUERY, refreshGmailForUser } from "@/lib/sources/gmail-refresh"
 import { refreshNotionForUser } from "@/lib/sources/notion-refresh"
 import { insertSourceSnapshot } from "@/lib/sources/persistence"
 import { getStoredCanvasIntegration } from "@/lib/supabase/canvas-integration"
+import { getStoredCalDavIntegration } from "@/lib/supabase/caldav-integration"
+import { getConnectorSettingsForUser, isConnectorEnabled } from "@/lib/supabase/connector-settings"
 import { getStoredGoogleIntegration } from "@/lib/supabase/google-calendar-integration"
 import { createSupabaseAdminClient } from "@/lib/supabase/server"
 import type { requireAuthenticatedUser } from "@/lib/supabase/auth"
@@ -53,6 +56,7 @@ function stripErrorPrefix(message: string) {
     .replace("NOTION_DATABASE_NOT_SELECTED:", "")
     .replace("NOTION_DATABASE_NOT_FOUND:", "")
     .replace("CANVAS_REAUTH_REQUIRED:", "")
+    .replace("CALDAV_REAUTH_REQUIRED:", "")
     .trim()
 }
 
@@ -108,10 +112,32 @@ export async function refreshSourcesForUser(input: {
   const refreshedAt = new Date().toISOString()
   const items: SourceRefreshItem[] = []
 
-  const googleIntegration = await getStoredGoogleIntegration(input.userId)
-  const canvasIntegration = await getStoredCanvasIntegration(input.userId)
+  const [googleIntegration, canvasIntegration, calDavIntegration, connectorSettings] = await Promise.all([
+    getStoredGoogleIntegration(input.userId),
+    getStoredCanvasIntegration(input.userId),
+    getStoredCalDavIntegration(input.userId),
+    getConnectorSettingsForUser(input.userId, adminClient),
+  ])
+  const googleCalendarEnabled = isConnectorEnabled(connectorSettings, "google_calendar")
+  const gmailEnabled = isConnectorEnabled(connectorSettings, "gmail")
+  const notionEnabled = isConnectorEnabled(connectorSettings, "notion")
+  const canvasEnabled = isConnectorEnabled(connectorSettings, "canvas")
+  const calDavEnabled = isConnectorEnabled(connectorSettings, "caldav")
+  const calDavConfigured = Boolean(
+    calDavIntegration?.status === "connected" &&
+      calDavIntegration.server_url &&
+      calDavIntegration.provider_account_email &&
+      calDavIntegration.password,
+  )
 
-  if (googleIntegration?.status === "connected" && hasOAuthScope(googleIntegration.scope, GOOGLE_CALENDAR_READONLY_SCOPE)) {
+  if (!googleCalendarEnabled) {
+    items.push({
+      source: "google_calendar",
+      status: "skipped",
+      summary: "Google Calendar is turned off.",
+      runnable: false,
+    })
+  } else if (googleIntegration?.status === "connected" && hasOAuthScope(googleIntegration.scope, GOOGLE_CALENDAR_READONLY_SCOPE)) {
     const result = await syncGoogleCalendarEventsForUser(input.userId)
 
     items.push({
@@ -132,7 +158,63 @@ export async function refreshSourcesForUser(input: {
     })
   }
 
-  if (googleIntegration?.status === "connected" && hasOAuthScope(googleIntegration.scope, GMAIL_READONLY_SCOPE)) {
+  if (!calDavEnabled) {
+    items.push({
+      source: "caldav",
+      status: "skipped",
+      summary: "CalDAV is turned off.",
+      runnable: false,
+    })
+  } else {
+    if (!calDavConfigured) {
+      items.push({
+        source: "caldav",
+        status: "skipped",
+        summary: "CalDAV is not connected with account credentials.",
+        runnable: false,
+      })
+    } else {
+      try {
+        const result = await refreshCalDavForUser(input.userId)
+        const failed = !result.success && (!result.needsAuthorization || calDavConfigured)
+        items.push({
+          source: "caldav",
+          status: result.success ? "fresh" : failed ? "failed" : "skipped",
+          summary: result.success
+            ? `CalDAV refreshed with ${result.events.length} mirrored events.`
+            : result.error || "CalDAV refresh failed.",
+          runnable: failed,
+          error: failed ? result.error || "CalDAV refresh failed." : undefined,
+        })
+      } catch (error) {
+        const rawMessage = error instanceof Error ? error.message : "CalDAV refresh failed."
+        const message = stripErrorPrefix(rawMessage)
+        await recordRefreshFailure({
+          adminClient,
+          userId: input.userId,
+          source: "caldav",
+          summary: message,
+          reason: rawMessage.startsWith("CALDAV_REAUTH_REQUIRED:") ? "reauthorization_required" : "refresh_failed",
+        })
+        items.push({
+          source: "caldav",
+          status: "failed",
+          summary: message,
+          runnable: true,
+          error: message,
+        })
+      }
+    }
+  }
+
+  if (!gmailEnabled) {
+    items.push({
+      source: "gmail",
+      status: "skipped",
+      summary: "Gmail is turned off.",
+      runnable: false,
+    })
+  } else if (googleIntegration?.status === "connected" && hasOAuthScope(googleIntegration.scope, GMAIL_READONLY_SCOPE)) {
     try {
       const result = await refreshGmailForUser(input.userId)
       items.push({
@@ -173,9 +255,16 @@ export async function refreshSourcesForUser(input: {
     })
   }
 
-  const notionConfig = await getNotionRunnableConfig(adminClient, input.userId)
+  const notionConfig = notionEnabled ? await getNotionRunnableConfig(adminClient, input.userId) : null
 
-  if (notionConfig) {
+  if (!notionEnabled) {
+    items.push({
+      source: "notion",
+      status: "skipped",
+      summary: "Notion is turned off.",
+      runnable: false,
+    })
+  } else if (notionConfig) {
     try {
       const result = await refreshNotionForUser(input.userId)
       items.push({
@@ -218,7 +307,14 @@ export async function refreshSourcesForUser(input: {
     })
   }
 
-  if (canvasIntegration?.status === "connected" && canvasIntegration.base_url && canvasIntegration.access_token) {
+  if (!canvasEnabled) {
+    items.push({
+      source: "canvas",
+      status: "skipped",
+      summary: "Canvas is turned off.",
+      runnable: false,
+    })
+  } else if (canvasIntegration?.status === "connected" && canvasIntegration.base_url && canvasIntegration.access_token) {
     try {
       const result = await refreshCanvasForUser(input.userId)
       items.push({
