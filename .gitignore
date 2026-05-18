@@ -17,3 +17,4 @@ node_modules
 test-results/
 playwright-report/
 .claude/worktrees/nostalgic-mayer-8fff16/
+/.claude
