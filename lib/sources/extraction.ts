@@ -4,6 +4,7 @@ import { createOpenAIResponse, getOpenAIConfig, getOpenAIResponseText } from "@/
 import type { Priority, SourceCandidateKind, SourceKind } from "@/types"
 
 const MAX_TEXT_SOURCE_CHARS = 60_000
+const SOURCE_EXTRACTION_OUTPUT_TOKENS = 8000
 const SUPPORTED_TEXT_MIME_TYPES = new Set([
   "text/plain",
   "text/markdown",
@@ -61,6 +62,7 @@ const SOURCE_EXTRACTION_PROMPT = [
   "Use ISO 8601 timestamps with timezone offsets for dueAt when the source gives enough information. Assume America/Chicago only when the source gives a date without a timezone.",
   "Use priority high only for imminent, graded, blocking, or explicitly important items.",
   "Return task/deadline/event candidates only when they need scheduler action. Return note candidates for useful context that should inform the secretary but should not become a task.",
+  "Return at most 12 candidates. Keep the summary under 900 characters and each evidence field under 180 characters.",
 ].join("\n")
 
 function candidateJsonSchema() {
@@ -177,7 +179,7 @@ async function requestExtraction(content: InputContentPart[]) {
         content,
       },
     ],
-    max_output_tokens: 2400,
+    max_output_tokens: SOURCE_EXTRACTION_OUTPUT_TOKENS,
     temperature: 0,
     text: {
       format: {
@@ -194,7 +196,19 @@ async function requestExtraction(content: InputContentPart[]) {
     throw new Error("OpenAI returned no source extraction payload.")
   }
 
-  const parsed = extractionResultSchema.parse(JSON.parse(text))
+  let parsedJson: unknown
+
+  try {
+    parsedJson = JSON.parse(text)
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : "Invalid JSON."
+    throw new Error(
+      `SOURCE_EXTRACTION_FAILED: OpenAI returned incomplete source extraction JSON (${detail}). This is not a Gmail authorization failure; retry the scan or reduce the source payload.`,
+      { cause: error },
+    )
+  }
+
+  const parsed = extractionResultSchema.parse(parsedJson)
 
   return {
     summary: parsed.summary,

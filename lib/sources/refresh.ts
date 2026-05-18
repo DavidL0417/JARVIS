@@ -49,6 +49,7 @@ function stripErrorPrefix(message: string) {
   return message
     .replace("GMAIL_API_DISABLED:", "")
     .replace("GMAIL_REAUTH_REQUIRED:", "")
+    .replace("SOURCE_EXTRACTION_FAILED:", "")
     .replace("NOTION_REAUTH_REQUIRED:", "")
     .replace("NOTION_DATABASE_NOT_SELECTED:", "")
     .replace("NOTION_DATABASE_NOT_FOUND:", "")
@@ -151,10 +152,12 @@ export async function refreshSourcesForUser(input: {
         sourceRef: GMAIL_CONTEXT_SEARCH_QUERY,
         summary: message,
         reason: rawMessage.startsWith("GMAIL_REAUTH_REQUIRED:")
-          ? "reauthorization_required"
-          : rawMessage.startsWith("GMAIL_API_DISABLED:")
-            ? "gmail_api_disabled"
-            : "refresh_failed",
+            ? "reauthorization_required"
+            : rawMessage.startsWith("GMAIL_API_DISABLED:")
+              ? "gmail_api_disabled"
+              : rawMessage.startsWith("SOURCE_EXTRACTION_FAILED:")
+                ? "extraction_failed"
+                : "refresh_failed",
       })
       items.push({
         source: "gmail",

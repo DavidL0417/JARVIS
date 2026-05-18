@@ -7,29 +7,14 @@ import {
   requireAuthenticatedUser,
 } from "@/lib/supabase/auth"
 import { createSupabaseAdminClient } from "@/lib/supabase/server"
-import {
-  getGoogleTokensFromSession,
-  upsertGoogleCalendarIntegration,
-} from "@/lib/supabase/google-calendar-integration"
 import { sourceIntakeResponseSchema } from "@/schemas/sources"
 
 export async function POST() {
   let userId: string | null = null
 
   try {
-    const { authUser, serverClient, user } = await requireAuthenticatedUser()
+    const { user } = await requireAuthenticatedUser()
     userId = user.id
-    const { data: sessionData } = await serverClient.auth.getSession()
-    const sessionTokens = getGoogleTokensFromSession(sessionData.session)
-
-    if (sessionTokens.accessToken || sessionTokens.refreshToken) {
-      await upsertGoogleCalendarIntegration({
-        userId: user.id,
-        authUser,
-        ...sessionTokens,
-      })
-    }
-
     const result = await refreshGmailForUser(user.id)
     return NextResponse.json(sourceIntakeResponseSchema.parse(result))
   } catch (error) {
@@ -39,11 +24,17 @@ export async function POST() {
 
     const message = error instanceof Error ? error.message : "Unknown Gmail scan error."
 
-    if (message.startsWith("GMAIL_API_DISABLED:") || message.startsWith("GMAIL_REAUTH_REQUIRED:")) {
+    if (
+      message.startsWith("GMAIL_API_DISABLED:") ||
+      message.startsWith("GMAIL_REAUTH_REQUIRED:") ||
+      message.startsWith("SOURCE_EXTRACTION_FAILED:")
+    ) {
       const needsAuthorization = message.startsWith("GMAIL_REAUTH_REQUIRED:")
+      const extractionFailed = message.startsWith("SOURCE_EXTRACTION_FAILED:")
       const detail = message
         .replace("GMAIL_API_DISABLED:", "")
         .replace("GMAIL_REAUTH_REQUIRED:", "")
+        .replace("SOURCE_EXTRACTION_FAILED:", "")
         .trim()
 
       if (userId) {
@@ -69,7 +60,11 @@ export async function POST() {
             freshness: "failed",
             summary: detail,
             payload: {
-              reason: needsAuthorization ? "reauthorization_required" : "gmail_api_disabled",
+              reason: needsAuthorization
+                ? "reauthorization_required"
+                : extractionFailed
+                  ? "extraction_failed"
+                  : "gmail_api_disabled",
             },
           })
         } catch (recordError) {
@@ -82,7 +77,7 @@ export async function POST() {
           error: detail,
           needsAuthorization,
         },
-        { status: needsAuthorization ? 409 : 503 },
+        { status: needsAuthorization ? 409 : extractionFailed ? 502 : 503 },
       )
     }
 

@@ -86,6 +86,32 @@ function getLatestSource(sources: SourceSnapshotSummary[], source: SourceSnapsho
   return sources.find((snapshot) => snapshot.source === source) ?? null
 }
 
+function getTime(value: string | null | undefined) {
+  return value ? new Date(value).getTime() : null
+}
+
+function getLatestActiveSource(
+  sources: SourceSnapshotSummary[],
+  source: SourceSnapshotSummary["source"],
+  options: { resolvedAfter?: string | null } = {},
+) {
+  const resolvedAfter = getTime(options.resolvedAfter)
+
+  return (
+    sources.find((snapshot) => {
+      if (snapshot.source !== source) {
+        return false
+      }
+
+      if (snapshot.freshness !== "failed" || !resolvedAfter) {
+        return true
+      }
+
+      return new Date(snapshot.capturedAt).getTime() > resolvedAfter
+    }) ?? null
+  )
+}
+
 function getIntegrationAccount(integration: UserIntegration | null) {
   return integration?.providerAccountEmail || integration?.providerUserId || null
 }
@@ -188,8 +214,13 @@ function deriveSourceConnectors(input: {
   const googleIntegration = getIntegration(input.integrations, "google")
   const notionIntegration = getIntegration(input.integrations, "notion")
   const canvasPublicIntegration = getIntegration(input.integrations, "canvas")
-  const googleCalendarSource = getLatestSource(input.sources, "google_calendar")
-  const gmailSource = getLatestSource(input.sources, "gmail")
+  const googleRecoveryAt = input.googleIntegration?.token_updated_at ?? null
+  const googleCalendarSource = getLatestActiveSource(input.sources, "google_calendar", {
+    resolvedAfter: googleRecoveryAt,
+  })
+  const gmailSource = getLatestActiveSource(input.sources, "gmail", {
+    resolvedAfter: googleRecoveryAt,
+  })
   const notionSource = getLatestSource(input.sources, "notion")
   const canvasSource = getLatestSource(input.sources, "canvas")
   const googleAccount = getIntegrationAccount(googleIntegration)

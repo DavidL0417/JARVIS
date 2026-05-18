@@ -358,7 +358,7 @@ function FailedSourceAlert({ sources }: { sources: SourceSnapshotSummary[] }) {
       <AlertDescription className="min-w-0 text-[12px]">
         <div className="flex min-w-0 flex-col gap-2">
           {sources.map((source) => (
-            <div key={source.id} className="min-w-0 rounded-sm border border-destructive/25 px-2.5 py-2">
+            <div key={source.id} className="min-w-0">
               <div className="flex items-center justify-between gap-2">
                 <span className="font-medium capitalize text-foreground">{source.source.replace("_", " ")}</span>
                 <span className="num shrink-0 text-[10px] uppercase text-destructive/80">{formatCapturedAt(source.capturedAt)}</span>
@@ -500,8 +500,15 @@ export function SourceSetupPanel({
   const [dedupeSummary, setDedupeSummary] = useState("")
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const pendingCount = sourceCandidates.filter((candidate) => candidate.status === "pending").length
-  const failedSources = sources.filter((source) => source.freshness === "failed")
   const busy = status === "busy"
+  const activeFailedSourceIds = new Set(
+    sourceConnectors
+      .filter((connector) => connector.status === "failed")
+      .map((connector) => connector.id),
+  )
+  const failedSources = sources.filter(
+    (source) => source.freshness === "failed" && activeFailedSourceIds.has(source.source as SourceConnectorId),
+  )
 
   const selectedConnector = CONNECTOR_DEFINITIONS.find((connector) => connector.id === selectedId) ?? CONNECTOR_DEFINITIONS[0]
   const failedSourcesByKind = useMemo(() => {
@@ -529,10 +536,7 @@ export function SourceSetupPanel({
     }
 
     if (connector.id === "google_calendar") {
-      if (
-        (googleCalendarConnector.status === "ready" || googleCalendarConnector.status === "connected") &&
-        failedSourcesByKind.google_calendar?.length
-      ) {
+      if (googleCalendarConnector.status === "failed") {
         return "refresh_issue"
       }
 
@@ -540,10 +544,7 @@ export function SourceSetupPanel({
     }
 
     if (connector.id === "gmail") {
-      if (
-        (gmailConnector.status === "ready" || gmailConnector.status === "connected") &&
-        failedSourcesByKind.gmail?.length
-      ) {
+      if (gmailConnector.status === "failed") {
         return "refresh_issue"
       }
 
@@ -551,20 +552,14 @@ export function SourceSetupPanel({
     }
 
     if (connector.id === "canvas") {
-      if (
-        (canvasConnector.status === "ready" || canvasConnector.status === "connected") &&
-        failedSourcesByKind.canvas?.length
-      ) {
+      if (canvasConnector.status === "failed") {
         return "refresh_issue"
       }
 
       return canvasConnector.status
     }
 
-    if (
-      (notionConnector.status === "ready" || notionConnector.status === "connected") &&
-      failedSourcesByKind.notion?.length
-    ) {
+    if (notionConnector.status === "failed") {
       return "refresh_issue"
     }
 

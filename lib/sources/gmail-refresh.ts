@@ -12,8 +12,17 @@ export const GMAIL_CONTEXT_SEARCH_QUERY = [
   "newer_than:21d",
   "-category:promotions",
   "-category:social",
-  "(to:me OR cc:me OR deadline OR due OR assignment OR syllabus OR exam OR quiz OR project OR meeting OR rescheduled OR RSVP OR confirm OR \"action required\" OR logistics)",
+  "(to:me OR cc:me OR deadline OR due OR assignment OR syllabus OR exam OR quiz OR project OR meeting OR rescheduled OR RSVP OR confirm OR \"action required\" OR logistics OR application OR apply OR submit OR opportunity OR internship OR research OR \"research assistant\" OR fellowship OR scholarship)",
 ].join(" ")
+export const GMAIL_LATEST_CONTEXT_QUERY = [
+  "newer_than:21d",
+  "-category:promotions",
+  "-category:social",
+].join(" ")
+
+const GMAIL_LATEST_MESSAGE_LIMIT = 20
+const GMAIL_KEYWORD_MESSAGE_LIMIT = 30
+const GMAIL_MESSAGE_BODY_CHAR_LIMIT = 1_600
 
 interface GmailListResponse {
   messages?: Array<{ id?: string }>
@@ -35,6 +44,11 @@ interface GmailMessageResponse {
     headers?: Array<{ name?: string; value?: string }>
   }
   error?: { message?: string }
+}
+
+interface GmailMessageSelection {
+  id: string
+  lanes: Set<"latest" | "keyword">
 }
 
 function decodeBase64Url(value: string) {
@@ -89,6 +103,36 @@ async function fetchGmailJson<T>(accessToken: string, url: string): Promise<T> {
   return payload
 }
 
+async function listGmailMessageIds(accessToken: string, query: string, maxResults: number) {
+  const url = `https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=${maxResults}&q=${encodeURIComponent(query)}`
+  const payload = await fetchGmailJson<GmailListResponse>(accessToken, url)
+
+  return (payload.messages || [])
+    .map((message) => message.id)
+    .filter((id): id is string => Boolean(id))
+}
+
+function mergeMessageSelections(input: Array<{ ids: string[]; lane: "latest" | "keyword" }>) {
+  const selections = new Map<string, GmailMessageSelection>()
+
+  for (const group of input) {
+    for (const id of group.ids) {
+      const existing = selections.get(id)
+
+      if (existing) {
+        existing.lanes.add(group.lane)
+      } else {
+        selections.set(id, {
+          id,
+          lanes: new Set([group.lane]),
+        })
+      }
+    }
+  }
+
+  return Array.from(selections.values())
+}
+
 export async function refreshGmailForUser(userId: string): Promise<SourceIntakeResponse> {
   const adminClient = createSupabaseAdminClient()
   const integration = await getStoredGoogleIntegration(userId)
@@ -107,11 +151,15 @@ export async function refreshGmailForUser(userId: string): Promise<SourceIntakeR
     throw new Error("GMAIL_REAUTH_REQUIRED: Google is not connected or needs reauthorization.")
   }
 
-  const listUrl = `https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=20&q=${encodeURIComponent(GMAIL_CONTEXT_SEARCH_QUERY)}`
-  const listPayload = await fetchGmailJson<GmailListResponse>(accessToken, listUrl)
-  const messageIds = (listPayload.messages || [])
-    .map((message) => message.id)
-    .filter((id): id is string => Boolean(id))
+  const [latestMessageIds, keywordMessageIds] = await Promise.all([
+    listGmailMessageIds(accessToken, GMAIL_LATEST_CONTEXT_QUERY, GMAIL_LATEST_MESSAGE_LIMIT),
+    listGmailMessageIds(accessToken, GMAIL_CONTEXT_SEARCH_QUERY, GMAIL_KEYWORD_MESSAGE_LIMIT),
+  ])
+  const selectedMessages = mergeMessageSelections([
+    { ids: latestMessageIds, lane: "latest" },
+    { ids: keywordMessageIds, lane: "keyword" },
+  ])
+  const messageIds = selectedMessages.map((message) => message.id)
 
   if (messageIds.length === 0) {
     const sourceSnapshot = await insertSourceSnapshot({
@@ -120,10 +168,13 @@ export async function refreshGmailForUser(userId: string): Promise<SourceIntakeR
       source: "gmail",
       sourceRef: GMAIL_CONTEXT_SEARCH_QUERY,
       freshness: "fresh",
-      summary: "Gmail context scan completed; no recent direct context messages matched the query.",
+      summary: "Gmail context scan completed; no recent messages matched the latest or keyword queries.",
       payload: {
-        query: GMAIL_CONTEXT_SEARCH_QUERY,
+        latestQuery: GMAIL_LATEST_CONTEXT_QUERY,
+        keywordQuery: GMAIL_CONTEXT_SEARCH_QUERY,
         messageCount: 0,
+        latestMessageCount: 0,
+        keywordMessageCount: 0,
       },
     })
 
@@ -145,14 +196,16 @@ export async function refreshGmailForUser(userId: string): Promise<SourceIntakeR
   )
   const sourceText = messages
     .map((message, index) => {
+      const selection = selectedMessages[index]
       const subject = getHeader(message, "Subject") ?? "(no subject)"
       const from = getHeader(message, "From") ?? "(unknown sender)"
       const date = getHeader(message, "Date") ?? "(unknown date)"
-      const bodyText = collectTextParts(message.payload).join("\n").slice(0, 6000)
+      const bodyText = collectTextParts(message.payload).join("\n").slice(0, GMAIL_MESSAGE_BODY_CHAR_LIMIT)
 
       return [
         `Message ${index + 1}`,
-        `ID: ${message.id ?? messageIds[index]}`,
+        `ID: ${message.id ?? selection?.id ?? messageIds[index]}`,
+        selection ? `Scan lanes: ${Array.from(selection.lanes).join(", ")}` : null,
         `From: ${from}`,
         `Date: ${date}`,
         `Subject: ${subject}`,
@@ -177,9 +230,18 @@ export async function refreshGmailForUser(userId: string): Promise<SourceIntakeR
     freshness: "fresh",
     summary: extraction.summary,
     payload: {
-      query: GMAIL_CONTEXT_SEARCH_QUERY,
+      latestQuery: GMAIL_LATEST_CONTEXT_QUERY,
+      keywordQuery: GMAIL_CONTEXT_SEARCH_QUERY,
       messageCount: messages.length,
+      latestMessageCount: latestMessageIds.length,
+      keywordMessageCount: keywordMessageIds.length,
+      dedupedMessageCount: messageIds.length,
+      messageBodyCharLimit: GMAIL_MESSAGE_BODY_CHAR_LIMIT,
       messageIds,
+      messageLanes: selectedMessages.map((message) => ({
+        id: message.id,
+        lanes: Array.from(message.lanes),
+      })),
       model: extraction.model,
       candidateCount: extraction.candidates.length,
     },
