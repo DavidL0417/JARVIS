@@ -26,7 +26,7 @@
 ## Calendar Source Of Truth
 
 - `schedule_events` is the canonical app event store.
-- Imported Google events are mirrored into `schedule_events`.
+- Imported Google events are mirrored into `schedule_events`. A successful Google Calendar refresh reconciles that mirror against the provider window and removes imported Google rows that disappeared from Google, so deleted classes or unsubscribed calendars do not remain as fixed commitments.
 - JARVIS-created task/focus blocks are persisted first. Syncing task blocks outward to Google Calendar is an approval-backed assistant tool run, not part of normal calendar reads.
 - Google app sign-in and Google source authorization are separate OAuth intents. Plain sign-in uses the provider for identity only; Calendar/Gmail authorization requests the offline source scopes and captures provider tokens from the callback exchange result immediately.
 - Sync responses expose an explicit authorization-required state instead of a generic failure.
