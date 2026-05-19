@@ -417,6 +417,18 @@ function deriveSourceConnectors(input: {
       selectedSourceId: input.canvasIntegration.base_url,
       selectedSourceName: input.canvasIntegration.base_name,
     })
+  } else if (canvasPublicIntegration?.status === "connected") {
+    sourceConnectors.push({
+      id: "canvas",
+      status: canvasSource?.freshness === "failed" ? "failed" : "ready",
+      account: canvasAccount,
+      canRun: true,
+      detail: canvasSource?.freshness === "failed"
+        ? canvasSource.summary
+        : `${canvasAccount ? `${canvasAccount}. ` : ""}Connected through the Canvas Reader extension.`,
+      selectedSourceId: canvasPublicIntegration.selectedSourceId,
+      selectedSourceName: canvasPublicIntegration.selectedSourceName,
+    })
   } else if (input.canvasIntegration?.status === "needs_reauth" || input.canvasIntegration?.status === "error") {
     sourceConnectors.push({
       id: "canvas",

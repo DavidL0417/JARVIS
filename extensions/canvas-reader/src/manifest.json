@@ -1,0 +1,39 @@
+{
+  "manifest_version": 3,
+  "name": "JARVIS Canvas Academic Reader",
+  "description": "Read visible Canvas course pages and import academic context into JARVIS.",
+  "version": "0.2.6",
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "JARVIS Canvas Reader"
+  },
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "http://localhost/*",
+        "http://127.0.0.1/*",
+        "https://mydearestjarvis.vercel.app/*"
+      ],
+      "js": ["app-bridge.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "permissions": ["activeTab", "alarms", "scripting", "storage", "tabs"],
+  "externally_connectable": {
+    "matches": [
+      "http://localhost/*",
+      "http://127.0.0.1/*",
+      "https://mydearestjarvis.vercel.app/*"
+    ]
+  },
+  "host_permissions": [
+    "http://localhost/*",
+    "http://127.0.0.1/*",
+    "https://mydearestjarvis.vercel.app/*",
+    "https://*/*"
+  ]
+}

@@ -179,7 +179,7 @@ export async function insertSourceFile(input: {
   mimeType: string
   storagePath: string
   sizeBytes: number
-  status: "processing" | "processed" | "failed"
+  status: "ready" | "processing" | "processed" | "failed"
   errorMessage?: string | null
 }): Promise<SourceFileSummary> {
   const { data, error } = await input.adminClient

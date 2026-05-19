@@ -15,6 +15,8 @@
 - Backend token reads and writes go through service-role-only RPC wrappers so `app_private` does not need to be exposed as a Supabase API schema.
 - Public integration rows may expose connection metadata only: provider, account email, status, selected calendar, and sync timestamps.
 - Canvas personal access tokens are a pilot-only integration secret. Store them only in `app_private.integration_tokens`; public integration rows may store the Canvas base URL/host and account metadata for readiness display.
+- Canvas extension pairing codes and extension bearer tokens are private credentials. Store only hashes in `app_private.canvas_extension_pairing_codes` and `app_private.canvas_extension_tokens`; never expose them through public tables.
+- Canvas extension control-plane rows are public metadata with RLS, not credentials. `canvas_extension_sessions`, `canvas_extension_commands`, and `canvas_extension_nodes` may store connection status, command state, URLs, titles, selection state, and compact evidence only.
 
 ## Production V1 Tables
 
@@ -41,6 +43,7 @@
 - Gmail authorization and Gmail API availability are separate readiness checks. If the Cloud project has not enabled `gmail.googleapis.com`, record a failed Gmail source snapshot and do not treat it as a user reauthorization problem.
 - Notion source intake uses a public OAuth connection, stores tokens in `app_private.integration_tokens`, and requires a user-selected authoritative tasks database on the integration row before importing. Imports query that database directly instead of broad workspace search.
 - Canvas source intake uses a user-generated access token for the one-client pilot. It imports bounded planner items into auto-approved source candidates and linked tasks using Canvas plannable IDs for dedupe. Completing a Canvas-backed task may only write a planner override with `marked_complete`; it must not submit coursework, alter grades, upload files, or post comments.
+- Canvas Academic Reader is an internal Chrome-extension fallback for schools that disable personal access tokens. The extension is a minimal browser bridge: it heartbeats, polls backend commands, navigates read-only Canvas pages, and submits selected snapshots or file metadata. JARVIS owns command selection, nested node expansion, stop/resume, and imports. Root discovery starts from Canvas `/courses` and records actual All Courses enrollment rows before any per-course expansion; course expansion stores Canvas course-navigation tabs as children of the selected course, then tab expansion stores page/file/module/assignment items under that tab.
 - `daily_plans` records the current command-deck plan: horizon, summary, now item, next items, risk items, source coverage, tradeoffs, model, and command.
 - Planner-created task blocks may reference `daily_plans.id` through `tasks.plan_id` and `schedule_events.plan_id`.
 - Daily planning performs a forced pre-plan refresh for every connected/runnable source. Missing or never-configured sources are coverage gaps; connected/runnable source failures are hard planning failures.

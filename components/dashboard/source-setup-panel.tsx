@@ -8,6 +8,7 @@ import {
   CalendarDays,
   CheckCircle2,
   Database,
+  Download,
   FileUp,
   Github,
   GraduationCap,
@@ -910,6 +911,14 @@ export function SourceSetupPanel({
               label="Import Canvas"
               onClick={handleCanvasImport}
               disabled={busy || !canvasConnector.canRun}
+            />
+            <ActionButton
+              icon={Download}
+              label="Reader extension"
+              onClick={() => {
+                window.location.href = "/dashboard/canvas-extension"
+              }}
+              disabled={busy}
             />
           </div>
           <FieldGroup className="gap-3">

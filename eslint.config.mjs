@@ -5,6 +5,7 @@ export default tseslint.config(
   {
     ignores: [
       ".next/**",
+      ".claude/**",
       "node_modules/**",
       "pnpm-lock.yaml",
       "tsconfig.tsbuildinfo",
@@ -45,6 +46,32 @@ export default tseslint.config(
         },
       ],
       "no-unused-vars": "off",
+    },
+  },
+  {
+    files: ["extensions/canvas-reader/src/**/*.js"],
+    languageOptions: {
+      globals: {
+        chrome: "readonly",
+        document: "readonly",
+        Element: "readonly",
+        fetch: "readonly",
+        FormData: "readonly",
+        location: "readonly",
+        clearInterval: "readonly",
+        setTimeout: "readonly",
+        setInterval: "readonly",
+        URL: "readonly",
+        window: "readonly",
+      },
+    },
+  },
+  {
+    files: ["scripts/**/*.mjs"],
+    languageOptions: {
+      globals: {
+        console: "readonly",
+      },
     },
   },
 )
