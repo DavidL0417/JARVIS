@@ -17,10 +17,10 @@ export function LandingFooter() {
 
         <div className="flex flex-col gap-1.5 text-[12.5px] text-muted-foreground md:items-end">
           <a
-            href="mailto:hi@mydearestjarvis.com"
+            href="mailto:davidxizhenliu@gmail.com"
             className="text-foreground transition-opacity hover:opacity-70"
           >
-            hi@mydearestjarvis.com
+            davidxizhenliu@gmail.com
           </a>
           <span className="num uppercase tracking-[0.12em]">© 2026 Jarvis · built solo by David Liu</span>
         </div>

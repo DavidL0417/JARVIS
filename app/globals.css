@@ -257,20 +257,15 @@
   }
 }
 
-/* ---------------- Section scenes ---------------- */
+/* ---------------- Section scenes (deterministic source tracks) ---------------- */
 .section-scenes {
-  --scene-p: 0;
   --scene-progress: 0;
   --system-opacity: 0;
   --overall-p: 0;
-  --stream-draw: 0;
-  --gather-p: 0;
-  --plan-draw: 0;
-  --plan-lock: 0;
-  --scatter-p: 0.2;
-  --filter-p: 0;
-  --final-p: 0;
-  --final-dim: 0;
+  --source-visible: 0;
+  --step-visible: 0;
+  --center-visible: 0;
+  --core-visible: 0;
   contain: paint;
   opacity: var(--system-opacity);
   transition: opacity 180ms cubic-bezier(0.22, 1, 0.36, 1);
@@ -279,11 +274,11 @@
 .source-plan-aura {
   position: absolute;
   inset: -18%;
-  opacity: calc(0.42 + var(--plan-lock) * 0.22);
+  opacity: calc(0.34 + var(--core-visible) * 0.2);
   background:
     radial-gradient(48rem 32rem at 30% 16%, oklch(0.78 0.13 46 / 0.18), transparent 64%),
-    radial-gradient(42rem 34rem at 78% 40%, oklch(0.70 0.09 185 / 0.12), transparent 68%),
-    radial-gradient(38rem 28rem at 48% 76%, oklch(0.68 0.08 250 / 0.08), transparent 70%);
+    radial-gradient(42rem 34rem at 78% 40%, oklch(0.70 0.09 185 / 0.14), transparent 68%),
+    radial-gradient(38rem 28rem at 48% 76%, oklch(0.68 0.08 250 / 0.10), transparent 70%);
   filter: blur(18px);
   transform: translate3d(0, calc(var(--overall-p) * -26px), 0);
   will-change: transform, opacity;
@@ -299,166 +294,146 @@
 }
 
 .source-plan-grid line {
-  stroke: oklch(0.40 0.014 45 / 0.34);
-  stroke-width: 0.45;
+  stroke: oklch(0.40 0.014 45 / 0.22);
+  stroke-width: 0.4;
   vector-effect: non-scaling-stroke;
-  opacity: calc(0.16 + var(--scatter-p) * 0.22);
+  opacity: calc(0.14 + var(--step-visible) * 0.08 + var(--center-visible) * 0.08);
 }
 
-.source-streams {
-  opacity: calc(0.5 + var(--stream-draw) * 0.48 - var(--plan-lock) * 0.04);
-  transition: opacity 520ms cubic-bezier(0.22, 1, 0.36, 1);
+.traveler {
+  opacity: var(--traveler-visible);
 }
 
-.source-channel {
-  opacity: 1;
-  stroke-dasharray: 1;
-  stroke-dashoffset: calc(1 - var(--stream-draw));
+.traveler-trail {
+  fill: none;
   vector-effect: non-scaling-stroke;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.source-tracks-layer {
+  opacity: calc(var(--source-visible) * 0.78);
+}
+
+.source-trail-haze {
+  opacity: 0.05;
+}
+
+.source-trail-glow {
+  opacity: 0.22;
+}
+
+.source-trail-core {
+  opacity: 0.58;
+}
+
+.traveler-tip {
+  fill: none;
+  vector-effect: non-scaling-stroke;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.78;
+}
+
+.step-lines-layer {
+  opacity: var(--step-visible);
   mix-blend-mode: screen;
 }
 
-.source-channel.source-a,
-.source-channel.source-d {
-  stroke-width: 1.55;
+.step-trail-haze {
+  opacity: 0.04;
 }
 
-.source-nodes {
-  opacity: calc(0.28 + var(--scatter-p) * 0.66 - var(--plan-lock) * 0.06);
+.step-trail-glow {
+  opacity: 0.14;
 }
 
-.source-node {
-  opacity: 1;
-  transform-box: fill-box;
-  transform-origin: center;
-  fill: oklch(0.88 0.09 60 / 0.88);
-  filter: drop-shadow(0 0 7px oklch(0.74 0.14 42 / 0.45));
+.step-trail-core {
+  opacity: 0.34;
 }
 
-.node-b,
-.node-f {
-  fill: var(--signal-teal);
+.step-tip {
+  opacity: 0.58;
 }
 
-.node-c,
-.node-g {
-  fill: var(--signal-blue);
+.center-tracks-layer {
+  opacity: var(--center-visible);
+  mix-blend-mode: screen;
 }
 
-.node-d,
-.node-h {
-  fill: var(--signal-green);
+.center-trail-haze {
+  opacity: 0.05;
 }
 
-.signal-packet {
-  opacity: calc(0.28 + var(--stream-draw) * 0.58);
-  transform-box: fill-box;
-  transform-origin: center;
-  filter: drop-shadow(0 0 8px currentColor);
-  animation: signal-packet-breathe 2.8s cubic-bezier(0.22, 1, 0.36, 1) infinite;
-  will-change: opacity;
+.center-trail-glow {
+  opacity: 0.17;
+}
+
+.center-trail-core {
+  opacity: 0.4;
+}
+
+.center-tip {
+  opacity: 0.68;
+}
+
+@media (max-width: 640px) {
+  .source-tracks-layer {
+    opacity: calc(var(--source-visible) * 0.5);
+  }
+
+  .step-lines-layer {
+    opacity: calc(var(--step-visible) * 0.5);
+  }
+
+  .center-tracks-layer {
+    opacity: calc(var(--center-visible) * 0.46);
+  }
 }
 
 .convergence-core {
-  opacity: calc(0.18 + var(--gather-p) * 0.82);
+  opacity: calc(var(--core-visible) * 0.92);
+  transition: opacity 360ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-.core-ring {
-  fill: none;
-  stroke: oklch(0.84 0.12 50 / 0.72);
-  stroke-width: 0.9;
-  stroke-dasharray: 1;
-  stroke-dashoffset: calc(1 - var(--gather-p));
-  vector-effect: non-scaling-stroke;
+.core-aura {
+  opacity: 0.88;
 }
 
-.core-ring-b {
-  stroke: oklch(0.70 0.09 185 / 0.62);
-  stroke-dashoffset: calc(1 - var(--plan-draw));
-}
-
-.core-crosshair {
-  fill: none;
-  stroke: oklch(0.78 0.13 46 / 0.44);
-  stroke-width: 0.65;
-  vector-effect: non-scaling-stroke;
-  opacity: calc(0.18 + var(--plan-draw) * 0.56);
+.plan-node-halo {
+  fill: rgb(255 185 130 / 0.22);
+  filter: blur(3px);
+  mix-blend-mode: screen;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: plan-node-halo-pulse 3s cubic-bezier(0.42, 0, 0.58, 1) infinite;
 }
 
 .plan-node {
   fill: oklch(0.92 0.10 55 / 0.95);
-  filter: drop-shadow(0 0 12px oklch(0.78 0.13 46 / 0.68));
-}
-
-.plan-geometry {
-  opacity: calc(0.14 + var(--plan-draw) * 0.86);
-}
-
-.plan-rail {
-  stroke: url(#schedule-rail-gradient);
-  stroke-width: 2;
-  stroke-dasharray: 1;
-  stroke-dashoffset: calc(1 - var(--plan-draw));
-  vector-effect: non-scaling-stroke;
-}
-
-.plan-tick {
-  stroke: oklch(0.56 0.018 55 / 0.42);
-  stroke-width: 0.65;
-  stroke-dasharray: 1;
-  stroke-dashoffset: clamp(0, calc(1 - var(--plan-draw) * 1.7 + var(--tick-index) * 0.12), 1);
-  vector-effect: non-scaling-stroke;
-}
-
-.plan-block {
-  fill-opacity: clamp(0.04, calc(var(--plan-lock) * 0.18 + 0.05), 0.24);
-  stroke-opacity: clamp(0.08, calc(var(--plan-draw) * 0.78 - var(--block-delay)), 0.78);
-  stroke-width: 1;
-  vector-effect: non-scaling-stroke;
-}
-
-.filter-marks {
-  opacity: var(--filter-p);
-}
-
-.filter-slash {
-  fill: none;
-  stroke: oklch(0.82 0.13 48 / 0.82);
-  stroke-width: 1.4;
-  stroke-dasharray: 1;
-  stroke-dashoffset: calc(1 - var(--filter-p));
-  vector-effect: non-scaling-stroke;
-}
-
-.final-resolve {
-  opacity: var(--final-p);
-}
-
-.final-horizon {
-  fill: none;
-  stroke: oklch(0.84 0.13 50 / 0.86);
-  stroke-width: 1;
-  stroke-dasharray: 1;
-  stroke-dashoffset: calc(1 - var(--final-p));
-  vector-effect: non-scaling-stroke;
-  filter: drop-shadow(0 0 8px oklch(0.74 0.14 42 / 0.58));
-}
-
-.final-pulse {
-  fill: oklch(0.92 0.10 55 / 0.9);
-  opacity: calc(0.2 + var(--final-p) * 0.8);
+  filter:
+    drop-shadow(0 0 12px oklch(0.78 0.13 46 / 0.72))
+    drop-shadow(0 0 24px oklch(0.74 0.14 42 / 0.42));
   transform-box: fill-box;
   transform-origin: center;
-  filter: drop-shadow(0 0 14px oklch(0.74 0.14 42 / 0.7));
-  animation: final-pulse 2.2s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+  animation: plan-node-pulse 2.8s cubic-bezier(0.42, 0, 0.58, 1) infinite;
 }
 
-.source-plan-final-dim {
-  position: absolute;
-  inset: 0;
-  opacity: calc(var(--final-dim) * 0.86);
-  background: oklch(0.05 0.005 32);
-  will-change: opacity;
+@keyframes plan-node-pulse {
+  0%, 100% { transform: scale(0.94); opacity: 0.86; }
+  50% { transform: scale(1.22); opacity: 1; }
+}
+
+@keyframes plan-node-halo-pulse {
+  0%, 100% { transform: scale(0.78); opacity: 0.24; }
+  50% { transform: scale(1.3); opacity: 0.42; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .plan-node,
+  .plan-node-halo {
+    animation: none;
+  }
 }
 
 .source-plan-readability {
@@ -470,32 +445,84 @@
     linear-gradient(180deg, oklch(0.135 0.012 35 / 0.46), transparent 36%, transparent 72%, oklch(0.135 0.012 35 / 0.55));
 }
 
-.section-scenes[data-active-scene="problem"] .source-streams {
-  opacity: 0.92;
-}
-
-.section-scenes[data-active-scene="how"] .convergence-core,
-.section-scenes[data-active-scene="cta"] .convergence-core {
-  opacity: 0.9;
-}
-
-.section-scenes[data-active-scene="not"] .source-streams {
-  opacity: 0.42;
-}
-
-@keyframes signal-packet-breathe {
-  0%, 100% { opacity: 0.28; }
-  50% { opacity: 0.92; }
-}
-
-@keyframes final-pulse {
-  0%, 100% { transform: scale(0.78); opacity: calc(0.2 + var(--final-p) * 0.5); }
-  50% { transform: scale(1.18); opacity: calc(0.36 + var(--final-p) * 0.64); }
+.landing-final-phrase {
+  position: relative;
+  z-index: 25;
+  text-shadow: 0 0 48px oklch(0.74 0.14 42 / 0.12);
 }
 
 /* ---------------- Hero ambient field ---------------- */
 .landing-hero {
   isolation: isolate;
+}
+
+/* Hero stagger layout */
+.hero-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: center;
+  gap: 1.75rem;
+}
+
+.hero-copy-block {
+  width: min(100%, 36rem);
+}
+
+.hero-preview-stage {
+  width: 100%;
+  margin-top: clamp(0.25rem, 1.5vh, 1rem);
+}
+
+.hero-preview-frame {
+  width: 100%;
+  transform: rotate(-0.65deg);
+  transform-origin: left center;
+}
+
+@media (min-width: 1100px) {
+  .hero-layout {
+    grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.15fr);
+    column-gap: clamp(36px, 4vw, 72px);
+    row-gap: 0;
+    align-items: start;
+  }
+
+  .hero-copy-block {
+    width: 100%;
+    max-width: none;
+    transform: translateY(clamp(-176px, -15vh, -116px));
+  }
+
+  .hero-preview-stage {
+    margin-top: clamp(152px, 18vh, 212px);
+  }
+
+  .hero-preview-frame {
+    transform: rotate(-0.5deg);
+    transform-origin: center center;
+  }
+
+  .hero-preview-frame::after {
+    content: '';
+    position: absolute;
+    inset: auto 0 -1px 0;
+    height: 80px;
+    background: linear-gradient(to top, oklch(0.135 0.012 35) 10%, transparent);
+    pointer-events: none;
+    z-index: 2;
+  }
+}
+
+@media (max-width: 860px) {
+  .hero-copy-block {
+    margin-left: 0;
+  }
+}
+
+@media (max-width: 560px) {
+  .hero-preview-stage {
+    display: none;
+  }
 }
 
 .hero-ambient-field {

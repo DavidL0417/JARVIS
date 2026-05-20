@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useRef, type CSSProperties } from "react"
+import { useMemo, type CSSProperties } from "react"
 
 import type { LandingMotionState } from "@/components/landing/landing-motion"
 
@@ -8,144 +8,395 @@ interface SectionScenesProps {
   motion: LandingMotionState
 }
 
-const sourceChannels = [
-  {
-    id: "source-a",
-    d: "M -80 170 C 140 110 260 118 400 225 S 610 390 760 356",
-    color: "var(--signal-copper)",
-  },
-  {
-    id: "source-b",
-    d: "M 1260 150 C 1060 118 940 170 805 282 S 610 390 500 332",
-    color: "var(--signal-teal)",
-  },
-  {
-    id: "source-c",
-    d: "M 80 760 C 250 600 360 570 505 565 S 670 424 760 356",
-    color: "var(--signal-blue)",
-  },
-  {
-    id: "source-d",
-    d: "M 1180 720 C 1040 608 970 580 850 544 S 680 430 500 332",
-    color: "var(--signal-green)",
-  },
-] as const
+const CENTER_X = 620
+const CENTER_Y = 374
 
-const packetPositions = [
-  { cx: 86, cy: 176, delay: "0ms", tone: "var(--signal-copper)" },
-  { cx: 1056, cy: 152, delay: "360ms", tone: "var(--signal-teal)" },
-  { cx: 180, cy: 640, delay: "720ms", tone: "var(--signal-blue)" },
-  { cx: 960, cy: 618, delay: "1080ms", tone: "var(--signal-green)" },
-  { cx: 418, cy: 256, delay: "1440ms", tone: "var(--signal-copper)" },
-  { cx: 808, cy: 458, delay: "1800ms", tone: "var(--signal-teal)" },
-] as const
+type Track = {
+  id: string
+  tone: string
+  width: number
+}
 
-const planBlocks = [
-  { y: 144, h: 54, tone: "var(--signal-teal)", delay: 0 },
-  { y: 218, h: 92, tone: "var(--signal-copper)", delay: 0.13 },
-  { y: 338, h: 44, tone: "var(--signal-blue)", delay: 0.25 },
-  { y: 422, h: 74, tone: "var(--signal-green)", delay: 0.37 },
-  { y: 526, h: 58, tone: "var(--signal-copper)", delay: 0.49 },
-] as const
+type Point = {
+  x: number
+  y: number
+}
+
+type TravelerTrack = Track & {
+  lane: 1 | 2 | 3
+  start: Point
+  c1: Point
+  c2: Point
+  end: Point
+  delay: number
+}
+
+const SOURCE_TRAVELERS: TravelerTrack[] = [
+  {
+    id: "source-gmail-1",
+    lane: 1,
+    tone: "var(--signal-copper)",
+    width: 1.65,
+    start: { x: -80, y: 120 },
+    c1: { x: 258, y: 74 },
+    c2: { x: 720, y: 250 },
+    end: { x: 1034, y: 304 },
+    delay: 0,
+  },
+  {
+    id: "source-canvas-1",
+    lane: 1,
+    tone: "var(--signal-teal)",
+    width: 1.35,
+    start: { x: 1280, y: 100 },
+    c1: { x: 1008, y: 122 },
+    c2: { x: 868, y: 250 },
+    end: { x: 760, y: 286 },
+    delay: 0.08,
+  },
+  {
+    id: "source-notion-1",
+    lane: 1,
+    tone: "var(--signal-green)",
+    width: 1.2,
+    start: { x: -128, y: 232 },
+    c1: { x: 120, y: 210 },
+    c2: { x: 290, y: 304 },
+    end: { x: 188, y: 292 },
+    delay: 0.16,
+  },
+  {
+    id: "source-calendar-1",
+    lane: 1,
+    tone: "var(--signal-blue)",
+    width: 1.28,
+    start: { x: 1300, y: 250 },
+    c1: { x: 1076, y: 194 },
+    c2: { x: 794, y: 318 },
+    end: { x: 620, y: 286 },
+    delay: 0.24,
+  },
+  {
+    id: "source-gmail-2",
+    lane: 2,
+    tone: "var(--signal-copper)",
+    width: 1.55,
+    start: { x: 1292, y: 346 },
+    c1: { x: 1048, y: 302 },
+    c2: { x: 882, y: 432 },
+    end: { x: 1042, y: 414 },
+    delay: 0.03,
+  },
+  {
+    id: "source-calendar-2",
+    lane: 2,
+    tone: "var(--signal-blue)",
+    width: 1.3,
+    start: { x: -92, y: 382 },
+    c1: { x: 268, y: 320 },
+    c2: { x: 470, y: 438 },
+    end: { x: 638, y: 388 },
+    delay: 0.11,
+  },
+  {
+    id: "source-canvas-2",
+    lane: 2,
+    tone: "var(--signal-teal)",
+    width: 1.25,
+    start: { x: -124, y: 520 },
+    c1: { x: 190, y: 454 },
+    c2: { x: 390, y: 436 },
+    end: { x: 178, y: 398 },
+    delay: 0.2,
+  },
+  {
+    id: "source-notion-2",
+    lane: 2,
+    tone: "var(--signal-green)",
+    width: 1.18,
+    start: { x: 1322, y: 540 },
+    c1: { x: 1128, y: 454 },
+    c2: { x: 884, y: 392 },
+    end: { x: 884, y: 352 },
+    delay: 0.28,
+  },
+  {
+    id: "source-notion-3",
+    lane: 3,
+    tone: "var(--signal-green)",
+    width: 1.25,
+    start: { x: 1290, y: 612 },
+    c1: { x: 990, y: 560 },
+    c2: { x: 800, y: 552 },
+    end: { x: 1056, y: 498 },
+    delay: 0.06,
+  },
+  {
+    id: "source-gmail-3",
+    lane: 3,
+    tone: "var(--signal-copper)",
+    width: 1.6,
+    start: { x: -100, y: 656 },
+    c1: { x: 260, y: 592 },
+    c2: { x: 488, y: 694 },
+    end: { x: 664, y: 500 },
+    delay: 0.14,
+  },
+  {
+    id: "source-calendar-3",
+    lane: 3,
+    tone: "var(--signal-blue)",
+    width: 1.35,
+    start: { x: -140, y: 724 },
+    c1: { x: 170, y: 734 },
+    c2: { x: 314, y: 538 },
+    end: { x: 166, y: 506 },
+    delay: 0.22,
+  },
+  {
+    id: "source-canvas-3",
+    lane: 3,
+    tone: "var(--signal-teal)",
+    width: 1.15,
+    start: { x: 1310, y: 720 },
+    c1: { x: 1080, y: 748 },
+    c2: { x: 852, y: 578 },
+    end: { x: 902, y: 552 },
+    delay: 0.3,
+  },
+]
+
+const STEP_TRACKS: TravelerTrack[] = [
+  {
+    id: "step-line-1",
+    lane: 1,
+    tone: "var(--signal-copper)",
+    width: 1.22,
+    start: { x: 188, y: 292 },
+    c1: { x: 336, y: 252 },
+    c2: { x: 478, y: 318 },
+    end: { x: 1034, y: 304 },
+    delay: 0,
+  },
+  {
+    id: "step-line-2",
+    lane: 2,
+    tone: "var(--signal-teal)",
+    width: 1.08,
+    start: { x: 178, y: 398 },
+    c1: { x: 342, y: 350 },
+    c2: { x: 500, y: 430 },
+    end: { x: 1042, y: 414 },
+    delay: 0.12,
+  },
+  {
+    id: "step-line-3",
+    lane: 3,
+    tone: "var(--signal-blue)",
+    width: 1.14,
+    start: { x: 166, y: 506 },
+    c1: { x: 328, y: 550 },
+    c2: { x: 512, y: 468 },
+    end: { x: 1056, y: 498 },
+    delay: 0.24,
+  },
+]
+
+const CENTER_TRACKS: TravelerTrack[] = SOURCE_TRAVELERS.map((track, index) => {
+  const side = track.end.x < CENTER_X ? -1 : 1
+  const lanePull = track.lane === 1 ? -34 : track.lane === 3 ? 34 : 0
+
+  return {
+    id: `center-${track.id}`,
+    lane: track.lane,
+    tone: track.tone,
+    width: track.width * 0.88,
+    start: track.end,
+    c1: {
+      x: track.end.x - side * (92 + (index % 3) * 22),
+      y: track.end.y + lanePull,
+    },
+    c2: {
+      x: CENTER_X + side * (84 + (index % 4) * 16),
+      y: CENTER_Y + lanePull * 0.45,
+    },
+    end: { x: CENTER_X, y: CENTER_Y },
+    delay: (index % 6) * 0.035,
+  }
+})
 
 function clamp01(value: number) {
   return Math.max(0, Math.min(1, value))
 }
 
+function smoothstep(value: number) {
+  return value * value * (3 - 2 * value)
+}
+
+function pathFor(track: TravelerTrack) {
+  return `M ${track.start.x} ${track.start.y} C ${track.c1.x} ${track.c1.y}, ${track.c2.x} ${track.c2.y}, ${track.end.x} ${track.end.y}`
+}
+
+function dashWindow(progress: number, length: number) {
+  const end = clamp01(progress)
+  const start = clamp01(end - length)
+  const visible = Math.max(0, end - start)
+
+  return {
+    dasharray: `${Math.max(visible, 0.0001).toFixed(4)} 1`,
+    dashoffset: (1 - end).toFixed(4),
+  }
+}
+
+function travelerVisibility(progress: number) {
+  const enters = smoothstep(clamp01(progress / 0.08))
+  const exits = 1 - smoothstep(clamp01((progress - 0.94) / 0.06))
+  return enters * exits
+}
+
+function Traveler({
+  track,
+  progress,
+  trailLength,
+  prefix,
+}: {
+  track: TravelerTrack
+  progress: number
+  trailLength: number
+  prefix: "source" | "step" | "center"
+}) {
+  const safeProgress = clamp01(progress)
+  const travelerVisible = travelerVisibility(safeProgress)
+  const dash = dashWindow(progress, trailLength)
+  const tip = dashWindow(progress, Math.min(0.018, trailLength * 0.22))
+  const path = pathFor(track)
+
+  return (
+    <g className={`${prefix}-traveler traveler`} style={{ ["--traveler-visible" as string]: travelerVisible.toFixed(4) } as CSSProperties}>
+      <path
+        className={`traveler-trail ${prefix}-trail ${prefix}-trail-haze`}
+        d={path}
+        pathLength={1}
+        stroke={track.tone}
+        strokeDasharray={dash.dasharray}
+        strokeDashoffset={dash.dashoffset}
+        strokeWidth={(track.width * 3.1).toFixed(2)}
+      />
+      <path
+        className={`traveler-trail ${prefix}-trail ${prefix}-trail-glow`}
+        d={path}
+        pathLength={1}
+        stroke={track.tone}
+        strokeDasharray={dash.dasharray}
+        strokeDashoffset={dash.dashoffset}
+        strokeWidth={(track.width * 1.65).toFixed(2)}
+      />
+      <path
+        className={`traveler-trail ${prefix}-trail ${prefix}-trail-core`}
+        d={path}
+        pathLength={1}
+        stroke={track.tone}
+        strokeDasharray={dash.dasharray}
+        strokeDashoffset={dash.dashoffset}
+        strokeWidth={track.width}
+      />
+      <path
+        className={`traveler-tip ${prefix}-tip`}
+        d={path}
+        pathLength={1}
+        stroke={track.tone}
+        strokeDasharray={tip.dasharray}
+        strokeDashoffset={tip.dashoffset}
+        strokeWidth={(track.width * 1.95).toFixed(2)}
+      />
+    </g>
+  )
+}
+
+function SourceTracksLayer({ progress }: { progress: number }) {
+  return (
+    <g className="source-tracks-layer">
+      {SOURCE_TRAVELERS.map((track) => (
+        <Traveler
+          key={track.id}
+          prefix="source"
+          progress={smoothstep(clamp01((progress - 0.25 - track.delay) / 2.35))}
+          track={track}
+          trailLength={0.11}
+        />
+      ))}
+    </g>
+  )
+}
+
+function StepLinesLayer({ progress }: { progress: number }) {
+  return (
+    <g className="step-lines-layer">
+      {STEP_TRACKS.map((track) => (
+        <Traveler
+          key={track.id}
+          prefix="step"
+          progress={smoothstep(clamp01((progress - 2.04 - track.delay) / 0.82))}
+          track={track}
+          trailLength={0.24}
+        />
+      ))}
+    </g>
+  )
+}
+
+function CenterTracksLayer({ progress }: { progress: number }) {
+  return (
+    <g className="center-tracks-layer">
+      {CENTER_TRACKS.map((track) => (
+        <Traveler
+          key={track.id}
+          prefix="center"
+          progress={smoothstep(clamp01((progress - 2.9 - track.delay) / 1.08))}
+          track={track}
+          trailLength={0.2}
+        />
+      ))}
+    </g>
+  )
+}
+
 export function SectionScenes({ motion }: SectionScenesProps) {
-  const rootRef = useRef<HTMLDivElement | null>(null)
   const stage = useMemo(() => {
     const sp = motion.sceneProgress
-    const systemOpacity = clamp01((sp - 0.18) * 1.45)
-    const streamDraw = clamp01((sp - 0.45) * 0.48)
-    const gather = clamp01((sp - 1.55) * 0.42)
-    const planDraw = clamp01((sp - 2.55) * 0.5)
-    const finish = clamp01((motion.overallProgress - 0.78) / 0.22)
-    const finalAct = clamp01(Math.max((sp - 4.15) * 0.95, finish))
-    const planLock = clamp01((sp - 3.4) * 0.55 + finalAct * 0.12)
-    const scatter = clamp01(0.22 + (1 - Math.abs(sp - 1.45)) * 0.34 - planLock * 0.08)
-    const filterOut = clamp01((sp - 3.7) * 0.72 + finalAct * 0.1)
-    const finalDim = clamp01(Math.max((sp - 4.35) * 1.55, (finish - 0.4) * 2.0))
+    const systemOpacity = clamp01((sp - 0.02) * 1.6)
+    const sourceVisible = smoothstep(clamp01((sp - 0.12) / 0.45)) * (1 - smoothstep(clamp01((sp - 3.18) / 0.54)))
+    const stepVisible = smoothstep(clamp01((sp - 1.98) / 0.36)) * (1 - smoothstep(clamp01((sp - 3.7) / 0.44)))
+    const centerVisible = smoothstep(clamp01((sp - 2.78) / 0.42)) * (1 - smoothstep(clamp01((sp - 4.08) / 0.42)))
+    const coreVisible = smoothstep(clamp01((sp - 3.46) / 0.4)) * (1 - smoothstep(clamp01((sp - 4.02) / 0.34)))
 
     return {
-      gather,
-      "--scene-p": sp.toFixed(4),
       "--scene-progress": sp.toFixed(4),
       "--system-opacity": systemOpacity.toFixed(4),
       "--overall-p": motion.overallProgress.toFixed(4),
-      "--stream-draw": streamDraw.toFixed(4),
-      "--gather-p": gather.toFixed(4),
-      "--plan-draw": planDraw.toFixed(4),
-      "--plan-lock": planLock.toFixed(4),
-      "--scatter-p": scatter.toFixed(4),
-      "--filter-p": filterOut.toFixed(4),
-      "--final-p": finalAct.toFixed(4),
-      "--final-dim": finalDim.toFixed(4),
-    } as CSSProperties & { gather: number }
-  }, [motion.sceneProgress, motion.overallProgress, motion.reducedMotion])
-
-  const { gather, ...stageStyle } = stage
-
-  useEffect(() => {
-    const root = rootRef.current
-    if (!root || motion.reducedMotion) return
-
-    let cancelled = false
-    void (async () => {
-      const { animate, stagger, eases } = await import("animejs")
-      if (cancelled) return
-
-      animate(root.querySelectorAll(".source-channel"), {
-        opacity: [0, 1],
-        translateY: [16, 0],
-        duration: 820,
-        delay: stagger(95, { start: 120 }),
-        ease: eases.outExpo,
-      })
-      animate(root.querySelectorAll(".source-node, .plan-node"), {
-        opacity: [0, 1],
-        scale: [0.72, 1],
-        duration: 680,
-        delay: stagger(55, { start: 260 }),
-        ease: eases.outQuart,
-      })
-    })()
-
-    return () => {
-      cancelled = true
-    }
-  }, [motion.reducedMotion])
+      "--source-visible": sourceVisible.toFixed(4),
+      "--step-visible": stepVisible.toFixed(4),
+      "--center-visible": centerVisible.toFixed(4),
+      "--core-visible": coreVisible.toFixed(4),
+    } as CSSProperties
+  }, [motion.sceneProgress, motion.overallProgress])
 
   return (
     <div
-      ref={rootRef}
       aria-hidden="true"
       className="section-scenes pointer-events-none fixed inset-0 z-[1] overflow-hidden"
       data-active-scene={motion.activeId}
       data-reduced-motion={motion.reducedMotion ? "true" : "false"}
-      style={stageStyle}
+      style={stage}
     >
       <div className="source-plan-aura" />
       <svg className="source-plan-svg" viewBox="0 0 1200 800" preserveAspectRatio="xMidYMid slice">
         <defs>
-          <linearGradient id="schedule-rail-gradient" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0" stopColor="oklch(0.74 0.14 42)" stopOpacity="0" />
-            <stop offset="0.18" stopColor="oklch(0.74 0.14 42)" stopOpacity="0.72" />
-            <stop offset="0.72" stopColor="oklch(0.70 0.09 185)" stopOpacity="0.62" />
-            <stop offset="1" stopColor="oklch(0.74 0.14 42)" stopOpacity="0" />
-          </linearGradient>
           <radialGradient id="source-core-gradient">
-            <stop offset="0" stopColor="oklch(0.90 0.09 56)" stopOpacity="0.92" />
-            <stop offset="0.36" stopColor="oklch(0.74 0.14 42)" stopOpacity="0.34" />
+            <stop offset="0" stopColor="oklch(0.92 0.10 56)" stopOpacity="0.85" />
+            <stop offset="0.34" stopColor="oklch(0.78 0.14 46)" stopOpacity="0.34" />
             <stop offset="1" stopColor="oklch(0.74 0.14 42)" stopOpacity="0" />
           </radialGradient>
-          <filter id="signal-glow" x="-60%" y="-60%" width="220%" height="220%">
-            <feGaussianBlur stdDeviation="4" result="blur" />
-            <feMerge>
-              <feMergeNode in="blur" />
-              <feMergeNode in="SourceGraphic" />
-            </feMerge>
-          </filter>
         </defs>
 
         <g className="source-plan-grid">
@@ -157,99 +408,16 @@ export function SectionScenes({ motion }: SectionScenesProps) {
           ))}
         </g>
 
-        <g className="source-streams" filter="url(#signal-glow)">
-          {sourceChannels.map((channel, index) => (
-            <path
-              key={channel.id}
-              className={`source-channel ${channel.id}`}
-              d={channel.d}
-              pathLength={1}
-              fill="none"
-              stroke={channel.color}
-              strokeWidth={index === 0 ? 1.5 : 1.2}
-              style={{ ["--channel-index" as string]: index }}
-            />
-          ))}
-        </g>
+        <SourceTracksLayer progress={motion.sceneProgress} />
+        <StepLinesLayer progress={motion.sceneProgress} />
+        <CenterTracksLayer progress={motion.sceneProgress} />
 
-        <g className="source-nodes">
-          <circle className="source-node node-a" cx="150" cy="168" r="4.5" />
-          <circle className="source-node node-b" cx="1030" cy="156" r="4.5" />
-          <circle className="source-node node-c" cx="170" cy="690" r="4.5" />
-          <circle className="source-node node-d" cx="1015" cy="654" r="4.5" />
-          <circle className="source-node node-e" cx="402" cy="224" r="3" />
-          <circle className="source-node node-f" cx="804" cy="282" r="3" />
-          <circle className="source-node node-g" cx="506" cy="566" r="3" />
-          <circle className="source-node node-h" cx="850" cy="544" r="3" />
-        </g>
-
-        <g className="signal-packets">
-          {packetPositions.map((packet, index) => (
-            <circle
-              key={index}
-              className="signal-packet"
-              cx={packet.cx}
-              cy={packet.cy}
-              r="3.5"
-              fill={packet.tone}
-              style={{
-                animationDelay: packet.delay,
-                color: packet.tone,
-                transform: `translate(${(620 - packet.cx) * gather * 0.42}px, ${(374 - packet.cy) * gather * 0.42}px)`,
-              }}
-            />
-          ))}
-        </g>
-
-        <g className="convergence-core" transform="translate(620 374)">
-          <circle r="132" fill="url(#source-core-gradient)" />
-          <circle className="core-ring core-ring-a" r="96" pathLength={1} />
-          <circle className="core-ring core-ring-b" r="54" pathLength={1} />
-          <path className="core-crosshair" d="M -118 0 H -58 M 58 0 H 118 M 0 -118 V -58 M 0 58 V 118" />
-          <circle className="plan-node" r="5" />
-        </g>
-
-        <g className="plan-geometry">
-          <line className="plan-rail" x1="860" x2="860" y1="112" y2="638" pathLength={1} />
-          {Array.from({ length: 7 }).map((_, index) => (
-            <line
-              key={index}
-              className="plan-tick"
-              x1="818"
-              x2="1018"
-              y1={130 + index * 78}
-              y2={130 + index * 78}
-              pathLength={1}
-              style={{ ["--tick-index" as string]: index }}
-            />
-          ))}
-          {planBlocks.map((block, index) => (
-            <rect
-              key={index}
-              className="plan-block"
-              x="884"
-              y={block.y}
-              width="188"
-              height={block.h}
-              rx="3"
-              stroke={block.tone}
-              fill={block.tone}
-              style={{ ["--block-delay" as string]: block.delay }}
-            />
-          ))}
-        </g>
-
-        <g className="filter-marks">
-          <path className="filter-slash filter-slash-a" d="M 156 626 L 284 498" pathLength={1} />
-          <path className="filter-slash filter-slash-b" d="M 926 228 L 1080 74" pathLength={1} />
-        </g>
-
-        <g className="final-resolve">
-          <path className="final-horizon" d="M 140 660 H 1060" pathLength={1} />
-          <circle className="final-pulse" cx="860" cy="660" r="5.5" />
+        <g className="convergence-core" transform={`translate(${CENTER_X} ${CENTER_Y})`}>
+          <circle className="core-aura" r="132" fill="url(#source-core-gradient)" />
+          <circle className="plan-node-halo" r="22" />
+          <circle className="plan-node" r="5.8" />
         </g>
       </svg>
-      <div className="source-plan-final-dim" />
       <div className="source-plan-readability" />
     </div>
   )
