@@ -325,13 +325,13 @@
   opacity: 0.58;
 }
 
-.traveler-head {
-  opacity: calc(var(--traveler-active) * 0.82);
-  mix-blend-mode: screen;
-}
-
-.source-head {
-  filter: drop-shadow(0 0 8px currentColor);
+.traveler-tip {
+  fill: none;
+  vector-effect: non-scaling-stroke;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.78;
+  will-change: stroke-dashoffset;
 }
 
 .step-lines-layer {
@@ -352,8 +352,8 @@
   opacity: 0.34;
 }
 
-.step-head {
-  opacity: calc(var(--traveler-active) * 0.6);
+.step-tip {
+  opacity: 0.58;
 }
 
 .center-tracks-layer {
@@ -374,9 +374,8 @@
   opacity: 0.4;
 }
 
-.center-head {
-  opacity: calc(var(--traveler-active) * 0.78);
-  filter: drop-shadow(0 0 9px currentColor);
+.center-tip {
+  opacity: 0.68;
 }
 
 @media (max-width: 640px) {

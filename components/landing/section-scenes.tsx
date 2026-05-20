@@ -202,41 +202,28 @@ const STEP_TRACKS: TravelerTrack[] = [
   },
 ]
 
-const CENTER_TRACKS: TravelerTrack[] = [
-  {
-    id: "center-line-1",
-    lane: 1,
-    tone: "var(--signal-copper)",
-    width: 1.3,
-    start: { x: 1034, y: 304 },
-    c1: { x: 910, y: 292 },
-    c2: { x: 756, y: 316 },
+const CENTER_TRACKS: TravelerTrack[] = SOURCE_TRAVELERS.map((track, index) => {
+  const side = track.end.x < CENTER_X ? -1 : 1
+  const lanePull = track.lane === 1 ? -34 : track.lane === 3 ? 34 : 0
+
+  return {
+    id: `center-${track.id}`,
+    lane: track.lane,
+    tone: track.tone,
+    width: track.width * 0.88,
+    start: track.end,
+    c1: {
+      x: track.end.x - side * (92 + (index % 3) * 22),
+      y: track.end.y + lanePull,
+    },
+    c2: {
+      x: CENTER_X + side * (84 + (index % 4) * 16),
+      y: CENTER_Y + lanePull * 0.45,
+    },
     end: { x: CENTER_X, y: CENTER_Y },
-    delay: 0,
-  },
-  {
-    id: "center-line-2",
-    lane: 2,
-    tone: "var(--signal-teal)",
-    width: 1.14,
-    start: { x: 1042, y: 414 },
-    c1: { x: 888, y: 430 },
-    c2: { x: 734, y: 400 },
-    end: { x: CENTER_X, y: CENTER_Y },
-    delay: 0.1,
-  },
-  {
-    id: "center-line-3",
-    lane: 3,
-    tone: "var(--signal-blue)",
-    width: 1.18,
-    start: { x: 1056, y: 498 },
-    c1: { x: 904, y: 514 },
-    c2: { x: 732, y: 448 },
-    end: { x: CENTER_X, y: CENTER_Y },
-    delay: 0.2,
-  },
-]
+    delay: (index % 6) * 0.035,
+  }
+})
 
 function clamp01(value: number) {
   return Math.max(0, Math.min(1, value))
@@ -248,22 +235,6 @@ function smoothstep(value: number) {
 
 function pathFor(track: TravelerTrack) {
   return `M ${track.start.x} ${track.start.y} C ${track.c1.x} ${track.c1.y}, ${track.c2.x} ${track.c2.y}, ${track.end.x} ${track.end.y}`
-}
-
-function cubicPoint(track: TravelerTrack, t: number) {
-  const inv = 1 - t
-  return {
-    x:
-      inv * inv * inv * track.start.x +
-      3 * inv * inv * t * track.c1.x +
-      3 * inv * t * t * track.c2.x +
-      t * t * t * track.end.x,
-    y:
-      inv * inv * inv * track.start.y +
-      3 * inv * inv * t * track.c1.y +
-      3 * inv * t * t * track.c2.y +
-      t * t * t * track.end.y,
-  }
 }
 
 function dashWindow(progress: number, length: number) {
@@ -288,13 +259,12 @@ function Traveler({
   trailLength: number
   prefix: "source" | "step" | "center"
 }) {
-  const active = clamp01(Math.min(progress * 7, (1 - progress) * 8))
-  const point = cubicPoint(track, clamp01(progress))
   const dash = dashWindow(progress, trailLength)
+  const tip = dashWindow(progress, Math.min(0.018, trailLength * 0.22))
   const path = pathFor(track)
 
   return (
-    <g className={`${prefix}-traveler`} style={{ ["--traveler-active" as string]: active.toFixed(4) } as CSSProperties}>
+    <g className={`${prefix}-traveler`}>
       <path
         className={`traveler-trail ${prefix}-trail ${prefix}-trail-haze`}
         d={path}
@@ -322,7 +292,15 @@ function Traveler({
         strokeDashoffset={dash.dashoffset}
         strokeWidth={track.width}
       />
-      <circle className={`traveler-head ${prefix}-head`} cx={point.x.toFixed(1)} cy={point.y.toFixed(1)} r={(track.width * 1.6).toFixed(2)} fill={track.tone} />
+      <path
+        className={`traveler-tip ${prefix}-tip`}
+        d={path}
+        pathLength={1}
+        stroke={track.tone}
+        strokeDasharray={tip.dasharray}
+        strokeDashoffset={tip.dashoffset}
+        strokeWidth={(track.width * 1.95).toFixed(2)}
+      />
     </g>
   )
 }
@@ -366,9 +344,9 @@ function CenterTracksLayer({ progress }: { progress: number }) {
         <Traveler
           key={track.id}
           prefix="center"
-          progress={smoothstep(clamp01((progress - 3.0 - track.delay) / 0.88))}
+          progress={smoothstep(clamp01((progress - 2.9 - track.delay) / 1.08))}
           track={track}
-          trailLength={0.22}
+          trailLength={0.2}
         />
       ))}
     </g>
@@ -379,9 +357,9 @@ export function SectionScenes({ motion }: SectionScenesProps) {
   const stage = useMemo(() => {
     const sp = motion.sceneProgress
     const systemOpacity = clamp01((sp - 0.02) * 1.6)
-    const sourceVisible = smoothstep(clamp01((sp - 0.12) / 0.45)) * (1 - smoothstep(clamp01((sp - 2.82) / 0.5)))
-    const stepVisible = smoothstep(clamp01((sp - 1.98) / 0.36)) * (1 - smoothstep(clamp01((sp - 3.45) / 0.44)))
-    const centerVisible = smoothstep(clamp01((sp - 2.82) / 0.42)) * (1 - smoothstep(clamp01((sp - 4.08) / 0.42)))
+    const sourceVisible = smoothstep(clamp01((sp - 0.12) / 0.45)) * (1 - smoothstep(clamp01((sp - 3.18) / 0.54)))
+    const stepVisible = smoothstep(clamp01((sp - 1.98) / 0.36)) * (1 - smoothstep(clamp01((sp - 3.7) / 0.44)))
+    const centerVisible = smoothstep(clamp01((sp - 2.78) / 0.42)) * (1 - smoothstep(clamp01((sp - 4.08) / 0.42)))
     const coreVisible = smoothstep(clamp01((sp - 3.46) / 0.4)) * (1 - smoothstep(clamp01((sp - 4.02) / 0.34)))
 
     return {
