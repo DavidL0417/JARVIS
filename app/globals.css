@@ -300,17 +300,19 @@
   opacity: calc(0.14 + var(--step-visible) * 0.08 + var(--center-visible) * 0.08);
 }
 
+.traveler {
+  opacity: var(--traveler-visible);
+}
+
 .traveler-trail {
   fill: none;
   vector-effect: non-scaling-stroke;
   stroke-linecap: round;
   stroke-linejoin: round;
-  will-change: stroke-dashoffset, opacity;
 }
 
 .source-tracks-layer {
   opacity: calc(var(--source-visible) * 0.78);
-  transition: opacity 120ms linear;
 }
 
 .source-trail-haze {
@@ -331,13 +333,11 @@
   stroke-linecap: round;
   stroke-linejoin: round;
   opacity: 0.78;
-  will-change: stroke-dashoffset;
 }
 
 .step-lines-layer {
   opacity: var(--step-visible);
   mix-blend-mode: screen;
-  transition: opacity 120ms linear;
 }
 
 .step-trail-haze {
@@ -359,7 +359,6 @@
 .center-tracks-layer {
   opacity: var(--center-visible);
   mix-blend-mode: screen;
-  transition: opacity 120ms linear;
 }
 
 .center-trail-haze {

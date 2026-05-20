@@ -243,9 +243,15 @@ function dashWindow(progress: number, length: number) {
   const visible = Math.max(0, end - start)
 
   return {
-    dasharray: `${visible.toFixed(4)} 1`,
+    dasharray: `${Math.max(visible, 0.0001).toFixed(4)} 1`,
     dashoffset: (1 - end).toFixed(4),
   }
+}
+
+function travelerVisibility(progress: number) {
+  const enters = smoothstep(clamp01(progress / 0.08))
+  const exits = 1 - smoothstep(clamp01((progress - 0.94) / 0.06))
+  return enters * exits
 }
 
 function Traveler({
@@ -259,12 +265,14 @@ function Traveler({
   trailLength: number
   prefix: "source" | "step" | "center"
 }) {
+  const safeProgress = clamp01(progress)
+  const travelerVisible = travelerVisibility(safeProgress)
   const dash = dashWindow(progress, trailLength)
   const tip = dashWindow(progress, Math.min(0.018, trailLength * 0.22))
   const path = pathFor(track)
 
   return (
-    <g className={`${prefix}-traveler`}>
+    <g className={`${prefix}-traveler traveler`} style={{ ["--traveler-visible" as string]: travelerVisible.toFixed(4) } as CSSProperties}>
       <path
         className={`traveler-trail ${prefix}-trail ${prefix}-trail-haze`}
         d={path}
