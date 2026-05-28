@@ -223,6 +223,56 @@ function actualUrlForNode(node) {
   return typeof node.metadata?.actualUrl === "string" ? node.metadata.actualUrl : node.url
 }
 
+function nodeUpdateFromSnapshot(snapshot, node) {
+  return {
+    parentId: node.parentId || null,
+    parentUrl: null,
+    canvasOrigin: new URL(snapshot.canvasOrigin).origin,
+    url: node.url,
+    title: node.title,
+    kind: node.kind,
+    textPreview: snapshot.visibleText?.slice(0, 900) || node.textPreview || null,
+    metadata: {
+      ...(node.metadata || {}),
+      actualUrl: actualUrlForNode(node),
+      pageKindHint: snapshot.pageKindHint || null,
+      pagePreview: snapshot.pagePreview || null,
+      previewCapturedAt: snapshot.capturedAt,
+    },
+    selected: node.selected,
+    expanded: true,
+  }
+}
+
+function capturedNodeFromSnapshot(snapshot, parentNode, requestedUrl) {
+  const parentLevel = parentNode ? parentNode.metadata?.level : null
+  const normalized = normalizeUrl(snapshot.url || requestedUrl, requestedUrl)
+  const title = snapshot.title || snapshot.courseHint || linkText({ url: requestedUrl, text: null })
+
+  return {
+    parentId: parentNode?.id || null,
+    parentUrl: null,
+    canvasOrigin: new URL(snapshot.canvasOrigin).origin,
+    url: normalized || requestedUrl,
+    title: title.slice(0, 240),
+    kind: classifyCanvasNodeKind(normalized || requestedUrl, title),
+    textPreview: snapshot.visibleText?.slice(0, 900) || null,
+    metadata: {
+      level: parentLevel === "course" ? "tab" : "item",
+      sourceTab: parentNode?.metadata?.sourceTab || parentNode?.title || null,
+      discoveredFrom: parentNode?.id || null,
+      actualUrl: normalized || requestedUrl,
+      capturedFromPreview: true,
+      pageKindHint: snapshot.pageKindHint || null,
+      pagePreview: snapshot.pagePreview || null,
+      previewCapturedAt: snapshot.capturedAt,
+      selectedByParent: false,
+    },
+    selected: false,
+    expanded: true,
+  }
+}
+
 function childNodesFromSnapshot(snapshot, parentNode) {
   const origin = new URL(snapshot.canvasOrigin).origin
   const seen = new Set()
@@ -278,7 +328,7 @@ function childNodesFromSnapshot(snapshot, parentNode) {
       url: normalized,
       title: linkText({ ...link, url: normalized }).slice(0, 240),
       kind: classifyCanvasNodeKind(normalized, link.text || ""),
-      textPreview: snapshot.visibleText?.slice(0, 900) || null,
+      textPreview: null,
       metadata: {
         level: parentLevel === "tab" ? "item" : "tab",
         sourceTab: parentNode.metadata?.sourceTab || parentNode.title,
@@ -383,8 +433,58 @@ async function executeExpandNode(command, context) {
     phase: parentLevel === "course" ? "tabs_complete" : "items_complete",
     nodeId: parentNode.id,
     message: parentLevel === "course" ? `Scraped ${nodes.length} Canvas tab(s).` : `Scraped ${nodes.length} item(s).`,
-    nodes,
+    nodes: [nodeUpdateFromSnapshot(snapshot, parentNode), ...nodes],
     result: { nodeCount: nodes.length, expandedNodeId: parentNode.id, expandedLevel: parentLevel },
+  })
+}
+
+async function executeCaptureUrl(command, context) {
+  const parentNode = context.nodes.find((node) => node.id === command.targetNodeId)
+  if (!parentNode) throw new Error("Canvas node was not included with capture command.")
+
+  const requestedUrl = typeof command.payload?.url === "string" ? command.payload.url : null
+  if (!requestedUrl) throw new Error("Canvas capture command did not include a URL.")
+
+  const origin = parentNode.canvasOrigin
+  const normalized = normalizeUrl(requestedUrl, actualUrlForNode(parentNode))
+  if (!normalized || !isAllowedCanvasUrl(normalized, origin)) {
+    throw new Error("Canvas Reader blocked this link because it is outside the safe read-only Canvas surface.")
+  }
+
+  const tab = await findCanvasTab(origin, context.appBaseUrl)
+  if (!tab?.id) throw new Error("Open the matching Canvas site before capturing this link.")
+
+  await reportCommand(context.appBaseUrl, context.extensionToken, {
+    commandId: command.id,
+    status: "progress",
+    phase: "open_preview_link",
+    nodeId: parentNode.id,
+    message: `Opening Canvas link from ${parentNode.title}.`,
+    details: { url: normalized },
+  })
+
+  const snapshot = await navigateAndCollect(tab, normalized, randomScanId())
+
+  if (looksLikeActiveAssessment({ url: snapshot.url, title: snapshot.title, text: snapshot.visibleText })) {
+    throw new Error("Canvas Reader blocked this link because it looks like an active quiz or timed assessment surface.")
+  }
+
+  const capturedNode = capturedNodeFromSnapshot(snapshot, parentNode, normalized)
+
+  await reportCommand(context.appBaseUrl, context.extensionToken, {
+    commandId: command.id,
+    status: "succeeded",
+    level: "success",
+    phase: "preview_link_captured",
+    nodeId: parentNode.id,
+    message: `Captured Canvas page: ${capturedNode.title}.`,
+    nodes: [capturedNode],
+    result: {
+      nodeCount: 1,
+      capturedUrl: capturedNode.url,
+      parentNodeId: parentNode.id,
+      previewLinkCount: snapshot.pagePreview?.links?.length || 0,
+    },
   })
 }
 
@@ -540,6 +640,8 @@ async function executeCommand(command, context) {
     await executeExpandNode(command, context)
   } else if (command.type === "import_selected") {
     await executeImportSelected(command, context)
+  } else if (command.type === "capture_url") {
+    await executeCaptureUrl(command, context)
   }
 
   const state = await storageGet([STORAGE_KEYS.lastCommand])

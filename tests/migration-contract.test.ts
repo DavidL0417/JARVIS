@@ -42,6 +42,14 @@ const canvasExtensionCommandEventsMigration = readFileSync(
   "supabase/migrations/20260519180734_canvas_extension_command_events.sql",
   "utf8",
 )
+const caldavProviderContractMigration = readFileSync(
+  "supabase/migrations/20260528012138_caldav_provider_contract.sql",
+  "utf8",
+)
+const canvasExtensionPagePreviewsMigration = readFileSync(
+  "supabase/migrations/20260528062929_canvas_extension_page_previews.sql",
+  "utf8",
+)
 
 describe("production Supabase migration", () => {
   it("keeps OAuth tokens outside public tables", () => {
@@ -148,6 +156,13 @@ describe("production Supabase migration", () => {
     expect(canvasAccessTokenMigration).not.toContain("disable row level security")
   })
 
+  it("allows CalDAV integration metadata without exposing private tokens", () => {
+    expect(caldavProviderContractMigration).toContain("check (provider in ('google', 'notion', 'canvas', 'caldav'))")
+    expect(caldavProviderContractMigration).toContain("token_provider in ('google', 'notion', 'canvas', 'caldav')")
+    expect(caldavProviderContractMigration).toContain("revoke all on function public.get_integration_token(uuid, text) from public, anon, authenticated;")
+    expect(caldavProviderContractMigration).not.toContain("disable row level security")
+  })
+
   it("stores Canvas extension pairing data in private service-role-only tables", () => {
     expect(canvasExtensionMigration).toContain("create table if not exists app_private.canvas_extension_pairing_codes")
     expect(canvasExtensionMigration).toContain("create table if not exists app_private.canvas_extension_tokens")
@@ -176,5 +191,15 @@ describe("production Supabase migration", () => {
     expect(canvasExtensionControlPlaneMigration).not.toContain("refresh_token")
     expect(canvasExtensionCommandEventsMigration).not.toContain("access_token")
     expect(canvasExtensionCommandEventsMigration).not.toContain("refresh_token")
+  })
+
+  it("allows Canvas preview-link capture commands without storing executable page archives", () => {
+    expect(canvasExtensionPagePreviewsMigration).toContain("'capture_url'")
+    expect(canvasExtensionPagePreviewsMigration).toContain("sanitized inert page previews")
+    expect(canvasExtensionPagePreviewsMigration).toContain("must never contain credentials")
+    expect(canvasExtensionPagePreviewsMigration).not.toContain("disable row level security")
+    expect(canvasExtensionPagePreviewsMigration).not.toContain("raw MHTML")
+    expect(canvasExtensionPagePreviewsMigration).not.toContain("access_token")
+    expect(canvasExtensionPagePreviewsMigration).not.toContain("refresh_token")
   })
 })

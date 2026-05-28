@@ -1,4 +1,10 @@
 const MAX_VISIBLE_TEXT_CHARS = 60000
+const MAX_PREVIEW_HTML_CHARS = 120000
+const MAX_PREVIEW_LINKS = 120
+const MAX_PREVIEW_BLOCKS = 60
+const MAX_BLOCK_HTML_CHARS = 60000
+const MAX_BLOCK_TEXT_CHARS = 16000
+const SECTION_HEADING_SELECTOR = "h1, h2, h3, h4"
 
 function cleanText(value) {
   return (value || "").replace(/\s+/g, " ").trim()
@@ -9,6 +15,239 @@ function visibleTextFor(element) {
 
   clone.querySelectorAll("script, style, noscript, iframe, input, textarea, select, button").forEach((node) => node.remove())
   return cleanText(clone.innerText || clone.textContent || "").slice(0, MAX_VISIBLE_TEXT_CHARS)
+}
+
+function previewRoot() {
+  const selectors = [
+    "#content",
+    ".ic-Layout-contentMain",
+    "[role='main']",
+    "main",
+    ".show-content",
+    "#wiki_page_show",
+    document.body ? "body" : "",
+  ].filter(Boolean)
+
+  for (const selector of selectors) {
+    const element = document.querySelector(selector)
+    if (element && visibleTextFor(element).length > 0) return element
+  }
+
+  return document.body
+}
+
+function isSafePreviewUrl(url) {
+  const pathname = url.pathname.toLowerCase()
+  const search = url.search.toLowerCase()
+
+  if (url.origin !== location.origin) return false
+  if (/\/quizzes\/[^/]+\/take(\/|$)/.test(pathname)) return false
+  if (/\/quizzes\/[^/]+\/questions(\/|$)/.test(pathname)) return false
+  if (/\/assignments\/[^/]+\/submissions\/new(\/|$)/.test(pathname)) return false
+  if (/\/discussion_topics\/[^/]+\/replies(\/|$)/.test(pathname)) return false
+  if (/\/conversations(\/|$)/.test(pathname)) return false
+  if (/\/accounts(\/|$)/.test(pathname)) return false
+  if (/[?&](submit|preview|take_quiz|download)=/i.test(search)) return false
+
+  return true
+}
+
+function sanitizeClone(source, options = {}) {
+  const clone = source.cloneNode(true)
+  const links = []
+  const seenLinks = new Set()
+  const linkLimit = options.linkLimit || MAX_PREVIEW_LINKS
+
+  clone.querySelectorAll("script, style, link, noscript, iframe, object, embed, canvas, svg, form, input, textarea, select, button").forEach((node) => node.remove())
+
+  for (const element of Array.from(clone.querySelectorAll("*"))) {
+    for (const attribute of Array.from(element.attributes)) {
+      const name = attribute.name.toLowerCase()
+
+      if (
+        name.startsWith("on") ||
+        ["src", "srcset", "srcdoc", "poster", "style", "formaction", "action", "target", "download"].includes(name)
+      ) {
+        element.removeAttribute(attribute.name)
+      }
+    }
+
+    if (element.tagName === "A") {
+      const href = element.getAttribute("href")
+      const text = cleanText(element.textContent || element.getAttribute("aria-label") || "")
+
+      try {
+        const url = new URL(href || "", location.href)
+        url.hash = ""
+
+        if (!["https:", "http:"].includes(url.protocol) || !isSafePreviewUrl(url)) {
+          element.removeAttribute("href")
+          element.setAttribute("aria-disabled", "true")
+          continue
+        }
+
+        const value = url.toString()
+        element.setAttribute("href", "#")
+        element.setAttribute("data-jarvis-canvas-url", value)
+        element.setAttribute("role", "button")
+
+        if (!seenLinks.has(value) && links.length < linkLimit) {
+          seenLinks.add(value)
+          links.push({
+            url: value,
+            text: text ? text.slice(0, 180) : null,
+          })
+        }
+      } catch {
+        element.removeAttribute("href")
+        element.setAttribute("aria-disabled", "true")
+      }
+    }
+  }
+
+  return {
+    html: clone.innerHTML || cleanText(source.textContent || ""),
+    links,
+    text: cleanText(clone.innerText || clone.textContent || ""),
+  }
+}
+
+function slugFor(value, fallback) {
+  const slug = cleanText(value || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 48)
+
+  return slug || fallback
+}
+
+function blockRootFor(root) {
+  const selectors = [
+    "#wiki_page_show",
+    ".show-content",
+    ".user_content",
+    "#course_syllabus",
+    "[data-testid='wiki-page-content']",
+  ]
+
+  for (const selector of selectors) {
+    const element = root.querySelector?.(selector)
+    if (element && visibleTextFor(element).length > 0) return element
+  }
+
+  return root
+}
+
+function blockTitleFor(elements) {
+  for (const element of elements) {
+    if (element.matches?.(SECTION_HEADING_SELECTOR)) {
+      const text = cleanText(element.textContent || "")
+      if (text) return text.slice(0, 180)
+    }
+
+    const heading = element.querySelector?.(SECTION_HEADING_SELECTOR)
+    const text = cleanText(heading?.textContent || "")
+    if (text) return text.slice(0, 180)
+  }
+
+  return null
+}
+
+function typeForBlock(elements, text, links) {
+  const tableWithLinks = elements.some((element) => element.matches?.("table") || Boolean(element.querySelector?.("table a[href]")))
+  const listWithLinks = elements.some((element) => element.matches?.("ul, ol") || Boolean(element.querySelector?.("ul a[href], ol a[href]")))
+  const linkTextLength = links.reduce((total, link) => total + (link.text?.length || 0), 0)
+  const density = text.length > 0 ? linkTextLength / text.length : 0
+
+  if (links.length >= 3 && (tableWithLinks || listWithLinks || density > 0.24 || text.length < 1200)) return "links"
+  if (links.length >= 2 && text.length > 500) return "mixed"
+  return "text"
+}
+
+function blockFromElements(elements, order) {
+  const wrapper = document.createElement("section")
+
+  for (const element of elements) {
+    wrapper.append(element.cloneNode(true))
+  }
+
+  const sanitized = sanitizeClone(wrapper, { linkLimit: 80 })
+  const text = sanitized.text.slice(0, MAX_BLOCK_TEXT_CHARS)
+  const title = blockTitleFor(elements)
+  const html = sanitized.html.slice(0, MAX_BLOCK_HTML_CHARS)
+
+  if (!text && sanitized.links.length === 0) return null
+
+  return {
+    id: `block-${order}-${slugFor(title || text.slice(0, 80), "section")}`,
+    type: typeForBlock(elements, text, sanitized.links),
+    title,
+    text: text || null,
+    html: html || null,
+    links: sanitized.links,
+    order,
+    truncated: sanitized.html.length > MAX_BLOCK_HTML_CHARS || sanitized.text.length > MAX_BLOCK_TEXT_CHARS,
+  }
+}
+
+function candidateBlockSections(root) {
+  const blockRoot = blockRootFor(root)
+  const children = Array.from(blockRoot.children).filter((element) => cleanText(element.textContent || "") || element.querySelector?.("a[href]"))
+  const sections = []
+  let current = []
+
+  for (const child of children) {
+    const isHeading = child.matches(SECTION_HEADING_SELECTOR)
+    const childHasHeading = !isHeading && child.querySelector?.(`:scope > ${SECTION_HEADING_SELECTOR}`)
+    const shouldStartSection = (isHeading || childHasHeading) && current.length > 0
+
+    if (shouldStartSection) {
+      sections.push(current)
+      current = []
+    }
+
+    current.push(child)
+
+    if ((child.matches("table") || child.matches("ul, ol")) && child.querySelectorAll("a[href]").length >= 3) {
+      sections.push(current)
+      current = []
+    }
+  }
+
+  if (current.length > 0) sections.push(current)
+  if (sections.length > 0) return sections
+
+  return [[blockRoot]]
+}
+
+function previewBlocks(root) {
+  const blocks = []
+
+  for (const section of candidateBlockSections(root)) {
+    if (blocks.length >= MAX_PREVIEW_BLOCKS) break
+    const block = blockFromElements(section, blocks.length)
+    if (block) blocks.push(block)
+  }
+
+  if (blocks.length > 0) return blocks
+
+  const fallback = blockFromElements([root], 0)
+  return fallback ? [fallback] : []
+}
+
+function sanitizePreviewHtml() {
+  const root = previewRoot()
+  const sanitized = sanitizeClone(root)
+  const html = sanitized.html
+
+  return {
+    html: html.slice(0, MAX_PREVIEW_HTML_CHARS),
+    links: sanitized.links,
+    blocks: previewBlocks(root),
+    capturedAt: new Date().toISOString(),
+    truncated: html.length > MAX_PREVIEW_HTML_CHARS,
+  }
 }
 
 function courseHint() {
@@ -231,6 +470,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     courseNavLinks: courseNavigationLinks(),
     pageItemLinks: pageItemLinks(),
     courseRows: canvasCourseRows(),
+    pagePreview: sanitizePreviewHtml(),
     capturedAt: new Date().toISOString(),
   })
 

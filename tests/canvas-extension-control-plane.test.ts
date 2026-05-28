@@ -15,12 +15,17 @@ import {
 } from "@/schemas/canvas-extension"
 
 describe("Canvas extension control-plane schemas", () => {
-  it("accepts app-created discovery, expansion, import, stop, and resume commands", () => {
+  it("accepts app-created discovery, expansion, capture, import, stop, and resume commands", () => {
     expect(canvasExtensionCreateCommandRequestSchema.parse({ type: "discover" }).type).toBe("discover")
     expect(canvasExtensionCreateCommandRequestSchema.parse({
       type: "expand_node",
       targetNodeId: "11111111-1111-4111-8111-111111111111",
     }).type).toBe("expand_node")
+    expect(canvasExtensionCreateCommandRequestSchema.parse({
+      type: "capture_url",
+      targetNodeId: "11111111-1111-4111-8111-111111111111",
+      url: "https://canvas.example.edu/courses/42/pages/week-1",
+    }).url).toBe("https://canvas.example.edu/courses/42/pages/week-1")
     expect(canvasExtensionCreateCommandRequestSchema.parse({
       type: "import_selected",
       nodeIds: ["11111111-1111-4111-8111-111111111111"],
@@ -119,11 +124,39 @@ describe("Canvas extension control-plane schemas", () => {
           kindHint: null,
         },
       ],
+      pagePreview: {
+        html: "<main><h1>Course 42</h1><a href=\"#\" data-jarvis-canvas-url=\"https://canvas.example.edu/courses/42/modules/items/7\">Week 1 PDF</a></main>",
+        links: [
+          {
+            url: "https://canvas.example.edu/courses/42/modules/items/7",
+            text: "Week 1 PDF",
+          },
+        ],
+        blocks: [
+          {
+            id: "block-0-course-42",
+            type: "links",
+            title: "Course 42",
+            text: "Course 42 Week 1 PDF",
+            html: "<h1>Course 42</h1><a href=\"#\" data-jarvis-canvas-url=\"https://canvas.example.edu/courses/42/modules/items/7\">Week 1 PDF</a>",
+            links: [
+              {
+                url: "https://canvas.example.edu/courses/42/modules/items/7",
+                text: "Week 1 PDF",
+              },
+            ],
+            order: 0,
+          },
+        ],
+        capturedAt: "2026-05-18T20:00:00.000Z",
+      },
       capturedAt: "2026-05-18T20:00:00.000Z",
     })
 
     expect(parsed.courseNavLinks?.[0].text).toBe("Modules")
     expect(parsed.pageItemLinks?.[0].text).toBe("Week 1 PDF")
+    expect(parsed.pagePreview?.links[0].text).toBe("Week 1 PDF")
+    expect(parsed.pagePreview?.blocks?.[0].type).toBe("links")
   })
 
   it("keeps only courses and nested nodes visible in the control plane", () => {

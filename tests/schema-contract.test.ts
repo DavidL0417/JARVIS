@@ -125,4 +125,50 @@ describe("production response schemas", () => {
     expect(USER_INTEGRATION_SELECT).not.toContain("selected_source_id")
     expect(USER_INTEGRATION_SELECT).not.toContain("selected_source_name")
   })
+
+  it("accepts connected CalDAV integration metadata from the live dashboard contract", () => {
+    expect(
+      dashboardResponseSchema.parse({
+        stats: {
+          tasks: 0,
+          overdue: 0,
+          unscheduled: 0,
+          checkInMode: "silent",
+          memories: 0,
+          sources: 0,
+        },
+        currentTask: null,
+        tasks: [],
+        events: [],
+        memories: [],
+        integrations: [
+          {
+            id: "00000000-0000-4000-8000-000000000002",
+            userId: "00000000-0000-4000-8000-000000000001",
+            provider: "caldav",
+            providerAccountEmail: null,
+            providerUserId: null,
+            status: "connected",
+            selectedCalendarId: null,
+            selectedSourceId: null,
+            selectedSourceName: null,
+            lastSyncedAt: null,
+            createdAt: now,
+            updatedAt: now,
+          },
+        ],
+        sourceConnectors: [],
+        sources: [],
+        sourceFiles: [],
+        sourceCandidates: [],
+        dailyPlan: null,
+      }),
+    ).toMatchObject({
+      integrations: [
+        {
+          provider: "caldav",
+        },
+      ],
+    })
+  })
 })

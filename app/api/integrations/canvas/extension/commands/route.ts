@@ -12,7 +12,29 @@ import {
   isAuthenticationRequiredError,
   requireAuthenticatedUser,
 } from "@/lib/supabase/auth"
-import { canvasExtensionCreateCommandRequestSchema } from "@/schemas/canvas-extension"
+import { canvasExtensionCreateCommandRequestSchema, type CanvasExtensionNode } from "@/schemas/canvas-extension"
+
+function isSafeCanvasCaptureUrl(value: string, canvasOrigin: string) {
+  try {
+    const url = new URL(value)
+    const origin = new URL(canvasOrigin).origin
+    const pathname = url.pathname.toLowerCase()
+    const search = url.search.toLowerCase()
+
+    if (url.origin !== origin) return false
+    if (/\/quizzes\/[^/]+\/take(\/|$)/.test(pathname)) return false
+    if (/\/quizzes\/[^/]+\/questions(\/|$)/.test(pathname)) return false
+    if (/\/assignments\/[^/]+\/submissions\/new(\/|$)/.test(pathname)) return false
+    if (/\/discussion_topics\/[^/]+\/replies(\/|$)/.test(pathname)) return false
+    if (/\/conversations(\/|$)/.test(pathname)) return false
+    if (/\/accounts(\/|$)/.test(pathname)) return false
+    if (/[?&](submit|preview|take_quiz|download)=/i.test(search)) return false
+
+    return true
+  } catch {
+    return false
+  }
+}
 
 async function selectedImportNodeIds(adminClient: Awaited<ReturnType<typeof requireAuthenticatedUser>>["adminClient"], userId: string) {
   const { data, error } = await adminClient
@@ -141,10 +163,11 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: true, commands })
     }
 
-    const commandType: "discover" | "expand_node" | "import_selected" = requestData.type === "resume"
+    const commandType: "discover" | "expand_node" | "import_selected" | "capture_url" = requestData.type === "resume"
       ? "import_selected"
       : requestData.type
     let nodeIds = requestData.nodeIds || []
+    let targetNode: CanvasExtensionNode | null = null
 
     if (commandType === "import_selected" && nodeIds.length === 0) {
       nodeIds = await selectedImportNodeIds(adminClient, user.id)
@@ -158,8 +181,12 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Choose a Canvas node to expand." }, { status: 400 })
     }
 
+    if (commandType === "capture_url" && (!requestData.targetNodeId || !requestData.url)) {
+      return NextResponse.json({ error: "Choose a Canvas node and link to capture." }, { status: 400 })
+    }
+
     if (requestData.targetNodeId) {
-      const { data: targetNode, error: targetError } = await adminClient
+      const { data: targetNodeRow, error: targetError } = await adminClient
         .from("canvas_extension_nodes")
         .select(CANVAS_EXTENSION_NODE_SELECT)
         .eq("user_id", user.id)
@@ -170,9 +197,15 @@ export async function POST(request: Request) {
         throw new Error(targetError.message)
       }
 
-      if (!targetNode) {
+      if (!targetNodeRow) {
         return NextResponse.json({ error: "Canvas node not found." }, { status: 404 })
       }
+
+      targetNode = mapCanvasExtensionNode(targetNodeRow)
+    }
+
+    if (commandType === "capture_url" && requestData.url && targetNode && !isSafeCanvasCaptureUrl(requestData.url, targetNode.canvasOrigin)) {
+      return NextResponse.json({ error: "Canvas Reader blocked this link because it is outside the safe read-only Canvas surface." }, { status: 400 })
     }
 
     const active = await runningCommand(adminClient, user.id)
@@ -191,7 +224,7 @@ export async function POST(request: Request) {
         user_id: user.id,
         type: commandType,
         target_node_id: requestData.targetNodeId ?? null,
-        payload: { nodeIds },
+        payload: { nodeIds, url: requestData.url ?? null },
       })
       .select(CANVAS_EXTENSION_COMMAND_SELECT)
       .single()
@@ -209,14 +242,18 @@ export async function POST(request: Request) {
         ? "discover"
         : command.type === "expand_node"
           ? "expand"
+          : command.type === "capture_url"
+            ? "capture"
           : "import",
       nodeId: requestData.targetNodeId ?? null,
       message: command.type === "discover"
         ? "Queued course discovery from Canvas All Courses."
         : command.type === "expand_node"
           ? "Queued Canvas node expansion."
+          : command.type === "capture_url"
+            ? "Queued Canvas page capture from preview link."
           : `Queued import for ${nodeIds.length} selected Canvas node${nodeIds.length === 1 ? "" : "s"}.`,
-      details: { nodeIds },
+      details: { nodeIds, url: requestData.url ?? null },
     })
 
     return NextResponse.json({ success: true, command })

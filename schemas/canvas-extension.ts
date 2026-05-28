@@ -13,6 +13,30 @@ export const canvasExtensionLinkSchema = z.object({
   kindHint: z.string().trim().max(80).nullable().optional(),
 })
 
+export const canvasExtensionPagePreviewLinkSchema = z.object({
+  url: canvasUrlSchema,
+  text: z.string().trim().max(180).nullable(),
+})
+
+export const canvasExtensionPagePreviewBlockSchema = z.object({
+  id: z.string().trim().min(1).max(80),
+  type: z.enum(["text", "links", "mixed"]),
+  title: z.string().trim().max(180).nullable(),
+  text: z.string().trim().max(16_000).nullable(),
+  html: z.string().trim().max(60_000).nullable(),
+  links: z.array(canvasExtensionPagePreviewLinkSchema).max(80),
+  order: z.number().int().nonnegative(),
+  truncated: z.boolean().optional(),
+})
+
+export const canvasExtensionPagePreviewSchema = z.object({
+  html: z.string().trim().min(1).max(120_000),
+  links: z.array(canvasExtensionPagePreviewLinkSchema).max(120),
+  blocks: z.array(canvasExtensionPagePreviewBlockSchema).max(80).optional(),
+  capturedAt: z.string().datetime({ offset: true }),
+  truncated: z.boolean().optional(),
+})
+
 export const canvasExtensionCourseRowSchema = z.object({
   url: canvasUrlSchema,
   title: z.string().trim().min(1).max(240),
@@ -35,6 +59,7 @@ export const canvasExtensionPageSnapshotSchema = z.object({
   courseNavLinks: z.array(canvasExtensionLinkSchema).max(100).optional(),
   pageItemLinks: z.array(canvasExtensionLinkSchema).max(250).optional(),
   courseRows: z.array(canvasExtensionCourseRowSchema).max(500).optional(),
+  pagePreview: canvasExtensionPagePreviewSchema.optional(),
   capturedAt: z.string().datetime({ offset: true }),
 }).superRefine((value, context) => {
   const origin = new URL(value.canvasOrigin).origin
@@ -47,6 +72,16 @@ export const canvasExtensionPageSnapshotSchema = z.object({
       path: ["url"],
     })
   }
+
+  value.pagePreview?.links.forEach((link, index) => {
+    if (new URL(link.url).origin !== origin) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Canvas preview links must match the declared Canvas origin.",
+        path: ["pagePreview", "links", index, "url"],
+      })
+    }
+  })
 })
 
 export const canvasExtensionPairingCodeResponseSchema = z.object({
@@ -114,7 +149,7 @@ export const canvasExtensionNodeKindSchema = z.enum([
   "unknown",
 ])
 
-export const canvasExtensionCommandTypeSchema = z.enum(["discover", "expand_node", "import_selected"])
+export const canvasExtensionCommandTypeSchema = z.enum(["discover", "expand_node", "import_selected", "capture_url"])
 export const canvasExtensionCommandStatusSchema = z.enum([
   "pending",
   "running",
@@ -205,9 +240,10 @@ export const canvasExtensionStateResponseSchema = z.object({
 })
 
 export const canvasExtensionCreateCommandRequestSchema = z.object({
-  type: z.enum(["discover", "expand_node", "import_selected", "stop", "resume"]),
+  type: z.enum(["discover", "expand_node", "import_selected", "capture_url", "stop", "resume"]),
   targetNodeId: z.string().uuid().nullable().optional(),
   nodeIds: z.array(z.string().uuid()).max(200).optional(),
+  url: canvasUrlSchema.optional(),
 })
 
 export const canvasExtensionSelectNodeRequestSchema = z.object({

@@ -62,7 +62,7 @@ export async function POST(request: Request) {
       })
     }
 
-    if (commandResult.data.target_node_id && report.status === "succeeded") {
+    if (commandResult.data.type === "expand_node" && commandResult.data.target_node_id && report.status === "succeeded") {
       await deleteCanvasExtensionChildren({
         adminClient,
         userId: tokenRecord.user_id,
@@ -161,7 +161,7 @@ export async function POST(request: Request) {
         .update({ active_command_id: null, updated_at: new Date().toISOString() })
         .eq("user_id", tokenRecord.user_id)
 
-      if (commandResult.data.target_node_id && report.status === "succeeded") {
+      if (commandResult.data.type === "expand_node" && commandResult.data.target_node_id && report.status === "succeeded") {
         await adminClient
           .from("canvas_extension_nodes")
           .update({ expanded: true, updated_at: new Date().toISOString() })

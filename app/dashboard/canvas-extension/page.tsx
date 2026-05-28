@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { useEffect, useMemo, useState, type ReactNode } from "react"
+import { useEffect, useMemo, useState, type MouseEvent, type ReactNode } from "react"
 import {
   AlertTriangle,
   ArrowLeft,
@@ -20,6 +20,7 @@ import {
   Square,
   Wifi,
   WifiOff,
+  X,
 } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
@@ -54,10 +55,33 @@ type StateError = {
   message: string
   details: string
 }
+type CanvasPagePreviewLink = { url: string; text: string | null }
+type CanvasPagePreviewBlock = {
+  id: string
+  type: "text" | "links" | "mixed"
+  title: string | null
+  text: string | null
+  html: string | null
+  links: CanvasPagePreviewLink[]
+  order: number
+  truncated?: boolean
+}
+type CanvasPagePreview = {
+  html: string
+  links: CanvasPagePreviewLink[]
+  blocks: CanvasPagePreviewBlock[]
+  capturedAt: string
+  truncated?: boolean
+}
 
 const KNOWN_CANVAS_EXTENSION_IDS = ["aogoejlpbjmfmmdelknoebibkbhlmplc"]
 const COMMAND_SETTLE_REFRESH_DELAY_MS = 1200
 const COMMAND_LIVE_REFRESH_MS = 1500
+const UNSAFE_PREVIEW_HTML_PATTERN = /<\s*(script|iframe|object|embed|form|input|textarea|select|button)\b|on[a-z]+\s*=|srcdoc\s*=|javascript:/i
+const CANVAS_ACCENT_TEXT = "text-[#d38a6a]"
+const CANVAS_ACCENT_BORDER = "border-[#d38a6a]/45"
+const CANVAS_ACCENT_BG = "bg-[#d38a6a]/10"
+const CANVAS_ACCENT_HOVER_BG = "hover:bg-[#d38a6a]/20"
 
 async function readJson<T>(response: Response, fallback: string): Promise<T> {
   const payload = await response.json().catch(() => null)
@@ -116,6 +140,7 @@ function commandLabel(command: CanvasExtensionCommand | null) {
   if (!command) return "Idle"
   if (command.type === "discover") return "Discover All Courses"
   if (command.type === "expand_node") return "Expand Canvas Node"
+  if (command.type === "capture_url") return "Capture Canvas Page"
   return "Import Selection"
 }
 
@@ -159,6 +184,58 @@ function displayUrl(node: CanvasExtensionNode) {
   return typeof node.metadata.actualUrl === "string" ? node.metadata.actualUrl : node.url
 }
 
+function pagePreviewFor(node: CanvasExtensionNode): CanvasPagePreview | null {
+  const value = node.metadata.pagePreview
+
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null
+  const preview = value as Record<string, unknown>
+  if (typeof preview.html !== "string" || typeof preview.capturedAt !== "string") return null
+  if (UNSAFE_PREVIEW_HTML_PATTERN.test(preview.html)) return null
+  const rawLinks = Array.isArray(preview.links) ? preview.links : []
+  const links = rawLinks.flatMap((link) => {
+    if (!link || typeof link !== "object" || Array.isArray(link)) return []
+    const record = link as Record<string, unknown>
+    return typeof record.url === "string"
+      ? [{ url: record.url, text: typeof record.text === "string" ? record.text : null }]
+      : []
+  })
+  const rawBlocks = Array.isArray(preview.blocks) ? preview.blocks : []
+  const blocks: CanvasPagePreviewBlock[] = rawBlocks.flatMap((block) => {
+    if (!block || typeof block !== "object" || Array.isArray(block)) return []
+    const record = block as Record<string, unknown>
+    const type: CanvasPagePreviewBlock["type"] | null =
+      record.type === "links" || record.type === "mixed" || record.type === "text" ? record.type : null
+    if (!type || typeof record.id !== "string" || typeof record.order !== "number") return []
+    const blockHtml = typeof record.html === "string" && !UNSAFE_PREVIEW_HTML_PATTERN.test(record.html) ? record.html : null
+    const blockLinks = Array.isArray(record.links) ? record.links.flatMap((link) => {
+      if (!link || typeof link !== "object" || Array.isArray(link)) return []
+      const linkRecord = link as Record<string, unknown>
+      return typeof linkRecord.url === "string"
+        ? [{ url: linkRecord.url, text: typeof linkRecord.text === "string" ? linkRecord.text : null }]
+        : []
+    }) : []
+
+    return [{
+      id: record.id,
+      type,
+      title: typeof record.title === "string" ? record.title : null,
+      text: typeof record.text === "string" ? record.text : null,
+      html: blockHtml,
+      links: blockLinks,
+      order: record.order,
+      truncated: record.truncated === true,
+    }]
+  }).sort((left, right) => left.order - right.order)
+
+  return {
+    html: preview.html,
+    links,
+    blocks,
+    capturedAt: preview.capturedAt,
+    truncated: preview.truncated === true,
+  }
+}
+
 function nodePathLabel(node: CanvasExtensionNode) {
   try {
     const url = new URL(displayUrl(node))
@@ -167,6 +244,16 @@ function nodePathLabel(node: CanvasExtensionNode) {
     return path.replace(/^\/+/, "").replace(/[-_]/g, " ") || url.hostname
   } catch {
     return node.kind
+  }
+}
+
+function urlPathLabel(value: string) {
+  try {
+    const url = new URL(value)
+    const courseTrimmed = url.pathname.replace(/^\/courses\/[^/]+\/?/, "")
+    return (courseTrimmed || "home").replace(/^\/+/, "").replace(/[-_]/g, " ") || url.hostname
+  } catch {
+    return value
   }
 }
 
@@ -266,6 +353,7 @@ function IconButton(props: {
   disabled?: boolean
   onClick?: () => void
   variant?: "default" | "outline" | "ghost"
+  tone?: "default" | "canvas"
 }) {
   return (
     <Tooltip>
@@ -274,7 +362,13 @@ function IconButton(props: {
           type="button"
           size="icon"
           variant={props.variant ?? "outline"}
-          className="h-9 w-9 rounded-sm"
+          className={cn(
+            "h-9 w-9 rounded-sm",
+            props.tone === "canvas" && CANVAS_ACCENT_BORDER,
+            props.tone === "canvas" && CANVAS_ACCENT_BG,
+            props.tone === "canvas" && CANVAS_ACCENT_TEXT,
+            props.tone === "canvas" && CANVAS_ACCENT_HOVER_BG,
+          )}
           disabled={props.disabled}
           onClick={props.onClick}
           aria-label={props.label}
@@ -326,7 +420,7 @@ function NodeRow(props: {
         aria-label={`Select ${node.title}`}
       />
       <button type="button" className="grid min-w-0 grid-cols-[auto_1fr] items-center gap-2 text-left" onClick={() => onSelect(node)}>
-        <Icon className={cn("h-4 w-4 shrink-0", active ? "text-primary" : "text-muted-foreground")} aria-hidden="true" />
+        <Icon className={cn("h-4 w-4 shrink-0", node.kind === "course" || nodeLevel(node) === "tab" ? CANVAS_ACCENT_TEXT : active ? "text-primary" : "text-muted-foreground")} aria-hidden="true" />
         <span className="min-w-0">
           <span className="block truncate text-[13px] font-medium">{node.title}</span>
           <span className="block truncate text-[11px] text-muted-foreground">{node.kind} · {nodePathLabel(node)}</span>
@@ -377,7 +471,7 @@ function ExpandPrompt(props: {
       <Button
         type="button"
         size="sm"
-        className="h-8 w-fit rounded-sm border border-orange-500/45 bg-orange-500/15 px-2.5 text-xs text-orange-500 hover:bg-orange-500/25 hover:text-orange-400"
+        className={cn("h-8 w-fit rounded-sm border px-2.5 text-xs", CANVAS_ACCENT_BORDER, CANVAS_ACCENT_BG, CANVAS_ACCENT_TEXT, CANVAS_ACCENT_HOVER_BG)}
         disabled={props.disabled}
         onClick={props.onExpand}
       >
@@ -412,87 +506,302 @@ function EventRail({ events, clientReady }: { events: CanvasExtensionCommandEven
   )
 }
 
-function DetailPane(props: {
-  node: TreeNode | null
+function PagePreview(props: {
+  preview: CanvasPagePreview
+  disabled: boolean
+  clientReady: boolean
+  onCaptureUrl: (url: string) => void
+}) {
+  function handleClick(event: MouseEvent<HTMLDivElement>) {
+    const target = event.target instanceof Element ? event.target.closest("[data-jarvis-canvas-url]") : null
+    const url = target?.getAttribute("data-jarvis-canvas-url")
+
+    if (!url) return
+    event.preventDefault()
+    if (!props.disabled) props.onCaptureUrl(url)
+  }
+
+  const blocks = props.preview.blocks.length > 0
+    ? props.preview.blocks
+    : [{
+        id: "full-page",
+        type: props.preview.links.length >= 3 ? "links" as const : "text" as const,
+        title: "Captured page",
+        text: null,
+        html: props.preview.html,
+        links: props.preview.links,
+        order: 0,
+        truncated: props.preview.truncated,
+      }]
+
+  return (
+    <div className="grid gap-3">
+      <div className="flex items-center justify-between gap-2">
+        <h3 className="text-xs font-medium text-foreground">Modules</h3>
+        <span className="truncate text-[10px] text-muted-foreground">
+          {blocks.length} block{blocks.length === 1 ? "" : "s"} · {props.preview.links.length} link{props.preview.links.length === 1 ? "" : "s"} · {formatTime(props.preview.capturedAt, props.clientReady)}
+        </span>
+      </div>
+      <div className="grid max-h-[62vh] gap-2 overflow-auto pr-1">
+        {blocks.map((block) => (
+          <PreviewBlock
+            key={block.id}
+            block={block}
+            disabled={props.disabled}
+            onCaptureUrl={props.onCaptureUrl}
+            onPreviewClick={handleClick}
+          />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function PreviewBlock(props: {
+  block: CanvasPagePreviewBlock
+  disabled: boolean
+  onCaptureUrl: (url: string) => void
+  onPreviewClick: (event: MouseEvent<HTMLDivElement>) => void
+}) {
+  const title = props.block.title || (props.block.type === "links" ? "Links" : "Text")
+
+  return (
+    <section className="grid gap-2 border border-rule bg-secondary/10 px-3 py-3">
+      <div className="flex min-w-0 items-center justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-2">
+          {props.block.type === "links" ? (
+            <Folder className={cn("h-4 w-4 shrink-0", CANVAS_ACCENT_TEXT)} aria-hidden="true" />
+          ) : (
+            <FileText className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+          )}
+          <h4 className="truncate text-sm font-medium text-foreground">{title}</h4>
+        </div>
+        <Badge variant="outline" className={cn("rounded-sm border-rule text-[10px] capitalize text-muted-foreground", props.block.type === "links" && CANVAS_ACCENT_BORDER, props.block.type === "links" && CANVAS_ACCENT_TEXT)}>
+          {props.block.type}
+        </Badge>
+      </div>
+
+      {props.block.type !== "links" && props.block.html ? (
+        <div
+          className={cn(
+            "canvas-page-preview max-h-72 overflow-auto border border-rule bg-background px-3 py-2 text-xs leading-5 text-muted-foreground",
+            "[&_a]:cursor-pointer [&_a]:text-[#d38a6a] [&_a]:underline [&_a:hover]:text-[#e2a184]",
+            "[&_h1]:mb-2 [&_h1]:text-lg [&_h1]:font-semibold [&_h2]:mb-2 [&_h2]:mt-3 [&_h2]:text-base [&_h2]:font-semibold",
+            "[&_h3]:mb-1.5 [&_h3]:mt-2 [&_h3]:text-sm [&_h3]:font-semibold [&_li]:my-1 [&_ol]:ml-5 [&_ol]:list-decimal [&_p]:my-2 [&_table]:w-full [&_td]:border-t [&_td]:border-rule [&_td]:py-1.5 [&_th]:border-b [&_th]:border-rule [&_th]:py-1.5 [&_ul]:ml-5 [&_ul]:list-disc",
+            props.disabled && "pointer-events-none opacity-70",
+          )}
+          onClick={props.onPreviewClick}
+          dangerouslySetInnerHTML={{ __html: props.block.html }}
+        />
+      ) : null}
+
+      {props.block.links.length > 0 ? (
+        <div className="grid gap-1">
+          {props.block.links.map((link) => (
+            <button
+              key={link.url}
+              type="button"
+              disabled={props.disabled}
+              className={cn(
+                "grid min-h-9 grid-cols-[auto_1fr_auto] items-center gap-2 border border-rule bg-background px-2 py-1.5 text-left text-xs text-muted-foreground hover:text-foreground disabled:pointer-events-none disabled:opacity-60",
+                props.block.type === "links" && CANVAS_ACCENT_HOVER_BG,
+              )}
+              onClick={() => props.onCaptureUrl(link.url)}
+            >
+              <ChevronRight className={cn("h-3.5 w-3.5", CANVAS_ACCENT_TEXT)} aria-hidden="true" />
+              <span className="min-w-0">
+                <span className="block truncate text-[12px] font-medium text-foreground">{link.text || urlPathLabel(link.url)}</span>
+                <span className="block truncate text-[10px] text-muted-foreground">{urlPathLabel(link.url)}</span>
+              </span>
+              <ExternalLink className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
+            </button>
+          ))}
+        </div>
+      ) : null}
+
+      {props.block.truncated ? <p className="text-[11px] text-yellow-500">Block was truncated.</p> : null}
+    </section>
+  )
+}
+
+function ItemRail(props: {
+  items: TreeNode[]
+  activeItem: TreeNode | null
+  onSelect: (node: CanvasExtensionNode) => void
+  onToggle: (node: CanvasExtensionNode) => void
+}) {
+  return (
+    <aside className="grid min-h-0 grid-rows-[auto_1fr] border-l border-rule bg-secondary/10">
+      <div className="flex h-9 items-center justify-between border-b border-rule px-3">
+        <h3 className="text-xs font-medium text-foreground">Detected Items</h3>
+        <span className="text-[11px] text-muted-foreground">{props.items.length}</span>
+      </div>
+      <div className="min-h-0 overflow-auto">
+        {props.items.length > 0 ? props.items.map((node) => {
+          const Icon = nodeIcon(node)
+          return (
+            <div
+              key={node.id}
+              className={cn(
+                "grid min-h-12 grid-cols-[auto_1fr] items-center gap-2 border-b border-rule/60 px-3 py-2",
+                props.activeItem?.id === node.id ? "bg-primary/15" : "hover:bg-secondary/25",
+              )}
+            >
+              <Checkbox
+                checked={node.selected}
+                onCheckedChange={() => props.onToggle(node)}
+                className="h-4 w-4 rounded-[4px] border-rule bg-background"
+                aria-label={`Select ${node.title}`}
+              />
+              <button type="button" className="grid min-w-0 grid-cols-[auto_1fr] items-center gap-2 text-left" onClick={() => props.onSelect(node)}>
+                <Icon className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+                <span className="min-w-0">
+                  <span className="block truncate text-[12px] font-medium text-foreground">{node.title}</span>
+                  <span className="block truncate text-[10px] text-muted-foreground">{node.kind} · {nodePathLabel(node)}</span>
+                </span>
+              </button>
+            </div>
+          )
+        }) : (
+          <p className="px-3 py-4 text-xs leading-5 text-muted-foreground">Capture the selected tab to detect importable Canvas links.</p>
+        )}
+      </div>
+    </aside>
+  )
+}
+
+function ContentPane(props: {
   selectedCourse: TreeNode | null
   selectedTab: TreeNode | null
-  commands: CanvasExtensionCommand[]
-  events: CanvasExtensionCommandEvent[]
+  selectedItem: TreeNode | null
+  items: TreeNode[]
   clientReady: boolean
+  commandBusy: boolean
+  previewBusy: boolean
+  onRefreshPreview: (node: TreeNode) => void
+  onCapturePreviewUrl: (node: TreeNode, url: string) => void
+  onSelectNode: (node: CanvasExtensionNode) => void
+  onToggleNode: (node: CanvasExtensionNode) => void
 }) {
-  const node = props.node || props.selectedTab || props.selectedCourse
+  const focusNode = props.selectedItem || props.selectedTab || props.selectedCourse
+  const selectedItemPreview = props.selectedItem ? pagePreviewFor(props.selectedItem) : null
+  const pageNode = selectedItemPreview
+    ? props.selectedItem
+    : props.selectedTab || props.selectedItem || props.selectedCourse
+  const captureNode = props.selectedItem || props.selectedTab || props.selectedCourse
 
-  if (!node) {
+  if (!focusNode || !pageNode) {
     return (
       <section className="grid min-h-0 grid-rows-[auto_1fr] bg-background">
         <div className="flex h-10 items-center border-b border-rule px-3">
-          <h2 className="text-xs font-medium text-foreground">Detail</h2>
+          <h2 className="text-xs font-medium text-foreground">Canvas Page</h2>
         </div>
         <EmptyColumn>Select a course to inspect Canvas content.</EmptyColumn>
       </section>
     )
   }
 
-  const commandsById = new Map(props.commands.map((command) => [command.id, command]))
-  const relevantEvents = props.events.filter((event) => {
-    if (event.nodeId) return event.nodeId === node.id
-    if (!event.commandId) return false
-
-    const command = commandsById.get(event.commandId)
-    if (!command) return false
-    if (command.targetNodeId === node.id) return true
-
-    const nodeIds = command.payload.nodeIds
-    return Array.isArray(nodeIds) && nodeIds.includes(node.id)
-  })
   const metadata = [
-    nodeLevel(node),
-    node.importedAt ? `imported ${formatTime(node.importedAt, props.clientReady)}` : "not imported",
-    node.expanded ? "expanded" : "not expanded",
+    nodeLevel(focusNode),
+    focusNode.importedAt ? `imported ${formatTime(focusNode.importedAt, props.clientReady)}` : "not imported",
+    focusNode.expanded ? "expanded" : "not expanded",
   ]
+  const pagePreview = selectedItemPreview || pagePreviewFor(pageNode)
+  const showingParentPageForItem = Boolean(props.selectedItem && !selectedItemPreview && props.selectedTab && pageNode.id === props.selectedTab.id)
 
   return (
     <section className="grid min-h-0 grid-rows-[auto_1fr] bg-background">
       <div className="flex h-10 items-center justify-between border-b border-rule px-3">
-        <h2 className="text-xs font-medium text-foreground">Detail</h2>
-        <a
-          href={displayUrl(node)}
-          target="_blank"
-          rel="noreferrer"
-          className="inline-flex h-7 items-center justify-center rounded-sm border border-rule px-2 text-muted-foreground hover:bg-secondary/30 hover:text-foreground"
-          aria-label="Open in Canvas"
-        >
-          <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
-        </a>
+        <h2 className="text-xs font-medium text-foreground">Canvas Page</h2>
+        <div className="flex items-center gap-1.5">
+          {captureNode ? (
+            <IconButton
+              label="Capture page"
+              disabled={props.commandBusy}
+              onClick={() => props.onRefreshPreview(captureNode)}
+              tone="canvas"
+            >
+              {props.previewBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />}
+            </IconButton>
+          ) : null}
+          <a
+            href={displayUrl(focusNode)}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex h-7 items-center justify-center rounded-sm border border-rule px-2 text-muted-foreground hover:bg-secondary/30 hover:text-foreground"
+            aria-label="Open in Canvas"
+          >
+            <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+          </a>
+        </div>
       </div>
-      <div className="grid min-h-0 content-start gap-4 overflow-auto p-4">
-        <div className="grid gap-1">
-          <p className="break-words text-lg font-semibold leading-tight text-foreground">{node.title}</p>
-          <p className="break-all text-[11px] leading-5 text-muted-foreground">{displayUrl(node)}</p>
-        </div>
-        <div className="flex flex-wrap gap-1.5">
-          {metadata.map((item) => (
-            <Badge key={item} variant="outline" className="rounded-sm border-rule text-[10px] text-muted-foreground">{item}</Badge>
-          ))}
-        </div>
-        {node.textPreview ? (
-          <div className="grid gap-2">
-            <h3 className="text-xs font-medium text-foreground">Preview</h3>
-            <p className="max-h-40 overflow-auto border border-rule bg-secondary/10 px-3 py-2 text-xs leading-5 text-muted-foreground">
-              {node.textPreview}
-            </p>
+      <div className="grid min-h-0 grid-cols-[minmax(0,1fr)_minmax(260px,0.42fr)]">
+        <div className="min-h-0 overflow-auto p-4">
+          <div className="grid gap-1">
+            <p className="break-words text-lg font-semibold leading-tight text-foreground">{focusNode.title}</p>
+            <p className="break-all text-[11px] leading-5 text-muted-foreground">{displayUrl(focusNode)}</p>
           </div>
-        ) : null}
-        {node.sourceSnapshotId || node.sourceFileId ? (
-          <div className="grid gap-2">
-            <h3 className="text-xs font-medium text-foreground">Source</h3>
-            <div className="grid gap-1 border border-rule bg-secondary/10 px-3 py-2 text-[11px] text-muted-foreground">
-              {node.sourceSnapshotId ? <p className="truncate">Snapshot {node.sourceSnapshotId}</p> : null}
-              {node.sourceFileId ? <p className="truncate">File {node.sourceFileId}</p> : null}
+          <div className="mt-3 flex flex-wrap gap-1.5">
+            {metadata.map((item) => (
+              <Badge key={item} variant="outline" className="rounded-sm border-rule text-[10px] text-muted-foreground">{item}</Badge>
+            ))}
+            {showingParentPageForItem ? (
+              <Badge variant="outline" className={cn("rounded-sm text-[10px]", CANVAS_ACCENT_BORDER, CANVAS_ACCENT_TEXT)}>showing tab page</Badge>
+            ) : null}
+          </div>
+          {props.selectedItem && !selectedItemPreview ? (
+            <div className="mt-4 grid gap-2 border border-rule bg-secondary/10 px-3 py-3">
+              <div className="flex items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium text-foreground">{props.selectedItem.title}</p>
+                  <p className="truncate text-[11px] text-muted-foreground">{nodePathLabel(props.selectedItem)}</p>
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  className={cn("h-8 rounded-sm border px-2.5 text-xs", CANVAS_ACCENT_BORDER, CANVAS_ACCENT_BG, CANVAS_ACCENT_TEXT, CANVAS_ACCENT_HOVER_BG)}
+                  disabled={props.commandBusy}
+                  onClick={() => props.selectedItem && props.onRefreshPreview(props.selectedItem)}
+                >
+                  {props.previewBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />}
+                  Capture
+                </Button>
+              </div>
             </div>
+          ) : null}
+          <div className="mt-4">
+            {pagePreview ? (
+              <PagePreview
+                preview={pagePreview}
+                disabled={props.commandBusy}
+                clientReady={props.clientReady}
+                onCaptureUrl={(url) => props.onCapturePreviewUrl(pageNode, url)}
+              />
+            ) : (
+              <ExpandPrompt
+                title={nodeLevel(pageNode) === "course" ? "No captured course page yet." : "No captured page modules yet."}
+                disabled={props.commandBusy}
+                busy={props.previewBusy}
+                onExpand={() => props.onRefreshPreview(pageNode)}
+              />
+            )}
           </div>
-        ) : null}
-        <EventRail events={relevantEvents} clientReady={props.clientReady} />
+          {focusNode.sourceSnapshotId || focusNode.sourceFileId ? (
+            <div className="mt-4 grid gap-2">
+              <h3 className="text-xs font-medium text-foreground">Source</h3>
+              <div className="grid gap-1 border border-rule bg-secondary/10 px-3 py-2 text-[11px] text-muted-foreground">
+                {focusNode.sourceSnapshotId ? <p className="truncate">Snapshot {focusNode.sourceSnapshotId}</p> : null}
+                {focusNode.sourceFileId ? <p className="truncate">File {focusNode.sourceFileId}</p> : null}
+              </div>
+            </div>
+          ) : null}
+        </div>
+        <ItemRail
+          items={props.items}
+          activeItem={props.selectedItem}
+          onSelect={props.onSelectNode}
+          onToggle={props.onToggleNode}
+        />
       </div>
     </section>
   )
@@ -509,6 +818,7 @@ export default function CanvasExtensionSetupPage() {
   const [wakingExtension, setWakingExtension] = useState(false)
   const [error, setError] = useState<StateError | null>(null)
   const [wakeWarning, setWakeWarning] = useState<string | null>(null)
+  const [activityOpen, setActivityOpen] = useState(false)
 
   const activeCommand = state?.health.activeCommand ?? state?.commands.find((command) => isActiveCommand(command)) ?? null
   const visibleNodes = useMemo(
@@ -533,6 +843,7 @@ export default function CanvasExtensionSetupPage() {
   const selectedItem = selectedTreeNode && nodeLevel(selectedTreeNode) === "item" ? selectedTreeNode : null
   const tabs = selectedCourse?.children ?? []
   const items = selectedTab?.children ?? []
+  const contentFocusNode = selectedItem || selectedTab || selectedCourse
   const selectedCount = visibleNodes.filter((node) => node.selected && !node.importedAt).length
   const commandBusy = Boolean(busyAction || isActiveCommand(activeCommand))
   const status = statusCopy({
@@ -611,8 +922,12 @@ export default function CanvasExtensionSetupPage() {
     }
   }
 
-  async function runCommand(type: "discover" | "expand_node" | "import_selected" | "stop" | "resume", targetNodeId?: string) {
-    setBusyAction(`${type}:${targetNodeId ?? ""}`)
+  async function runCommand(
+    type: "discover" | "expand_node" | "import_selected" | "capture_url" | "stop" | "resume",
+    targetNodeId?: string,
+    payload: { url?: string } = {},
+  ) {
+    setBusyAction(`${type}:${targetNodeId ?? ""}:${payload.url ?? ""}`)
     setError(null)
     setWakeWarning(null)
 
@@ -621,7 +936,7 @@ export default function CanvasExtensionSetupPage() {
         await fetch("/api/integrations/canvas/extension/commands", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ type, targetNodeId }),
+          body: JSON.stringify({ type, targetNodeId, ...payload }),
         }),
         "Failed to create Canvas extension command.",
       )
@@ -766,7 +1081,7 @@ export default function CanvasExtensionSetupPage() {
   }
 
   return (
-    <main className="min-h-screen bg-background text-foreground">
+    <main className="relative min-h-screen bg-background text-foreground">
       <div className="grid h-screen grid-rows-[auto_1fr]">
         <header className="grid gap-3 border-b border-rule bg-background px-4 py-3">
           <div className="flex items-center justify-between gap-3">
@@ -782,6 +1097,9 @@ export default function CanvasExtensionSetupPage() {
               </div>
             </div>
             <div className="flex items-center gap-2">
+              <IconButton label="Activity log" onClick={() => setActivityOpen((open) => !open)}>
+                <Clock3 className="h-4 w-4" aria-hidden="true" />
+              </IconButton>
               <IconButton label="Reload state" disabled={refreshing} onClick={refreshState}>
                 {refreshing ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <RefreshCw className="h-4 w-4" aria-hidden="true" />}
               </IconButton>
@@ -790,6 +1108,25 @@ export default function CanvasExtensionSetupPage() {
               </IconButton>
             </div>
           </div>
+          {activityOpen ? (
+            <div className="absolute right-4 top-16 z-30 w-[min(420px,calc(100vw-2rem))] border border-rule bg-background p-3 shadow-xl">
+              <div className="mb-3 flex items-center justify-between gap-2">
+                <div>
+                  <p className="text-sm font-medium text-foreground">Activity</p>
+                  <p className="text-[11px] text-muted-foreground">{state?.events.length ?? 0} event{(state?.events.length ?? 0) === 1 ? "" : "s"}</p>
+                </div>
+                <button
+                  type="button"
+                  className="inline-flex h-7 w-7 items-center justify-center rounded-sm border border-rule text-muted-foreground hover:bg-secondary/30 hover:text-foreground"
+                  onClick={() => setActivityOpen(false)}
+                  aria-label="Close activity log"
+                >
+                  <X className="h-3.5 w-3.5" aria-hidden="true" />
+                </button>
+              </div>
+              <EventRail events={state?.events ?? []} clientReady={clientReady} />
+            </div>
+          ) : null}
           <div
             className={cn(
               "grid min-h-10 grid-cols-[auto_1fr_auto] items-center gap-3 border px-3 py-2",
@@ -829,7 +1166,7 @@ export default function CanvasExtensionSetupPage() {
         </header>
 
         <div className="grid min-h-0 grid-cols-[240px_minmax(0,1fr)]">
-          <aside className="grid min-h-0 grid-rows-[auto_auto_1fr] gap-4 border-r border-rule bg-secondary/10 p-3">
+          <aside className="grid min-h-0 content-start gap-4 border-r border-rule bg-secondary/10 p-3">
             <section className="grid gap-2">
               <div className="flex items-center justify-between">
                 <h2 className="text-xs font-medium text-foreground">Setup</h2>
@@ -879,13 +1216,9 @@ export default function CanvasExtensionSetupPage() {
                 </IconButton>
               </div>
             </section>
-
-            <section className="min-h-0">
-              <EventRail events={state?.events ?? []} clientReady={clientReady} />
-            </section>
           </aside>
 
-          <section className="grid min-h-0 grid-cols-[minmax(180px,0.8fr)_minmax(180px,0.8fr)_minmax(220px,1fr)_minmax(300px,1.1fr)]">
+          <section className="grid min-h-0 grid-cols-[minmax(190px,0.7fr)_minmax(190px,0.7fr)_minmax(520px,1.8fr)]">
             <Column title="Courses" count={courses.length}>
               {courses.length > 0 ? courses.map((node) => (
                 <NodeRow
@@ -919,34 +1252,25 @@ export default function CanvasExtensionSetupPage() {
               ) : <EmptyColumn>Select a course.</EmptyColumn>}
             </Column>
 
-            <Column title="Items" count={items.length}>
-              {selectedTab ? (
-                items.length > 0 ? items.map((node) => (
-                  <NodeRow
-                    key={node.id}
-                    node={node}
-                    active={selectedItem?.id === node.id}
-                    onSelect={setSelectedNode}
-                    onToggle={toggleNode}
-                  />
-                )) : (
-                  <ExpandPrompt
-                    title="No items yet."
-                    disabled={commandBusy}
-                    busy={busyAction === `expand_node:${selectedTab.id}` || activeCommand?.targetNodeId === selectedTab.id}
-                    onExpand={() => runCommand("expand_node", selectedTab.id)}
-                  />
-                )
-              ) : <EmptyColumn>Select a tab.</EmptyColumn>}
-            </Column>
-
-            <DetailPane
-              node={selectedItem}
+            <ContentPane
               selectedCourse={selectedCourse}
               selectedTab={selectedTab}
-              commands={state?.commands ?? []}
-              events={state?.events ?? []}
+              selectedItem={selectedItem}
+              items={items}
               clientReady={clientReady}
+              commandBusy={commandBusy}
+              previewBusy={
+                Boolean(contentFocusNode) &&
+                (
+                  busyAction?.startsWith(`expand_node:${contentFocusNode?.id}:`) ||
+                  busyAction?.startsWith(`capture_url:${contentFocusNode?.id}:`) ||
+                  activeCommand?.targetNodeId === contentFocusNode?.id
+                )
+              }
+              onRefreshPreview={(node) => runCommand("expand_node", node.id)}
+              onCapturePreviewUrl={(node, url) => runCommand("capture_url", node.id, { url })}
+              onSelectNode={setSelectedNode}
+              onToggleNode={toggleNode}
             />
           </section>
         </div>
