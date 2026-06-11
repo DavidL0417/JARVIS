@@ -7,12 +7,12 @@ export const scheduleEventSourceSchema = z.enum(["task", "calendar", "focus"])
 export const checkInMoodSchema = z.enum(["good", "okay", "stuck"])
 export const checkInOutcomeSchema = z.enum(["completed", "missed", "partial"])
 export const checkInEnergySchema = z.enum(["low", "medium", "high"])
-export const syncOriginSchema = z.enum(["local", "gcal"])
-export const calendarSourceSchema = z.enum(["local", "google", "imported", "task"])
+export const syncOriginSchema = z.enum(["local", "gcal", "caldav"])
+export const calendarSourceSchema = z.enum(["local", "google", "caldav", "imported", "task"])
 export const calendarSyncPreferenceSchema = z.enum(["active", "pending", "ignored"])
 export const integrationProviderSchema = z.enum(["google", "notion", "canvas", "caldav"])
 export const userIntegrationStatusSchema = z.enum(["connected", "needs_reauth", "disconnected", "error"])
-export const sourceConnectorIdSchema = z.enum(["google_calendar", "notion", "gmail", "canvas"])
+export const sourceConnectorIdSchema = z.enum(["google_calendar", "notion", "gmail", "canvas", "caldav"])
 export const sourceConnectorStatusSchema = z.enum(["ready", "connected", "auth_needed", "missing_config", "failed"])
 export const memoryLayerSchema = z.enum([
   "operating_rules",
@@ -117,6 +117,7 @@ export const sourceConnectorSchema = z.object({
   detail: z.string().min(1),
   account: z.string().min(1).nullable(),
   canRun: z.boolean(),
+  enabled: z.boolean(),
   selectedSourceId: z.string().min(1).nullable(),
   selectedSourceName: z.string().min(1).nullable(),
 })

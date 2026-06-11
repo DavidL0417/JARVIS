@@ -5,10 +5,6 @@ import {
   syncGoogleCalendarEventsForUser,
 } from "@/lib/google-calendar-events"
 import {
-  getGoogleTokensFromSession,
-  upsertGoogleCalendarIntegration,
-} from "@/lib/supabase/google-calendar-integration"
-import {
   isAuthenticationRequiredError,
   requireAuthenticatedUser,
 } from "@/lib/supabase/auth"
@@ -48,18 +44,7 @@ export async function GET() {
 
 export async function POST() {
   try {
-    const { authUser, serverClient, user } = await requireAuthenticatedUser()
-    const { data: sessionData } = await serverClient.auth.getSession()
-    const googleTokens = getGoogleTokensFromSession(sessionData.session)
-
-    if (googleTokens.accessToken || googleTokens.refreshToken) {
-      await upsertGoogleCalendarIntegration({
-        userId: user.id,
-        authUser,
-        ...googleTokens,
-      })
-    }
-
+    const { user } = await requireAuthenticatedUser()
     const result = await syncGoogleCalendarEventsForUser(user.id)
     return NextResponse.json(result, { status: result.success ? 200 : 409 })
   } catch (error) {

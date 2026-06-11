@@ -93,9 +93,9 @@ export async function POST(request: Request) {
     )
   }
 
-  if (parsedBody.data.source === "task") {
+  if (parsedBody.data.source === "task" || parsedBody.data.source === "google" || parsedBody.data.source === "caldav") {
     return NextResponse.json(
-      { error: "Task Calendar is system-managed and cannot be created manually." },
+      { error: "Remote and task calendars are system-managed and cannot be created manually." },
       { status: 400 },
     )
   }

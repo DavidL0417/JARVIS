@@ -17,6 +17,7 @@
 - Canvas personal access tokens are a pilot-only integration secret. Store them only in `app_private.integration_tokens`; public integration rows may store the Canvas base URL/host and account metadata for readiness display.
 - Canvas extension pairing codes and extension bearer tokens are private credentials. Store only hashes in `app_private.canvas_extension_pairing_codes` and `app_private.canvas_extension_tokens`; never expose them through public tables.
 - Canvas extension control-plane rows are public metadata with RLS, not credentials. `canvas_extension_sessions`, `canvas_extension_commands`, `canvas_extension_command_events`, and `canvas_extension_nodes` may store connection status, command state, progress events, URLs, titles, selection state, compact evidence, and sanitized inert Canvas page previews only. Captured previews should prefer block metadata (`text`, `links`, or `mixed`) so the reader can surface syllabus prose separately from link-heavy course-summary/module lists.
+- CalDAV app passwords are integration secrets. Store them only in `app_private.integration_tokens`; public integration rows may store the CalDAV server URL/host, username/account label, status, and sync timestamps.
 
 ## Production V1 Tables
 
@@ -28,12 +29,15 @@
 ## Calendar Source Of Truth
 
 - `schedule_events` is the canonical app event store.
-- Imported Google events are mirrored into `schedule_events`.
+- Imported Google events are mirrored into `schedule_events`. A successful Google Calendar refresh reconciles that mirror against the provider window and removes imported Google rows that disappeared from Google, so deleted classes or unsubscribed calendars do not remain as fixed commitments.
+- Imported CalDAV events are mirrored into `schedule_events` as read-only calendar events with `last_synced_from = 'caldav'` and stable `external_event_id` values.
+- Connector enablement lives in `connector_settings`. A connected but disabled source keeps credentials and mirrored rows, but source refresh and planning must skip it intentionally instead of treating it as a failure.
 - JARVIS-created task/focus blocks are persisted first. Syncing task blocks outward to Google Calendar is an approval-backed assistant tool run, not part of normal calendar reads.
 - Google app sign-in and Google source authorization are separate OAuth intents. Plain sign-in uses the provider for identity only; Calendar/Gmail authorization requests the offline source scopes and captures provider tokens from the callback exchange result immediately.
 - Sync responses expose an explicit authorization-required state instead of a generic failure.
 - Source connector readiness is derived on the server from public integration rows, private token presence, known OAuth scopes, and required environment variables. The UI must not treat a public `connected` row as runnable unless the private token/scope check also passes.
 - CalDAV may appear as a public integration provider for connected calendar-source metadata. It must be accepted by response contracts even while richer CalDAV source refresh remains modeled separately.
+- Remote calendar rows from Google and CalDAV are sync-managed for identity/name, but users may change local display fields such as visibility, color, and sync preference.
 - Daily Vercel Cron calls `/api/cron/source-refresh` with `CRON_SECRET`. The daily cadence keeps Hobby deployments valid; manual refreshes and forced pre-plan refreshes cover fresh planning needs. Cron isolates per-user failures and records failed source snapshots instead of hiding refresh problems.
 
 ## Source Intake And Plans

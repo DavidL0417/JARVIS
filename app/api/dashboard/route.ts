@@ -30,6 +30,11 @@ import {
   type StoredCanvasIntegration,
 } from "@/lib/supabase/canvas-integration"
 import {
+  getStoredCalDavIntegration,
+  type StoredCalDavIntegration,
+} from "@/lib/supabase/caldav-integration"
+import { getConnectorSettingsForUser, isConnectorEnabled } from "@/lib/supabase/connector-settings"
+import {
   getStoredGoogleIntegration,
   type StoredGoogleIntegration,
 } from "@/lib/supabase/google-calendar-integration"
@@ -50,6 +55,7 @@ import type {
   UserIntegrationRow,
   IntegrationTokenRow,
   SourceConnector,
+  SourceConnectorId,
 } from "@/types"
 
 type AdminClient = Awaited<ReturnType<typeof requireAuthenticatedUser>>["adminClient"]
@@ -84,6 +90,32 @@ function getIntegration(integrations: UserIntegration[], provider: UserIntegrati
 
 function getLatestSource(sources: SourceSnapshotSummary[], source: SourceSnapshotSummary["source"]) {
   return sources.find((snapshot) => snapshot.source === source) ?? null
+}
+
+function getTime(value: string | null | undefined) {
+  return value ? new Date(value).getTime() : null
+}
+
+function getLatestActiveSource(
+  sources: SourceSnapshotSummary[],
+  source: SourceSnapshotSummary["source"],
+  options: { resolvedAfter?: string | null } = {},
+) {
+  const resolvedAfter = getTime(options.resolvedAfter)
+
+  return (
+    sources.find((snapshot) => {
+      if (snapshot.source !== source) {
+        return false
+      }
+
+      if (snapshot.freshness !== "failed" || !resolvedAfter) {
+        return true
+      }
+
+      return new Date(snapshot.capturedAt).getTime() > resolvedAfter
+    }) ?? null
+  )
 }
 
 function getIntegrationAccount(integration: UserIntegration | null) {
@@ -147,13 +179,17 @@ function getDistinctActiveSourceCount(input: {
   const sourceLabels = new Set<string>()
 
   for (const connector of input.sourceConnectors) {
-    if (connector.status === "connected" || connector.status === "ready") {
+    if (connector.enabled && (connector.status === "connected" || connector.status === "ready")) {
       sourceLabels.add(connector.id)
     }
   }
 
+  const connectorEnabledBySource = new Map<string, boolean>(
+    input.sourceConnectors.map((connector) => [connector.id, connector.enabled]),
+  )
+
   for (const source of input.sources) {
-    if (source.freshness !== "failed") {
+    if (source.freshness !== "failed" && connectorEnabledBySource.get(source.source) !== false) {
       sourceLabels.add(source.source)
     }
   }
@@ -184,23 +220,36 @@ function deriveSourceConnectors(input: {
   googleIntegration: StoredGoogleIntegration | null
   notionToken: IntegrationTokenRow | null
   canvasIntegration: StoredCanvasIntegration | null
+  calDavIntegration: StoredCalDavIntegration | null
+  connectorSettings: Map<SourceConnectorId, boolean>
 }): SourceConnector[] {
   const googleIntegration = getIntegration(input.integrations, "google")
   const notionIntegration = getIntegration(input.integrations, "notion")
   const canvasPublicIntegration = getIntegration(input.integrations, "canvas")
-  const googleCalendarSource = getLatestSource(input.sources, "google_calendar")
-  const gmailSource = getLatestSource(input.sources, "gmail")
+  const calDavPublicIntegration = getIntegration(input.integrations, "caldav")
+  const googleRecoveryAt = input.googleIntegration?.token_updated_at ?? null
+  const googleCalendarSource = getLatestActiveSource(input.sources, "google_calendar", {
+    resolvedAfter: googleRecoveryAt,
+  })
+  const gmailSource = getLatestActiveSource(input.sources, "gmail", {
+    resolvedAfter: googleRecoveryAt,
+  })
   const notionSource = getLatestSource(input.sources, "notion")
   const canvasSource = getLatestSource(input.sources, "canvas")
+  const calDavSource = getLatestSource(input.sources, "caldav")
   const googleAccount = getIntegrationAccount(googleIntegration)
   const notionAccount = getIntegrationAccount(notionIntegration)
   const canvasAccount =
     input.canvasIntegration?.provider_account_email ||
     input.canvasIntegration?.provider_user_id ||
     getIntegrationAccount(canvasPublicIntegration)
+  const calDavAccount =
+    input.calDavIntegration?.provider_account_email ||
+    input.calDavIntegration?.provider_user_id ||
+    getIntegrationAccount(calDavPublicIntegration)
   const missingGoogleEnv = getMissingEnv(["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET"])
   const missingNotionEnv = getMissingEnv(["NOTION_CLIENT_ID", "NOTION_CLIENT_SECRET"])
-  const sourceConnectors: SourceConnector[] = []
+  const sourceConnectors: Array<Omit<SourceConnector, "enabled">> = []
 
   if (notionIntegration?.status === "connected" && input.notionToken?.access_token) {
     sourceConnectors.push({
@@ -405,6 +454,45 @@ function deriveSourceConnectors(input: {
     }
   }
 
+  if (
+    input.calDavIntegration?.status === "connected" &&
+    input.calDavIntegration.server_url &&
+    input.calDavIntegration.provider_account_email &&
+    input.calDavIntegration.password
+  ) {
+    sourceConnectors.push({
+      id: "caldav",
+      status: calDavSource?.freshness === "failed" ? "failed" : "ready",
+      account: calDavAccount,
+      canRun: true,
+      detail: calDavSource?.freshness === "failed"
+        ? calDavSource.summary
+        : `${calDavAccount ? `${calDavAccount}. ` : ""}Ready to refresh ${input.calDavIntegration.server_name ?? "CalDAV"}.`,
+      selectedSourceId: input.calDavIntegration.server_url,
+      selectedSourceName: input.calDavIntegration.server_name,
+    })
+  } else if (input.calDavIntegration?.status === "needs_reauth" || input.calDavIntegration?.status === "error") {
+    sourceConnectors.push({
+      id: "caldav",
+      status: "auth_needed",
+      account: calDavAccount,
+      canRun: false,
+      detail: `${calDavAccount ? `${calDavAccount}. ` : ""}Reconnect with your Apple ID email and app-specific password, or choose Custom for another CalDAV server.`,
+      selectedSourceId: input.calDavIntegration.server_url,
+      selectedSourceName: input.calDavIntegration.server_name,
+    })
+  } else {
+    sourceConnectors.push({
+      id: "caldav",
+      status: "auth_needed",
+      account: calDavAccount,
+      canRun: false,
+      detail: "Connect Apple Calendar with your Apple ID email and app-specific password.",
+      selectedSourceId: input.calDavIntegration?.server_url ?? null,
+      selectedSourceName: input.calDavIntegration?.server_name ?? null,
+    })
+  }
+
   if (input.canvasIntegration?.status === "connected" && input.canvasIntegration.base_url && input.canvasIntegration.access_token) {
     sourceConnectors.push({
       id: "canvas",
@@ -451,7 +539,18 @@ function deriveSourceConnectors(input: {
     })
   }
 
-  return sourceConnectors
+  return sourceConnectors.map((connector) => {
+    const enabled = isConnectorEnabled(input.connectorSettings, connector.id)
+
+    return {
+      ...connector,
+      enabled,
+      canRun: enabled && connector.canRun,
+      detail: enabled
+        ? connector.detail
+        : "This source is turned off. Turn it on to include it in refreshes and planning.",
+    }
+  })
 }
 
 export async function GET() {
@@ -470,6 +569,8 @@ export async function GET() {
       storedGoogleIntegration,
       storedNotionToken,
       storedCanvasIntegration,
+      storedCalDavIntegration,
+      connectorSettings,
       dailyPlanResult,
     ] = await Promise.all([
       adminClient
@@ -516,6 +617,8 @@ export async function GET() {
       getStoredGoogleIntegration(user.id),
       getStoredIntegrationToken(user.id, "notion"),
       getStoredCanvasIntegration(user.id),
+      getStoredCalDavIntegration(user.id),
+      getConnectorSettingsForUser(user.id, adminClient),
       adminClient
         .from("daily_plans")
         .select(DAILY_PLAN_SELECT)
@@ -574,6 +677,8 @@ export async function GET() {
       googleIntegration: storedGoogleIntegration,
       notionToken: storedNotionToken,
       canvasIntegration: storedCanvasIntegration,
+      calDavIntegration: storedCalDavIntegration,
+      connectorSettings,
     })
     const dailyPlan = dailyPlanResult.data ? mapDailyPlanRowToDailyPlan(dailyPlanResult.data) : null
     const scheduledTaskIds = new Set(

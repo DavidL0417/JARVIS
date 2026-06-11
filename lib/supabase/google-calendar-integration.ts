@@ -39,6 +39,7 @@ export interface StoredGoogleIntegration {
   refresh_token: string | null
   expires_at: string | null
   scope: string | null
+  token_updated_at: string | null
 }
 
 export function getGoogleTokensFromSession(session: Session | null): Required<GoogleIntegrationTokens> {
@@ -157,6 +158,7 @@ export async function getStoredGoogleIntegration(userId: string): Promise<Stored
     refresh_token: tokenRow?.refresh_token ?? null,
     expires_at: tokenRow?.expires_at ?? null,
     scope: tokenRow?.scope ?? null,
+    token_updated_at: tokenRow?.updated_at ?? null,
   }
 }
 
@@ -267,19 +269,39 @@ export async function refreshGoogleAccessToken(userId: string, refreshToken: str
     }).toString(),
     cache: "no-store",
   })
-
-  if (!response.ok) {
-    await markGoogleIntegrationStatus(userId, "needs_reauth", `Google token refresh failed with status ${response.status}.`)
-    return null
-  }
-
-  const payload = (await response.json()) as {
+  const payload = (await response.json().catch(() => null)) as {
     access_token?: string
     expires_in?: number
     scope?: string
+    error?: string
+    error_description?: string
+  } | null
+
+  if (!response.ok) {
+    const permanentAuthFailure = response.status === 400 || response.status === 401
+    const detail = payload?.error_description || payload?.error || `status ${response.status}`
+
+    if (permanentAuthFailure) {
+      await upsertGoogleTokenRow({
+        userId,
+        accessToken: null,
+        refreshToken: null,
+        expiresAt: null,
+        scope: null,
+      })
+    }
+
+    await markGoogleIntegrationStatus(
+      userId,
+      permanentAuthFailure ? "needs_reauth" : "error",
+      permanentAuthFailure
+        ? `Google token refresh was rejected (${detail}). Reconnect Google to grant Calendar and Gmail access again.`
+        : `Google token refresh failed with ${detail}.`,
+    )
+    return null
   }
 
-  if (!payload.access_token) {
+  if (!payload?.access_token) {
     await markGoogleIntegrationStatus(userId, "needs_reauth", "Google token refresh returned no access token.")
     return null
   }

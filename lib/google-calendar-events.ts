@@ -21,6 +21,21 @@ const GOOGLE_EVENT_LOOKBACK_DAYS = 90
 const GOOGLE_EVENT_LOOKAHEAD_DAYS = 180
 const GOOGLE_CALENDAR_ID_PREFIX = "google-calendar:"
 
+interface GoogleCalendarSyncWindow {
+  timeMin: string
+  timeMax: string
+}
+
+interface MirroredGoogleEventRecord {
+  id: string
+  gcal_event_id: string | null
+  calendar_id: string | null
+  starts_at: string
+  ends_at: string
+  source: ScheduleEvent["source"]
+  last_synced_from: ScheduleEvent["lastSyncedFrom"]
+}
+
 function isGoogleAuthorizationFailure(message: string) {
   return /authorization|reauthorization|unauthorized|invalid authentication|invalid credentials|status 401|not connected/i.test(
     message,
@@ -68,6 +83,57 @@ interface GoogleCalendarWriteResponse {
 
 function toCalendarKey(googleCalendarId: string) {
   return `${GOOGLE_CALENDAR_ID_PREFIX}${googleCalendarId}`
+}
+
+function getGoogleCalendarSyncWindow(now = Date.now()): GoogleCalendarSyncWindow {
+  return {
+    timeMin: new Date(now - GOOGLE_EVENT_LOOKBACK_DAYS * DAY_IN_MS).toISOString(),
+    timeMax: new Date(now + GOOGLE_EVENT_LOOKAHEAD_DAYS * DAY_IN_MS).toISOString(),
+  }
+}
+
+function getStoredGoogleEventCalendarKey(event: Pick<MirroredGoogleEventRecord, "calendar_id" | "gcal_event_id">) {
+  if (event.calendar_id?.startsWith(GOOGLE_CALENDAR_ID_PREFIX)) {
+    return event.calendar_id
+  }
+
+  const parsedEventId = splitStoredGoogleEventId(event.gcal_event_id)
+  return parsedEventId ? toCalendarKey(parsedEventId.calendarId) : null
+}
+
+function overlapsSyncWindow(
+  event: Pick<MirroredGoogleEventRecord, "starts_at" | "ends_at">,
+  syncWindow: GoogleCalendarSyncWindow,
+) {
+  return new Date(event.ends_at).getTime() >= new Date(syncWindow.timeMin).getTime() &&
+    new Date(event.starts_at).getTime() <= new Date(syncWindow.timeMax).getTime()
+}
+
+export function getStaleGoogleMirrorEventIdsForTest(input: {
+  mirroredEvents: MirroredGoogleEventRecord[]
+  currentGcalEventIds: Set<string>
+  currentCalendarKeys: Set<string>
+  syncWindow: GoogleCalendarSyncWindow
+}) {
+  return input.mirroredEvents
+    .filter((event) => {
+      if (event.source !== "calendar" || event.last_synced_from !== "gcal" || !event.gcal_event_id) {
+        return false
+      }
+
+      const calendarKey = getStoredGoogleEventCalendarKey(event)
+
+      if (!calendarKey) {
+        return false
+      }
+
+      if (!input.currentCalendarKeys.has(calendarKey)) {
+        return true
+      }
+
+      return overlapsSyncWindow(event, input.syncWindow) && !input.currentGcalEventIds.has(event.gcal_event_id)
+    })
+    .map((event) => event.id)
 }
 
 function toEventTimestamp(value: GoogleCalendarEventDateTime | undefined, fallbackHour: string) {
@@ -153,13 +219,15 @@ async function fetchGoogleCalendarList(accessToken: string) {
   return (payload.items || []).filter((calendar) => typeof calendar.id === "string" && calendar.id.length > 0)
 }
 
-async function fetchGoogleEventsForCalendar(accessToken: string, googleCalendarId: string, userId: string) {
-  const now = Date.now()
-  const timeMin = new Date(now - GOOGLE_EVENT_LOOKBACK_DAYS * DAY_IN_MS).toISOString()
-  const timeMax = new Date(now + GOOGLE_EVENT_LOOKAHEAD_DAYS * DAY_IN_MS).toISOString()
+async function fetchGoogleEventsForCalendar(
+  accessToken: string,
+  googleCalendarId: string,
+  userId: string,
+  syncWindow: GoogleCalendarSyncWindow,
+) {
   const searchParams = new URLSearchParams({
-    timeMin,
-    timeMax,
+    timeMin: syncWindow.timeMin,
+    timeMax: syncWindow.timeMax,
     singleEvents: "true",
     orderBy: "startTime",
     maxResults: "2500",
@@ -224,21 +292,46 @@ async function persistGoogleCalendars(userId: string, calendars: GoogleCalendarL
   }
 
   const adminClient = createSupabaseAdminClient()
+  const calendarKeys = calendars
+    .filter((calendar): calendar is GoogleCalendarListItem & { id: string } => typeof calendar.id === "string")
+    .map((calendar) => toCalendarKey(calendar.id))
+
+  if (calendarKeys.length === 0) {
+    return
+  }
+
+  const { data: existingCalendars, error: existingCalendarsError } = await adminClient
+    .from("calendars")
+    .select(USER_CALENDAR_SELECT)
+    .eq("user_id", userId)
+    .in("calendar_key", calendarKeys)
+
+  if (existingCalendarsError) {
+    throw new Error(existingCalendarsError.message)
+  }
+
+  const existingByKey = new Map(
+    (existingCalendars ?? []).map((calendar) => [calendar.calendar_key as string, calendar as UserCalendarRow]),
+  )
+
   const rows = calendars
     .filter((calendar): calendar is GoogleCalendarListItem & { id: string } => typeof calendar.id === "string")
     .map((calendar) => {
       const summary = calendar.summary?.trim() || "Google Calendar"
+      const calendarKey = toCalendarKey(calendar.id)
+      const existing = existingByKey.get(calendarKey)
+
       return {
         user_id: userId,
-        calendar_key: toCalendarKey(calendar.id),
+        calendar_key: calendarKey,
         name: summary,
-        color: calendar.backgroundColor?.trim() || "#93c5fd",
+        color: existing?.color || calendar.backgroundColor?.trim() || "#93c5fd",
         source: "google" as const,
         google_calendar_id: calendar.id,
         remote_name: summary,
-        is_visible: true,
+        is_visible: existing?.is_visible ?? true,
         is_immutable: true,
-        sync_preference: "active" as const,
+        sync_preference: existing?.sync_preference ?? ("active" as const),
         is_task_calendar: false,
         updated_at: new Date().toISOString(),
       }
@@ -253,17 +346,64 @@ async function persistGoogleCalendars(userId: string, calendars: GoogleCalendarL
   }
 }
 
-async function persistGoogleEvents(userId: string, events: ScheduleEvent[]) {
+async function deleteStaleMirroredGoogleEvents(input: {
+  userId: string
+  currentEvents: ScheduleEvent[]
+  currentCalendarKeys: string[]
+  syncWindow: GoogleCalendarSyncWindow
+}) {
   const adminClient = createSupabaseAdminClient()
+  const { data, error } = await adminClient
+    .from("schedule_events")
+    .select("id, gcal_event_id, calendar_id, starts_at, ends_at, source, last_synced_from")
+    .eq("user_id", input.userId)
+    .eq("source", "calendar")
+    .eq("last_synced_from", "gcal")
+    .not("gcal_event_id", "is", null)
 
-  if (events.length === 0) {
-    return
+  if (error) {
+    throw new Error(error.message)
   }
 
+  const staleIds = getStaleGoogleMirrorEventIdsForTest({
+    mirroredEvents: (data ?? []) as MirroredGoogleEventRecord[],
+    currentGcalEventIds: new Set(
+      input.currentEvents
+        .map((event) => event.gcalEventId)
+        .filter((eventId): eventId is string => typeof eventId === "string" && eventId.length > 0),
+    ),
+    currentCalendarKeys: new Set(input.currentCalendarKeys),
+    syncWindow: input.syncWindow,
+  })
+
+  if (staleIds.length === 0) {
+    return 0
+  }
+
+  const { error: deleteError } = await adminClient
+    .from("schedule_events")
+    .delete()
+    .eq("user_id", input.userId)
+    .in("id", staleIds)
+
+  if (deleteError) {
+    throw new Error(deleteError.message)
+  }
+
+  return staleIds.length
+}
+
+async function persistGoogleEvents(input: {
+  userId: string
+  events: ScheduleEvent[]
+  calendarKeys: string[]
+  syncWindow: GoogleCalendarSyncWindow
+}) {
+  const adminClient = createSupabaseAdminClient()
   const { data: existingEvents, error: existingEventsError } = await adminClient
     .from("schedule_events")
     .select("gcal_event_id, priority, is_immutable")
-    .eq("user_id", userId)
+    .eq("user_id", input.userId)
     .not("gcal_event_id", "is", null)
 
   if (existingEventsError) {
@@ -278,42 +418,65 @@ async function persistGoogleEvents(userId: string, events: ScheduleEvent[]) {
       .map((event) => [event.gcal_event_id, event]),
   )
 
-  const { error } = await adminClient
-    .from("schedule_events")
-    .upsert(
-      events.map((event) => {
-        const existing = event.gcalEventId ? existingByGcalId.get(event.gcalEventId) : null
+  if (input.events.length > 0) {
+    const { error } = await adminClient
+      .from("schedule_events")
+      .upsert(
+        input.events.map((event) => {
+          const existing = event.gcalEventId ? existingByGcalId.get(event.gcalEventId) : null
 
-        return mapScheduleEventToInsert(
-          {
-            ...event,
-            priority: existing?.priority ?? event.priority,
-            isImmutable: existing?.is_immutable ?? event.isImmutable,
-            isCheckedIn: true,
-          },
-          userId,
-        )
-      }),
-      {
-        onConflict: "user_id,gcal_event_id",
-      },
-    )
+          return mapScheduleEventToInsert(
+            {
+              ...event,
+              priority: existing?.priority ?? event.priority,
+              isImmutable: existing?.is_immutable ?? event.isImmutable,
+              isCheckedIn: true,
+            },
+            input.userId,
+          )
+        }),
+        {
+          onConflict: "user_id,gcal_event_id",
+        },
+      )
 
-  if (error) {
-    throw new Error(error.message)
+    if (error) {
+      throw new Error(error.message)
+    }
+  }
+
+  const removedStaleEventCount = await deleteStaleMirroredGoogleEvents({
+    userId: input.userId,
+    currentEvents: input.events,
+    currentCalendarKeys: input.calendarKeys,
+    syncWindow: input.syncWindow,
+  })
+
+  return {
+    upsertedEventCount: input.events.length,
+    removedStaleEventCount,
   }
 }
 
-async function recordGoogleSourceSnapshot(userId: string, eventCount: number, calendarCount: number) {
+async function recordGoogleSourceSnapshot(
+  userId: string,
+  eventCount: number,
+  calendarCount: number,
+  removedStaleEventCount: number,
+) {
   const adminClient = createSupabaseAdminClient()
+  const removedSummary = removedStaleEventCount > 0
+    ? ` Removed ${removedStaleEventCount} stale mirrored event${removedStaleEventCount === 1 ? "" : "s"}.`
+    : ""
   const { error } = await adminClient.from("source_snapshots").insert({
     user_id: userId,
     source: "google_calendar",
     freshness: "fresh",
-    summary: `Imported ${eventCount} Google Calendar events from ${calendarCount} calendars.`,
+    summary: `Imported ${eventCount} Google Calendar events from ${calendarCount} calendars.${removedSummary}`,
     payload: {
       eventCount,
       calendarCount,
+      removedStaleEventCount,
     },
   })
 
@@ -513,11 +676,15 @@ export async function syncGoogleCalendarEventsForUser(userId: string): Promise<G
   }
 
   try {
+    const syncWindow = getGoogleCalendarSyncWindow()
     const calendars = await fetchGoogleCalendarList(accessToken)
     await persistGoogleCalendars(userId, calendars)
+    const calendarKeys = calendars
+      .filter((calendar): calendar is GoogleCalendarListItem & { id: string } => typeof calendar.id === "string")
+      .map((calendar) => toCalendarKey(calendar.id))
 
     const eventResults = await Promise.allSettled(
-      calendars.map((calendar) => fetchGoogleEventsForCalendar(accessToken, calendar.id as string, userId)),
+      calendars.map((calendar) => fetchGoogleEventsForCalendar(accessToken, calendar.id as string, userId, syncWindow)),
     )
     const failedResults = eventResults.filter((result): result is PromiseRejectedResult => result.status === "rejected")
 
@@ -532,8 +699,13 @@ export async function syncGoogleCalendarEventsForUser(userId: string): Promise<G
       .sort((left, right) => new Date(left.start).getTime() - new Date(right.start).getTime())
 
     await recordGoogleCalendarTaskFeedback(userId, events)
-    await persistGoogleEvents(userId, events)
-    await recordGoogleSourceSnapshot(userId, events.length, calendars.length)
+    const persistenceResult = await persistGoogleEvents({
+      userId,
+      events,
+      calendarKeys,
+      syncWindow,
+    })
+    await recordGoogleSourceSnapshot(userId, events.length, calendars.length, persistenceResult.removedStaleEventCount)
     await updateGoogleLastSyncedAt(userId)
 
     const [mirroredEvents, mirroredCalendars] = await Promise.all([

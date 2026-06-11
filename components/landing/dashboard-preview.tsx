@@ -7,6 +7,7 @@ const previewBlocks: Array<{ row: number; span: number; label: string; sub: stri
 ]
 
 const hours = ["08", "09", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20"]
+const hourRowHeight = 22
 
 export function DashboardPreview() {
   return (
@@ -86,7 +87,8 @@ export function DashboardPreview() {
               {hours.map((hour) => (
                 <span
                   key={hour}
-                  className="flex h-6 items-start justify-end pr-2 pt-1 leading-none"
+                  className="flex items-start justify-end pr-2 pt-1 leading-none"
+                  style={{ height: `${hourRowHeight}px` }}
                 >
                   {hour}
                 </span>
@@ -96,7 +98,7 @@ export function DashboardPreview() {
             <div
               className="relative grid"
               style={{
-                gridTemplateRows: `repeat(${hours.length}, 24px)`,
+                gridTemplateRows: `repeat(${hours.length}, ${hourRowHeight}px)`,
               }}
             >
               {hours.map((_, index) => (
@@ -136,8 +138,8 @@ export function DashboardPreview() {
                     key={index}
                     className="absolute left-2 right-3 flex items-center gap-2 px-2 py-1"
                     style={{
-                      top: `${block.row * 24}px`,
-                      height: `${block.span * 24 - 2}px`,
+                      top: `${block.row * hourRowHeight}px`,
+                      height: `${block.span * hourRowHeight - 2}px`,
                       background: tone.bg,
                       border: `1px solid ${tone.ring}`,
                       borderRadius: 2,

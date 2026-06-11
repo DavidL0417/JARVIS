@@ -7,10 +7,10 @@ export type CheckInOutcome = "completed" | "missed" | "partial"
 export type CheckInEnergy = "low" | "medium" | "high"
 export type IntegrationProvider = "google" | "notion" | "canvas" | "caldav"
 export type UserIntegrationStatus = "connected" | "needs_reauth" | "disconnected" | "error"
-export type SourceConnectorId = "google_calendar" | "notion" | "gmail" | "canvas"
+export type SourceConnectorId = "google_calendar" | "notion" | "gmail" | "canvas" | "caldav"
 export type SourceConnectorStatus = "ready" | "connected" | "auth_needed" | "missing_config" | "failed"
-export type SyncOrigin = "local" | "gcal"
-export type CalendarSource = "local" | "google" | "imported" | "task"
+export type SyncOrigin = "local" | "gcal" | "caldav"
+export type CalendarSource = "local" | "google" | "caldav" | "imported" | "task"
 export type CalendarSyncPreference = "active" | "pending" | "ignored"
 export type MemoryKind = "preference" | "task_context" | "source_observation" | "candidate" | "observation" | "rule"
 export type MemoryLayer =
@@ -155,6 +155,7 @@ export interface SourceConnector {
   detail: string
   account: string | null
   canRun: boolean
+  enabled: boolean
   selectedSourceId: string | null
   selectedSourceName: string | null
 }

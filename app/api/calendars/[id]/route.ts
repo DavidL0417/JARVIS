@@ -92,8 +92,8 @@ export async function PATCH(
       return NextResponse.json({ error: "Calendar not found." }, { status: 404 })
     }
 
-    if (existing.source === "google") {
-      return NextResponse.json({ error: "Imported Google calendars are managed by sync." }, { status: 409 })
+    if ((existing.source === "google" || existing.source === "caldav") && (parsedBody.data.name || "isImmutable" in parsedBody.data)) {
+      return NextResponse.json({ error: "Remote calendars are managed by sync. Visibility, color, and display preference can still be changed." }, { status: 409 })
     }
 
     if (parsedBody.data.name) {
@@ -188,8 +188,8 @@ export async function DELETE(
       )
     }
 
-    if (existing.source === "google") {
-      return NextResponse.json({ error: "Imported Google calendars are removed by disconnect/resync." }, { status: 409 })
+    if (existing.source === "google" || existing.source === "caldav") {
+      return NextResponse.json({ error: "Remote calendars are removed by disconnect/resync." }, { status: 409 })
     }
 
     const [scheduleEventUpdate, taskUpdate, deleteResult] = await Promise.all([

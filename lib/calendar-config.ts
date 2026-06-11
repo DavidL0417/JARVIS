@@ -4,7 +4,7 @@ import {
   TASKS_CALENDAR_NAME,
 } from "@/lib/task-calendar-constants"
 
-export type AppCalendarSource = "local" | "google" | "imported" | "task"
+export type AppCalendarSource = "local" | "google" | "caldav" | "imported" | "task"
 
 export type AppCalendarPreset = {
   id: string

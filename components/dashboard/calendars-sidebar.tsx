@@ -21,8 +21,6 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import {
   Check,
   Download,
-  Eye,
-  EyeOff,
   MoreVertical,
   Palette,
   Pencil,
@@ -45,7 +43,7 @@ export interface Calendar {
   color: string
   isVisible: boolean
   isImmutable?: boolean
-  source: "local" | "google" | "imported" | "task"
+  source: "local" | "google" | "caldav" | "imported" | "task"
 }
 
 type GuardIntent = {
@@ -68,6 +66,13 @@ const colorOptions = [
 ]
 
 const initialCalendars: Calendar[] = []
+const CALENDAR_GROUP_ORDER = [
+  "caldav",
+  "google",
+  "task",
+  "local",
+  "imported",
+] satisfies Calendar["source"][]
 
 interface CalendarsSidebarProps {
   isOpen: boolean
@@ -80,16 +85,32 @@ interface CalendarsSidebarProps {
 
 function sortCalendars(calendars: Calendar[]) {
   return [...calendars].sort((left, right) => {
-    if (left.source === "task" && right.source !== "task") {
-      return -1
-    }
+    const leftGroup = CALENDAR_GROUP_ORDER.indexOf(left.source)
+    const rightGroup = CALENDAR_GROUP_ORDER.indexOf(right.source)
 
-    if (left.source !== "task" && right.source === "task") {
-      return 1
+    if (leftGroup !== rightGroup) {
+      return leftGroup - rightGroup
     }
 
     return left.name.localeCompare(right.name)
   })
+}
+
+function getCalendarGroupLabel(source: Calendar["source"]) {
+  if (source === "google") return "Google"
+  if (source === "caldav") return "Apple Calendar"
+  if (source === "task") return "JARVIS"
+  if (source === "imported") return "Imported"
+  return "Local"
+}
+
+function isRemoteCalendar(calendar: Calendar) {
+  return calendar.source === "google" || calendar.source === "caldav"
+}
+
+function getCalendarGroupOrder(group: string) {
+  const source = CALENDAR_GROUP_ORDER.find((item) => getCalendarGroupLabel(item) === group)
+  return source ? CALENDAR_GROUP_ORDER.indexOf(source) : CALENDAR_GROUP_ORDER.length
 }
 
 function toSidebarCalendar(calendar: UserCalendar): Calendar {
@@ -147,6 +168,18 @@ export function CalendarsSidebar({
     () => new Map(calendars.map((calendar) => [calendar.id, calendar])),
     [calendars],
   )
+  const calendarGroups = useMemo(() => {
+    const groups = new Map<string, Calendar[]>()
+
+    for (const calendar of calendars) {
+      const group = getCalendarGroupLabel(calendar.source)
+      groups.set(group, [...(groups.get(group) ?? []), calendar])
+    }
+
+    return Array.from(groups.entries()).sort(
+      ([left], [right]) => getCalendarGroupOrder(left) - getCalendarGroupOrder(right),
+    )
+  }, [calendars])
 
   async function persistCalendarMutation(
     request: () => Promise<Response>,
@@ -368,6 +401,15 @@ export function CalendarsSidebar({
     onSelectCalendar?.(activeCalendarId === calendarId ? null : calendarId)
   }
 
+  const handleCalendarRowClick = (calendarId: string) => {
+    if (onSelectCalendar) {
+      handleCalendarClick(calendarId)
+      return
+    }
+
+    void handleToggleVisibility(calendarId)
+  }
+
   if (!isOpen) {
     return null
   }
@@ -380,7 +422,7 @@ export function CalendarsSidebar({
       />
 
       <aside
-        className="fixed left-0 top-0 z-50 h-full w-72 border-r border-rule bg-background animate-in slide-in-from-left duration-200"
+        className="fixed left-0 top-0 z-50 h-full w-80 max-w-[calc(100vw-1rem)] border-r border-rule bg-background animate-in slide-in-from-left duration-200"
         aria-label="Calendars"
       >
         <div className="flex h-full flex-col">
@@ -411,112 +453,119 @@ export function CalendarsSidebar({
                 No calendars.
               </p>
             ) : (
-              <ul>
-                {calendars.map((calendar) => {
-                  const active = activeCalendarId === calendar.id
-                  const sourceLabel =
-                    calendar.source === "google"
-                      ? "GCAL"
-                      : calendar.source === "imported"
-                        ? "ICS"
-                        : calendar.source === "task"
-                          ? "TASK"
-                          : null
-                  return (
-                    <li
-                      key={calendar.id}
-                      className={`group relative flex items-center gap-2 border-b border-rule px-2 py-2 transition-colors ${
-                        active ? "bg-accent" : "hover:bg-accent/40"
-                      }`}
-                    >
-                      <button
-                        type="button"
-                        onClick={(event) => {
-                          event.stopPropagation()
-                          void handleToggleVisibility(calendar.id)
-                        }}
-                        aria-label={calendar.isVisible ? `Hide ${calendar.name}` : `Show ${calendar.name}`}
-                        className="flex h-4 w-4 shrink-0 items-center justify-center rounded-sm transition-colors hover:bg-accent"
-                        style={{ color: calendar.isVisible ? calendar.color : "var(--muted-foreground)" }}
-                      >
-                        {calendar.isVisible ? (
-                          <Eye className="h-3 w-3" />
-                        ) : (
-                          <EyeOff className="h-3 w-3" />
-                        )}
-                      </button>
-                      <span
-                        className="h-2 w-2 shrink-0 rounded-full"
-                        style={{ backgroundColor: calendar.color }}
-                        aria-hidden="true"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => handleCalendarClick(calendar.id)}
-                        className="flex-1 truncate text-left text-[12.5px] text-foreground"
-                      >
-                        {calendar.name}
-                      </button>
-                      {sourceLabel ? (
-                        <span className="num text-[9px] uppercase text-muted-foreground">
-                          {sourceLabel}
-                        </span>
-                      ) : null}
-                      {calendar.source !== "task" ? (
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild onClick={(event) => event.stopPropagation()}>
+              <div className="flex flex-col gap-2">
+                {calendarGroups.map(([group, groupCalendars]) => (
+                  <div key={group}>
+                    <h3 className="px-3 pb-1.5 pt-3 text-[12px] font-semibold text-muted-foreground">
+                      {group}
+                    </h3>
+                    <ul className="flex flex-col gap-0.5">
+                      {groupCalendars.map((calendar) => {
+                        const active = activeCalendarId === calendar.id
+                        const remote = isRemoteCalendar(calendar)
+
+                        return (
+                          <li
+                            key={calendar.id}
+                            className={`group relative flex min-h-10 items-center gap-2 rounded-sm px-2 py-1.5 transition-colors ${
+                              active ? "bg-accent" : "hover:bg-accent/45"
+                            }`}
+                          >
                             <button
                               type="button"
-                              aria-label={`More for ${calendar.name}`}
-                              disabled={isMutating}
-                              className="flex h-6 w-6 shrink-0 items-center justify-center rounded-sm text-muted-foreground opacity-0 transition-opacity hover:bg-accent hover:text-foreground group-hover:opacity-100 focus:opacity-100"
+                              onClick={(event) => {
+                                event.stopPropagation()
+                                void handleToggleVisibility(calendar.id)
+                              }}
+                              aria-label={
+                                calendar.isVisible ? `Hide ${calendar.name}` : `Show ${calendar.name}`
+                              }
+                              aria-pressed={calendar.isVisible}
+                              disabled={isMutating || !calendar.recordId}
+                              className="flex h-5 w-5 shrink-0 items-center justify-center rounded-[5px] border text-background transition-transform hover:scale-105 disabled:cursor-not-allowed disabled:opacity-60"
+                              style={{
+                                backgroundColor: calendar.isVisible ? calendar.color : "transparent",
+                                borderColor: calendar.isVisible ? calendar.color : "var(--muted-foreground)",
+                              }}
                             >
-                              <MoreVertical className="h-3.5 w-3.5" />
+                              {calendar.isVisible ? (
+                                <Check className="h-3.5 w-3.5" strokeWidth={3} />
+                              ) : null}
                             </button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="w-40">
-                            <DropdownMenuItem onClick={() => setEditingCalendar(calendar)}>
-                              <Pencil className="mr-2 h-3.5 w-3.5" />
-                              Rename
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => setColorPickerOpen(calendar.id)}>
-                              <Palette className="mr-2 h-3.5 w-3.5" />
-                              Color
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() => void handleDeleteCalendar(calendar.id)}
-                              className="text-destructive focus:text-destructive"
+                            <button
+                              type="button"
+                              onClick={() => handleCalendarRowClick(calendar.id)}
+                              className={`min-w-0 flex-1 truncate text-left text-[14px] font-medium ${
+                                calendar.isVisible ? "text-foreground" : "text-muted-foreground"
+                              }`}
                             >
-                              <Trash2 className="mr-2 h-3.5 w-3.5" />
-                              Delete
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      ) : null}
+                              {calendar.name}
+                            </button>
+                            {calendar.source !== "task" ? (
+                              <DropdownMenu>
+                                <DropdownMenuTrigger
+                                  asChild
+                                  onClick={(event) => event.stopPropagation()}
+                                >
+                                  <button
+                                    type="button"
+                                    aria-label={`More for ${calendar.name}`}
+                                    disabled={isMutating}
+                                    className="flex h-6 w-6 shrink-0 items-center justify-center rounded-sm text-muted-foreground opacity-0 transition-opacity hover:bg-accent hover:text-foreground group-hover:opacity-100 focus:opacity-100"
+                                  >
+                                    <MoreVertical className="h-3.5 w-3.5" />
+                                  </button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end" className="w-40">
+                                  {!remote ? (
+                                    <DropdownMenuItem onClick={() => setEditingCalendar(calendar)}>
+                                      <Pencil className="mr-2 h-3.5 w-3.5" />
+                                      Rename
+                                    </DropdownMenuItem>
+                                  ) : null}
+                                  <DropdownMenuItem onClick={() => setColorPickerOpen(calendar.id)}>
+                                    <Palette className="mr-2 h-3.5 w-3.5" />
+                                    Color
+                                  </DropdownMenuItem>
+                                  {!remote ? (
+                                    <DropdownMenuItem
+                                      onClick={() => void handleDeleteCalendar(calendar.id)}
+                                      className="text-destructive focus:text-destructive"
+                                    >
+                                      <Trash2 className="mr-2 h-3.5 w-3.5" />
+                                      Delete
+                                    </DropdownMenuItem>
+                                  ) : null}
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            ) : null}
 
-                      {colorPickerOpen === calendar.id ? (
-                        <div className="absolute right-10 top-9 z-50 rounded-sm border border-rule bg-popover p-1.5 shadow-lg">
-                          <div className="grid grid-cols-5 gap-1">
-                            {colorOptions.map((color) => (
-                              <button
-                                type="button"
-                                key={color}
-                                aria-label={`Color ${color}`}
-                                className="h-5 w-5 rounded-sm border border-transparent transition-colors hover:border-foreground/40"
-                                style={{ backgroundColor: color }}
-                                onClick={(event) => {
-                                  event.stopPropagation()
-                                  void handleChangeColor(calendar.id, color)
-                                }}
-                              />
-                            ))}
-                          </div>
-                        </div>
-                      ) : null}
-                    </li>
-                  )
-                })}
-              </ul>
+                            {colorPickerOpen === calendar.id ? (
+                              <div className="absolute right-10 top-9 z-50 rounded-sm border border-rule bg-popover p-1.5 shadow-lg">
+                                <div className="grid grid-cols-5 gap-1">
+                                  {colorOptions.map((color) => (
+                                    <button
+                                      type="button"
+                                      key={color}
+                                      aria-label={`Color ${color}`}
+                                      className="h-5 w-5 rounded-sm border border-transparent transition-colors hover:border-foreground/40"
+                                      style={{ backgroundColor: color }}
+                                      onClick={(event) => {
+                                        event.stopPropagation()
+                                        void handleChangeColor(calendar.id, color)
+                                      }}
+                                    />
+                                  ))}
+                                </div>
+                              </div>
+                            ) : null}
+                          </li>
+                        )
+                      })}
+                    </ul>
+                  </div>
+                ))}
+              </div>
             )}
           </div>
 

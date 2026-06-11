@@ -58,6 +58,14 @@ const canvasExtensionSyncCourseMigration = readFileSync(
   "supabase/migrations/20260528130000_canvas_extension_sync_course.sql",
   "utf8",
 )
+const caldavConnectorSettingsMigration = readFileSync(
+  "supabase/migrations/20260518034200_caldav_connector_settings.sql",
+  "utf8",
+)
+const repairIntegrationProviderChecksMigration = readFileSync(
+  "supabase/migrations/20260518194828_repair_integration_provider_checks.sql",
+  "utf8",
+)
 
 describe("production Supabase migration", () => {
   it("keeps OAuth tokens outside public tables", () => {
@@ -88,6 +96,8 @@ describe("production Supabase migration", () => {
     for (const table of ["source_files", "source_candidates", "daily_plans"]) {
       expect(dailyCommandDeckMigration).toContain(`alter table public.${table} enable row level security;`)
     }
+
+    expect(caldavConnectorSettingsMigration).toContain("alter table public.connector_settings enable row level security;")
   })
 
   it("keeps browser clients behind backend routes instead of direct table grants", () => {
@@ -169,6 +179,28 @@ describe("production Supabase migration", () => {
     expect(caldavProviderContractMigration).toContain("token_provider in ('google', 'notion', 'canvas', 'caldav')")
     expect(caldavProviderContractMigration).toContain("revoke all on function public.get_integration_token(uuid, text) from public, anon, authenticated;")
     expect(caldavProviderContractMigration).not.toContain("disable row level security")
+  })
+
+  it("adds CalDAV and connector enablement without exposing private tokens", () => {
+    expect(caldavConnectorSettingsMigration).toContain("check (provider in ('google', 'notion', 'canvas', 'caldav'))")
+    expect(caldavConnectorSettingsMigration).toContain("source in ('local', 'google', 'caldav', 'imported', 'task')")
+    expect(caldavConnectorSettingsMigration).toContain("last_synced_from in ('local', 'gcal', 'caldav')")
+    expect(caldavConnectorSettingsMigration).toContain("create table public.connector_settings")
+    expect(caldavConnectorSettingsMigration).toContain("alter table public.connector_settings enable row level security;")
+    expect(caldavConnectorSettingsMigration).toContain("revoke all on public.connector_settings from anon, authenticated;")
+    expect(caldavConnectorSettingsMigration).toContain("token_provider in ('google', 'notion', 'canvas', 'caldav')")
+    expect(caldavConnectorSettingsMigration).toContain("revoke all on function public.get_integration_token(uuid, text) from public, anon, authenticated;")
+    expect(caldavConnectorSettingsMigration).not.toContain("disable row level security")
+  })
+
+  it("repairs stale provider checks for CalDAV without reopening token access", () => {
+    expect(repairIntegrationProviderChecksMigration).toContain("'public.integrations'::regclass")
+    expect(repairIntegrationProviderChecksMigration).toContain("'app_private.integration_tokens'::regclass")
+    expect(repairIntegrationProviderChecksMigration).toContain("pg_get_constraintdef(c.oid) ilike '%provider%'")
+    expect(repairIntegrationProviderChecksMigration).toContain("check (provider in ('google', 'notion', 'canvas', 'caldav'))")
+    expect(repairIntegrationProviderChecksMigration).toContain("token_provider in ('google', 'notion', 'canvas', 'caldav')")
+    expect(repairIntegrationProviderChecksMigration).toContain("revoke all on function public.get_integration_token(uuid, text) from public, anon, authenticated;")
+    expect(repairIntegrationProviderChecksMigration).not.toContain("disable row level security")
   })
 
   it("stores Canvas extension pairing data in private service-role-only tables", () => {

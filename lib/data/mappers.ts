@@ -125,11 +125,15 @@ function normalizeSyncOrigin(value: SyncOrigin | string | null | undefined): Syn
     return value
   }
 
+  if (value === "caldav") {
+    return value
+  }
+
   return "local"
 }
 
 function normalizeCalendarSource(value: CalendarSource | string | null | undefined): CalendarSource {
-  if (value === "google" || value === "imported" || value === "task") {
+  if (value === "google" || value === "caldav" || value === "imported" || value === "task") {
     return value
   }
 

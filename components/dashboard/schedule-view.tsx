@@ -19,7 +19,17 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
-import { CalendarPlus, ChevronLeft, ChevronRight, KeyRound, Loader2, MapPin, RefreshCw, X } from "lucide-react"
+import {
+  CalendarDays,
+  CalendarPlus,
+  ChevronLeft,
+  ChevronRight,
+  KeyRound,
+  Loader2,
+  MapPin,
+  RefreshCw,
+  X,
+} from "lucide-react"
 import {
   fetchGoogleEvents,
   isGoogleCalendarAuthorizationError,
@@ -48,7 +58,7 @@ export interface CalendarEvent {
   title: string
   start: string
   end: string
-  source: "google" | "local" | "task"
+  source: "google" | "caldav" | "local" | "task"
   isReadOnly: boolean
   calendarId: string
   allDay: boolean
@@ -137,7 +147,12 @@ function mapScheduleEventsToCalendarEvents(
   return scheduleEvents.flatMap((event) => {
     const start = new Date(event.start)
     const end = new Date(event.end)
-    const source = event.lastSyncedFrom === "gcal" || Boolean(event.gcalEventId) ? ("google" as const) : ("local" as const)
+    const source =
+      event.lastSyncedFrom === "caldav"
+        ? ("caldav" as const)
+        : event.lastSyncedFrom === "gcal" || Boolean(event.gcalEventId)
+          ? ("google" as const)
+          : ("local" as const)
     const base = {
       title: event.title,
       start: event.start,
@@ -307,6 +322,7 @@ interface ScheduleViewProps {
   plannerStatus?: string
   plannerSummary?: string
   onSchedule?: () => void | Promise<void>
+  onOpenCalendars?: () => void
   isScheduling?: boolean
 }
 
@@ -463,6 +479,7 @@ export function ScheduleView({
   plannerStatus = "Idle",
   plannerSummary = "",
   onSchedule,
+  onOpenCalendars,
   isScheduling = false,
 }: ScheduleViewProps) {
   const [viewMode, setViewMode] = useState<ViewMode>("7days")
@@ -688,12 +705,16 @@ export function ScheduleView({
           if (visibleCalendarIds.includes(event.calendarId)) {
             return true
           }
-          return event.source === "google" && !knownCalendarIds.has(event.calendarId)
+          return (event.source === "google" || event.source === "caldav") && !knownCalendarIds.has(event.calendarId)
         })
       : mappedEvents
   }, [calendars, displayDates, scheduleEvents, tasks, visibleCalendarIds])
 
   const allDayEvents = useMemo(() => events.filter((event) => event.allDay), [events])
+  const visibleCalendarCount = useMemo(
+    () => (calendars ?? []).filter((calendar) => calendar.isVisible).length,
+    [calendars],
+  )
   const taskReminderEvents = useMemo(
     () => allDayEvents.filter((event) => event.renderVariant === "task-due"),
     [allDayEvents],
@@ -1051,6 +1072,29 @@ export function ScheduleView({
               {syncNeedsAuthorization ? "Authorize Google Calendar" : "Sync Google"}
             </TooltipContent>
           </Tooltip>
+          {onOpenCalendars ? (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  onClick={onOpenCalendars}
+                  aria-label="Choose visible calendars"
+                  className="flex h-8 items-center gap-1.5 rounded-sm border border-rule px-2.5 text-[12px] text-foreground hover:border-rule-strong hover:bg-accent"
+                >
+                  <CalendarDays className="h-3.5 w-3.5 text-copper" />
+                  <span className="num text-[10.5px] uppercase text-muted-foreground">
+                    Calendars
+                  </span>
+                  <span className="num text-[10.5px] uppercase text-foreground">
+                    {visibleCalendarCount}
+                  </span>
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="text-[11px]">
+                Choose visible calendars
+              </TooltipContent>
+            </Tooltip>
+          ) : null}
         </div>
 
         <div className="flex items-center gap-0.5">

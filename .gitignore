@@ -16,7 +16,7 @@ node_modules
 .DS_Store
 test-results/
 playwright-report/
-.claude/worktrees/
+/.claude
 
 # TypeScript incremental build cache
 tsconfig.tsbuildinfo
