@@ -8,6 +8,7 @@ import {
 import { classifySupabaseAuthError } from "@/lib/supabase/auth"
 import {
   canvasExtensionCommandEventSchema,
+  canvasExtensionImportPageRequestSchema,
   canvasExtensionPageSnapshotSchema,
   canvasExtensionCreateCommandRequestSchema,
   canvasExtensionStateResponseSchema,
@@ -157,6 +158,35 @@ describe("Canvas extension control-plane schemas", () => {
     expect(parsed.pageItemLinks?.[0].text).toBe("Week 1 PDF")
     expect(parsed.pagePreview?.links[0].text).toBe("Week 1 PDF")
     expect(parsed.pagePreview?.blocks?.[0].type).toBe("links")
+  })
+
+  it("accepts both DOM snapshots and Canvas API content on the import-page request", () => {
+    const snapshot = canvasExtensionImportPageRequestSchema.parse({
+      scanId: "canvas-command-123456",
+      canvasOrigin: "https://canvas.example.edu",
+      url: "https://canvas.example.edu/courses/42/pages/week-1",
+      title: "Week 1",
+      courseHint: "Course 42",
+      pageKindHint: "page",
+      visibleText: "Week 1 reading",
+      links: [],
+      capturedAt: "2026-05-28T20:00:00.000Z",
+    })
+    expect("visibleText" in snapshot).toBe(true)
+
+    const apiContent = canvasExtensionImportPageRequestSchema.parse({
+      scanId: "canvas-command-123456",
+      canvasOrigin: "https://canvas.example.edu",
+      url: "https://canvas.example.edu/courses/42/pages/week-1",
+      title: "Week 1",
+      courseHint: "Course 42",
+      pageKindHint: "page",
+      apiSource: "page",
+      nodeId: "11111111-1111-4111-8111-111111111111",
+      contentHtml: "<h1>Week 1</h1><p>Read chapter 1.</p>",
+      capturedAt: "2026-05-28T20:00:00.000Z",
+    })
+    expect("apiSource" in apiContent && apiContent.apiSource).toBe("page")
   })
 
   it("keeps only courses and nested nodes visible in the control plane", () => {

@@ -5,7 +5,10 @@ import {
   isAllowedCanvasUrl,
   isLikelyCanvasTabUrl,
   looksLikeActiveAssessment,
+  looksLikeGatedCapture,
+  looksLikeLoginUrl,
   normalizeUrl,
+  unwrapProxyUrl,
 } from "../extensions/canvas-reader/src/guardrails.js"
 import {
   appHostPermissionPattern,
@@ -74,5 +77,49 @@ describe("Canvas extension guardrails", () => {
     expect(isLikelyCanvasTabUrl("https://chatgpt.com/")).toBe(false)
     expect(isLikelyCanvasTabUrl("https://canvas.northwestern.edu/")).toBe(true)
     expect(isLikelyCanvasTabUrl("https://school.instructure.com/courses/42")).toBe(true)
+  })
+
+  it("detects auth/SSO landing URLs, including Northwestern SSO", () => {
+    expect(looksLikeLoginUrl("https://prd-nusso.it.northwestern.edu/nusso/XUI/?realm=northwestern")).toBe(true)
+    expect(looksLikeLoginUrl("https://idp.example.edu/idp/profile/SAML2/Redirect/SSO")).toBe(true)
+    expect(looksLikeLoginUrl("https://api.duosecurity.com/frame/web/v1/auth")).toBe(true)
+    expect(looksLikeLoginUrl("https://www.proquest.com/docview/2679088860")).toBe(false)
+  })
+
+  it("flags a sign-in shell as a gated capture but lets a real article through", () => {
+    // The actual Northwestern SSO shell that previously got stored as content.
+    expect(looksLikeGatedCapture({
+      target: "http://turing.library.northwestern.edu/login?url=https://www.proquest.com/docview/2679088860/se-2",
+      destination: "https://www.proquest.com/docview/2679088860/se-2",
+      finalUrl: "https://prd-nusso.it.northwestern.edu/nusso/XUI/?realm=northwestern",
+      html: "<html><body><!--[if !IE]--> Loading... <a>Help with login problems</a></body></html>",
+      readableTextLength: 40,
+    })).toBe(true)
+
+    expect(looksLikeGatedCapture({
+      target: "https://www.jstor.org/stable/799511",
+      destination: "https://www.jstor.org/stable/799511",
+      finalUrl: "https://www.jstor.org/stable/799511",
+      html: "<html><body><article><h1>Moral Passage</h1><p>" + "word ".repeat(400) + "</p></article></body></html>",
+      readableTextLength: 2000,
+    })).toBe(false)
+  })
+
+  it("detects an inline password field even without auth URL markers", () => {
+    expect(looksLikeGatedCapture({
+      target: "https://paywall.example.com/article",
+      destination: "https://paywall.example.com/article",
+      finalUrl: "https://paywall.example.com/article",
+      html: '<form><input type="password" name="pw"></form>',
+      readableTextLength: 12,
+    })).toBe(true)
+  })
+
+  it("unwraps EZproxy links to the underlying reading", () => {
+    expect(
+      unwrapProxyUrl("http://turing.library.northwestern.edu/login?url=https://www.proquest.com/docview/2679088860/se-2?accountid=12861"),
+    ).toBe("https://www.proquest.com/docview/2679088860/se-2?accountid=12861")
+    // A plain reading link is returned unchanged.
+    expect(unwrapProxyUrl("https://www.jstor.org/stable/799511")).toBe("https://www.jstor.org/stable/799511")
   })
 })

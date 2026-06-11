@@ -338,6 +338,51 @@ export async function deleteCanvasExtensionChildren(input: {
   }
 }
 
+// Delete a single Canvas node the user no longer wants (e.g. a bad capture). Page content
+// rows cascade on the node FK; any stored original file is best-effort removed from storage.
+export async function deleteCanvasExtensionNode(input: {
+  adminClient: AdminClient
+  userId: string
+  nodeId: string
+}): Promise<boolean> {
+  const targetResult = await input.adminClient
+    .from("canvas_extension_nodes")
+    .select(CANVAS_EXTENSION_NODE_SELECT)
+    .eq("user_id", input.userId)
+    .eq("id", input.nodeId)
+    .maybeSingle()
+
+  if (targetResult.error) {
+    throw new Error(targetResult.error.message)
+  }
+  if (!targetResult.data) {
+    return false
+  }
+
+  // Never let "delete this reading" wipe a whole course's children.
+  const node = mapCanvasExtensionNode(targetResult.data)
+  if (node.kind === "course") {
+    throw new Error("Courses can't be deleted from the reader.")
+  }
+
+  const storagePath = typeof node.metadata?.storagePath === "string" ? node.metadata.storagePath : null
+  if (storagePath) {
+    await input.adminClient.storage.from("source-originals").remove([storagePath]).catch(() => undefined)
+  }
+
+  const { error } = await input.adminClient
+    .from("canvas_extension_nodes")
+    .delete()
+    .eq("user_id", input.userId)
+    .eq("id", input.nodeId)
+
+  if (error) {
+    throw new Error(error.message)
+  }
+
+  return true
+}
+
 export async function updateCanvasExtensionNodeSelection(input: {
   adminClient: AdminClient
   userId: string

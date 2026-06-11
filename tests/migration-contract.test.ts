@@ -50,6 +50,14 @@ const canvasExtensionPagePreviewsMigration = readFileSync(
   "supabase/migrations/20260528062929_canvas_extension_page_previews.sql",
   "utf8",
 )
+const canvasExtensionPageContentMigration = readFileSync(
+  "supabase/migrations/20260528120000_canvas_extension_page_content.sql",
+  "utf8",
+)
+const canvasExtensionSyncCourseMigration = readFileSync(
+  "supabase/migrations/20260528130000_canvas_extension_sync_course.sql",
+  "utf8",
+)
 
 describe("production Supabase migration", () => {
   it("keeps OAuth tokens outside public tables", () => {
@@ -201,5 +209,24 @@ describe("production Supabase migration", () => {
     expect(canvasExtensionPagePreviewsMigration).not.toContain("raw MHTML")
     expect(canvasExtensionPagePreviewsMigration).not.toContain("access_token")
     expect(canvasExtensionPagePreviewsMigration).not.toContain("refresh_token")
+  })
+
+  it("allows the sync_course command type for full-course content pulls", () => {
+    expect(canvasExtensionSyncCourseMigration).toContain("'sync_course'")
+    expect(canvasExtensionSyncCourseMigration).toContain("canvas_extension_commands_type_check")
+    expect(canvasExtensionSyncCourseMigration).not.toContain("disable row level security")
+  })
+
+  it("stores Canvas extension page markdown content with RLS and no credentials", () => {
+    expect(canvasExtensionPageContentMigration).toContain("create table public.canvas_extension_page_content")
+    expect(canvasExtensionPageContentMigration).toContain("content_markdown text not null")
+    expect(canvasExtensionPageContentMigration).toContain(
+      "alter table public.canvas_extension_page_content enable row level security",
+    )
+    expect(canvasExtensionPageContentMigration).toContain("canvas_extension_page_content_select_own")
+    expect(canvasExtensionPageContentMigration).toContain("must never contain credentials")
+    expect(canvasExtensionPageContentMigration).not.toContain("disable row level security")
+    expect(canvasExtensionPageContentMigration).not.toContain("access_token")
+    expect(canvasExtensionPageContentMigration).not.toContain("refresh_token")
   })
 })

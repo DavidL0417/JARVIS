@@ -1,3 +1,9 @@
+if (window.__JARVIS_CANVAS_READER_LOADED__) {
+  // Content script already injected into this page; the existing message listener
+  // keeps handling collection, so skip re-running to avoid redeclaring top-level consts.
+} else {
+  window.__JARVIS_CANVAS_READER_LOADED__ = true
+
 const MAX_VISIBLE_TEXT_CHARS = 60000
 const MAX_PREVIEW_HTML_CHARS = 120000
 const MAX_PREVIEW_LINKS = 120
@@ -452,6 +458,11 @@ function addReadOnlyGuards() {
 addReadOnlyGuards()
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  if (message?.type === "JARVIS_PING_CANVAS_READER") {
+    sendResponse({ ok: true })
+    return false
+  }
+
   if (!message || message.type !== "JARVIS_COLLECT_CANVAS_PAGE") {
     return false
   }
@@ -476,3 +487,5 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
   return true
 })
+
+}

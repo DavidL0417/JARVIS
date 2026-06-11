@@ -21,7 +21,13 @@ function isSafeCanvasCaptureUrl(value: string, canvasOrigin: string) {
     const pathname = url.pathname.toLowerCase()
     const search = url.search.toLowerCase()
 
-    if (url.origin !== origin) return false
+    // Cross-origin links (external course readings: JSTOR, publisher sites, dictionaries)
+    // are captured as read-only readings. Allow http/https; the extension upgrades to https,
+    // fetches with the user's own session, and prefers the actual PDF before any sign-in prompt.
+    if (url.origin !== origin) {
+      return url.protocol === "https:" || url.protocol === "http:"
+    }
+
     if (/\/quizzes\/[^/]+\/take(\/|$)/.test(pathname)) return false
     if (/\/quizzes\/[^/]+\/questions(\/|$)/.test(pathname)) return false
     if (/\/assignments\/[^/]+\/submissions\/new(\/|$)/.test(pathname)) return false
@@ -163,7 +169,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: true, commands })
     }
 
-    const commandType: "discover" | "expand_node" | "import_selected" | "capture_url" = requestData.type === "resume"
+    const commandType: "discover" | "expand_node" | "import_selected" | "capture_url" | "sync_course" = requestData.type === "resume"
       ? "import_selected"
       : requestData.type
     let nodeIds = requestData.nodeIds || []
@@ -179,6 +185,10 @@ export async function POST(request: Request) {
 
     if (commandType === "expand_node" && !requestData.targetNodeId) {
       return NextResponse.json({ error: "Choose a Canvas node to expand." }, { status: 400 })
+    }
+
+    if (commandType === "sync_course" && !requestData.targetNodeId) {
+      return NextResponse.json({ error: "Choose a Canvas course to sync." }, { status: 400 })
     }
 
     if (commandType === "capture_url" && (!requestData.targetNodeId || !requestData.url)) {
@@ -244,6 +254,8 @@ export async function POST(request: Request) {
           ? "expand"
           : command.type === "capture_url"
             ? "capture"
+            : command.type === "sync_course"
+              ? "sync"
           : "import",
       nodeId: requestData.targetNodeId ?? null,
       message: command.type === "discover"
@@ -252,6 +264,8 @@ export async function POST(request: Request) {
           ? "Queued Canvas node expansion."
           : command.type === "capture_url"
             ? "Queued Canvas page capture from preview link."
+            : command.type === "sync_course"
+              ? "Queued full-course content sync from the Canvas API."
           : `Queued import for ${nodeIds.length} selected Canvas node${nodeIds.length === 1 ? "" : "s"}.`,
       details: { nodeIds, url: requestData.url ?? null },
     })

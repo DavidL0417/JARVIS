@@ -2,6 +2,9 @@
 
 import Link from "next/link"
 import { useEffect, useMemo, useState, type MouseEvent, type ReactNode } from "react"
+import ReactMarkdown from "react-markdown"
+import remarkBreaks from "remark-breaks"
+import remarkGfm from "remark-gfm"
 import {
   AlertTriangle,
   ArrowLeft,
@@ -13,11 +16,13 @@ import {
   ExternalLink,
   FileText,
   Folder,
+  Globe,
   KeyRound,
   Loader2,
   Play,
   RefreshCw,
   Square,
+  Trash2,
   Wifi,
   WifiOff,
   X,
@@ -72,6 +77,14 @@ type CanvasPagePreview = {
   blocks: CanvasPagePreviewBlock[]
   capturedAt: string
   truncated?: boolean
+}
+type CanvasPageContent = {
+  markdown: string
+  apiSource: string | null
+  truncated: boolean
+  capturedAt: string
+  title: string | null
+  url: string | null
 }
 
 const KNOWN_CANVAS_EXTENSION_IDS = ["aogoejlpbjmfmmdelknoebibkbhlmplc"]
@@ -274,7 +287,19 @@ function ancestorByLevel(node: TreeNode | null, nodesById: Map<string, TreeNode>
 
 function nodeIcon(node: CanvasExtensionNode) {
   if (node.kind === "course" || nodeLevel(node) === "tab") return Folder
+  if (node.kind === "external_link") return Globe
   return FileText
+}
+
+function isCaptureableExternalLink(href: string, canvasOrigin: string | undefined | null): boolean {
+  try {
+    const url = new URL(href)
+    if (url.protocol !== "https:" && url.protocol !== "http:") return false
+    if (canvasOrigin && url.host.toLowerCase() === new URL(canvasOrigin).host.toLowerCase()) return false
+    return true
+  } catch {
+    return false
+  }
 }
 
 function statusCopy(input: {
@@ -339,7 +364,9 @@ function statusCopy(input: {
   const recentEvent = input.lastEvent && input.clientReady && Date.now() - new Date(input.lastEvent.createdAt).getTime() < 10 * 60_000
     ? input.lastEvent
     : null
-  const stale = input.clientReady && Date.now() - new Date(input.session.lastSeenAt).getTime() >= 90_000
+  // MV3 alarm polls land roughly every 60-70s when Chrome throttles the worker,
+  // so anything under ~2 polls of silence is normal jitter, not a dead extension.
+  const stale = input.clientReady && Date.now() - new Date(input.session.lastSeenAt).getTime() >= 150_000
   return {
     tone: stale ? "warning" : "success",
     label: stale ? "Extension stale" : "Extension live",
@@ -459,29 +486,6 @@ function EmptyColumn({ children }: { children: ReactNode }) {
   return <p className="px-3 py-4 text-xs leading-5 text-muted-foreground">{children}</p>
 }
 
-function ExpandPrompt(props: {
-  title: string
-  disabled: boolean
-  busy: boolean
-  onExpand: () => void
-}) {
-  return (
-    <div className="grid gap-3 px-3 py-4">
-      <p className="text-xs leading-5 text-muted-foreground">{props.title}</p>
-      <Button
-        type="button"
-        size="sm"
-        className={cn("h-8 w-fit rounded-sm border px-2.5 text-xs", CANVAS_ACCENT_BORDER, CANVAS_ACCENT_BG, CANVAS_ACCENT_TEXT, CANVAS_ACCENT_HOVER_BG)}
-        disabled={props.disabled}
-        onClick={props.onExpand}
-      >
-        {props.busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />}
-        Expand
-      </Button>
-    </div>
-  )
-}
-
 function EventRail({ events, clientReady }: { events: CanvasExtensionCommandEvent[]; clientReady: boolean }) {
   return (
     <div className="grid gap-2">
@@ -504,6 +508,126 @@ function EventRail({ events, clientReady }: { events: CanvasExtensionCommandEven
       </div>
     </div>
   )
+}
+
+function MarkdownContent({ markdown, onLinkNavigate }: { markdown: string; onLinkNavigate?: (href: string) => boolean }) {
+  return (
+    <div
+      className={cn(
+        "max-h-[64vh] overflow-auto border border-rule bg-background px-4 py-3 text-[13px] leading-6 text-foreground",
+        "[&_a]:cursor-pointer [&_a]:text-[#d38a6a] [&_a]:underline [&_a:hover]:text-[#e2a184]",
+        "[&_h1]:mb-2 [&_h1]:mt-1 [&_h1]:text-lg [&_h1]:font-semibold [&_h2]:mb-2 [&_h2]:mt-4 [&_h2]:text-base [&_h2]:font-semibold",
+        "[&_h3]:mb-1.5 [&_h3]:mt-3 [&_h3]:text-sm [&_h3]:font-semibold [&_p]:my-2 [&_li]:my-1 [&_ul]:my-2 [&_ul]:ml-5 [&_ul]:list-disc [&_ol]:my-2 [&_ol]:ml-5 [&_ol]:list-decimal",
+        "[&_blockquote]:border-l-2 [&_blockquote]:border-rule [&_blockquote]:pl-3 [&_blockquote]:text-muted-foreground",
+        "[&_table]:w-full [&_th]:border-b [&_th]:border-rule [&_th]:py-1.5 [&_th]:text-left [&_td]:border-t [&_td]:border-rule [&_td]:py-1.5",
+        "[&_code]:rounded-sm [&_code]:bg-accent [&_code]:px-1 [&_code]:py-0.5 [&_code]:text-[11px]",
+      )}
+    >
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm, remarkBreaks]}
+        components={{
+          a: ({ children, href }) => (
+            <a
+              href={href}
+              target="_blank"
+              rel="noreferrer"
+              onClick={(event) => {
+                if (href && onLinkNavigate?.(href)) event.preventDefault()
+              }}
+            >
+              {children}
+            </a>
+          ),
+        }}
+      >
+        {markdown}
+      </ReactMarkdown>
+    </div>
+  )
+}
+
+type CanvasFileView = { url: string; mimeType: string; fileName: string; sizeBytes: number | null }
+
+function FileView({ file }: { file: CanvasFileView }) {
+  const type = (file.mimeType || "").toLowerCase()
+
+  if (type.includes("pdf")) {
+    return <iframe src={file.url} title={file.fileName} className="h-[72vh] w-full border border-rule bg-white" />
+  }
+  if (type.startsWith("image/")) {
+    return (
+      <div className="flex justify-center border border-rule bg-background p-3">
+        <img src={file.url} alt={file.fileName} className="max-h-[72vh] w-auto" />
+      </div>
+    )
+  }
+  if (type.startsWith("video/")) {
+    return <video src={file.url} controls className="max-h-[72vh] w-full border border-rule bg-black" />
+  }
+  if (type.startsWith("audio/")) {
+    return <audio src={file.url} controls className="w-full" />
+  }
+
+  return (
+    <a
+      href={file.url}
+      target="_blank"
+      rel="noreferrer"
+      className="flex items-center gap-2 border border-rule bg-secondary/10 px-4 py-6 text-sm text-foreground hover:bg-secondary/20"
+    >
+      <Download className="h-4 w-4 shrink-0" aria-hidden="true" />
+      <span className="min-w-0">
+        <span className="block truncate font-medium">{file.fileName}</span>
+        <span className="block text-[11px] text-muted-foreground">Open / download this file</span>
+      </span>
+    </a>
+  )
+}
+
+function unwrapProxyUrlForMatch(value: string): string {
+  // EZproxy/library links wrap the real reading in a ?url= (or ?qurl=) param; the captured
+  // node is stored under that destination, so match on it rather than the shared /login path.
+  try {
+    const url = new URL(value)
+    const inner = url.searchParams.get("url") || url.searchParams.get("qurl")
+    if (inner) {
+      const innerUrl = new URL(inner)
+      if (innerUrl.protocol === "https:" || innerUrl.protocol === "http:") return innerUrl.toString()
+    }
+  } catch {
+    // not a proxy url
+  }
+  return value
+}
+
+function normalizeUrlForMatch(value: string): string | null {
+  try {
+    const url = new URL(unwrapProxyUrlForMatch(value))
+    // Canvas file links come in /files/<id>, /files/<id>/download, and /files/<id>/preview
+    // variants; nodes store the canonical /files/<id> form.
+    const path = url.pathname
+      .replace(/\/+$/, "")
+      .replace(/(\/files\/\d+)\/(?:download|preview)$/, "$1")
+    // Treat http/https as the same target: Canvas stores some external_urls as legacy http,
+    // but the captured node is stored under https.
+    const host = url.host.toLowerCase()
+    return `${host}${path}`.toLowerCase()
+  } catch {
+    return null
+  }
+}
+
+function isCapturableCanvasLink(href: string, canvasOrigin: string | undefined | null): boolean {
+  if (!canvasOrigin) return false
+  try {
+    const url = new URL(href)
+    if (url.origin !== new URL(canvasOrigin).origin) return false
+    // Only intercept Canvas content/file/module links. External-tool launches, quizzes, and
+    // anything off-origin (JSTOR, library links, etc.) open in a new tab like Canvas itself.
+    return /\/courses\/\d+\/(pages|assignments|discussion_topics|announcements|files|modules)(\/|$)/.test(url.pathname)
+  } catch {
+    return false
+  }
 }
 
 function PagePreview(props: {
@@ -624,106 +748,137 @@ function PreviewBlock(props: {
   )
 }
 
-function ItemRail(props: {
-  items: TreeNode[]
-  activeItem: TreeNode | null
-  onSelect: (node: CanvasExtensionNode) => void
-  onToggle: (node: CanvasExtensionNode) => void
-}) {
-  return (
-    <aside className="grid min-h-0 grid-rows-[auto_1fr] border-l border-rule bg-secondary/10">
-      <div className="flex h-9 items-center justify-between border-b border-rule px-3">
-        <h3 className="text-xs font-medium text-foreground">Detected Items</h3>
-        <span className="text-[11px] text-muted-foreground">{props.items.length}</span>
-      </div>
-      <div className="min-h-0 overflow-auto">
-        {props.items.length > 0 ? props.items.map((node) => {
-          const Icon = nodeIcon(node)
-          return (
-            <div
-              key={node.id}
-              className={cn(
-                "grid min-h-12 grid-cols-[auto_1fr] items-center gap-2 border-b border-rule/60 px-3 py-2",
-                props.activeItem?.id === node.id ? "bg-primary/15" : "hover:bg-secondary/25",
-              )}
-            >
-              <Checkbox
-                checked={node.selected}
-                onCheckedChange={() => props.onToggle(node)}
-                className="h-4 w-4 rounded-[4px] border-rule bg-background"
-                aria-label={`Select ${node.title}`}
-              />
-              <button type="button" className="grid min-w-0 grid-cols-[auto_1fr] items-center gap-2 text-left" onClick={() => props.onSelect(node)}>
-                <Icon className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-                <span className="min-w-0">
-                  <span className="block truncate text-[12px] font-medium text-foreground">{node.title}</span>
-                  <span className="block truncate text-[10px] text-muted-foreground">{node.kind} · {nodePathLabel(node)}</span>
-                </span>
-              </button>
-            </div>
-          )
-        }) : (
-          <p className="px-3 py-4 text-xs leading-5 text-muted-foreground">Capture the selected tab to detect importable Canvas links.</p>
-        )}
-      </div>
-    </aside>
-  )
-}
-
-function ContentPane(props: {
+function ReaderPane(props: {
   selectedCourse: TreeNode | null
-  selectedTab: TreeNode | null
-  selectedItem: TreeNode | null
-  items: TreeNode[]
+  selectedDoc: TreeNode | null
   clientReady: boolean
   commandBusy: boolean
-  previewBusy: boolean
-  onRefreshPreview: (node: TreeNode) => void
-  onCapturePreviewUrl: (node: TreeNode, url: string) => void
-  onSelectNode: (node: CanvasExtensionNode) => void
+  courseSyncing: boolean
+  capturingFile: boolean
+  onSyncCourse: (node: TreeNode) => void
   onToggleNode: (node: CanvasExtensionNode) => void
+  onSelectNode: (node: CanvasExtensionNode) => void
+  onCaptureFile: (href: string) => void
+  onDeleteNode: (node: CanvasExtensionNode) => void
 }) {
-  const focusNode = props.selectedItem || props.selectedTab || props.selectedCourse
-  const selectedItemPreview = props.selectedItem ? pagePreviewFor(props.selectedItem) : null
-  const pageNode = selectedItemPreview
-    ? props.selectedItem
-    : props.selectedTab || props.selectedItem || props.selectedCourse
-  const captureNode = props.selectedItem || props.selectedTab || props.selectedCourse
+  const focusNode = props.selectedDoc || props.selectedCourse
+  const focusNodeId = focusNode?.id ?? null
+  // Re-capturing an external webpage (e.g. after signing in) updates the same node in place,
+  // so the node id is unchanged; this timestamp changes on every capture and forces a refetch.
+  const contentVersion = typeof focusNode?.metadata?.capturedAt === "string" ? focusNode.metadata.capturedAt : null
+  const [content, setContent] = useState<CanvasPageContent | null>(null)
+  const [contentLoading, setContentLoading] = useState(false)
 
-  if (!focusNode || !pageNode) {
+  const isViewableFile = props.selectedDoc?.kind === "file" && typeof props.selectedDoc.metadata.storagePath === "string"
+  const [fileView, setFileView] = useState<CanvasFileView | null>(null)
+  const [fileLoading, setFileLoading] = useState(false)
+
+  useEffect(() => {
+    if (!isViewableFile || !focusNodeId) {
+      setFileView(null)
+      return
+    }
+
+    let cancelled = false
+    setFileView(null)
+    setFileLoading(true)
+    fetch(`/api/integrations/canvas/extension/file-url?nodeId=${focusNodeId}`)
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data) => {
+        if (!cancelled) setFileView(data && data.success ? (data.file ?? null) : null)
+      })
+      .catch(() => {
+        if (!cancelled) setFileView(null)
+      })
+      .finally(() => {
+        if (!cancelled) setFileLoading(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [focusNodeId, isViewableFile])
+
+  const docsByUrl = useMemo(() => {
+    const map = new Map<string, TreeNode>()
+    for (const child of props.selectedCourse?.children ?? []) {
+      const candidates = [child.url, typeof child.metadata.actualUrl === "string" ? child.metadata.actualUrl : null]
+      for (const candidate of candidates) {
+        const key = candidate ? normalizeUrlForMatch(candidate) : null
+        if (key && !map.has(key)) map.set(key, child)
+      }
+    }
+    return map
+  }, [props.selectedCourse])
+
+  const handleLinkNavigate = (href: string) => {
+    const key = normalizeUrlForMatch(href)
+    const doc = key ? docsByUrl.get(key) : null
+    if (doc) {
+      // A previously-captured webpage that hit a sign-in wall: re-capture (the user may have
+      // signed in since) rather than re-opening the stale login notice.
+      if (doc.kind === "external_link" && doc.metadata.loginRequired === true) {
+        props.onCaptureFile(href)
+        return true
+      }
+      if (doc.id !== props.selectedDoc?.id) props.onSelectNode(doc)
+      return true
+    }
+    if (isCapturableCanvasLink(href, props.selectedCourse?.canvasOrigin)) {
+      props.onCaptureFile(href)
+      return true
+    }
+    // Off-Canvas readings get pulled in and read inline too, instead of opening a new tab.
+    if (isCaptureableExternalLink(href, props.selectedCourse?.canvasOrigin)) {
+      props.onCaptureFile(href)
+      return true
+    }
+    return false
+  }
+
+  useEffect(() => {
+    if (!focusNodeId) {
+      setContent(null)
+      return
+    }
+
+    let cancelled = false
+    setContent(null)
+    setContentLoading(true)
+    fetch(`/api/integrations/canvas/extension/page-content?nodeId=${focusNodeId}`)
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data) => {
+        if (!cancelled) setContent(data && data.success ? (data.content ?? null) : null)
+      })
+      .catch(() => {
+        if (!cancelled) setContent(null)
+      })
+      .finally(() => {
+        if (!cancelled) setContentLoading(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [focusNodeId, contentVersion])
+
+  if (!focusNode) {
     return (
       <section className="grid min-h-0 grid-rows-[auto_1fr] bg-background">
         <div className="flex h-10 items-center border-b border-rule px-3">
-          <h2 className="text-xs font-medium text-foreground">Canvas Page</h2>
+          <h2 className="text-xs font-medium text-foreground">Reader</h2>
         </div>
-        <EmptyColumn>Select a course to inspect Canvas content.</EmptyColumn>
+        <EmptyColumn>Select a course, then Sync it to pull its content.</EmptyColumn>
       </section>
     )
   }
 
-  const metadata = [
-    nodeLevel(focusNode),
-    focusNode.importedAt ? `imported ${formatTime(focusNode.importedAt, props.clientReady)}` : "not imported",
-    focusNode.expanded ? "expanded" : "not expanded",
-  ]
-  const pagePreview = selectedItemPreview || pagePreviewFor(pageNode)
-  const showingParentPageForItem = Boolean(props.selectedItem && !selectedItemPreview && props.selectedTab && pageNode.id === props.selectedTab.id)
-
-  return (
-    <section className="grid min-h-0 grid-rows-[auto_1fr] bg-background">
-      <div className="flex h-10 items-center justify-between border-b border-rule px-3">
-        <h2 className="text-xs font-medium text-foreground">Canvas Page</h2>
-        <div className="flex items-center gap-1.5">
-          {captureNode ? (
-            <IconButton
-              label="Capture page"
-              disabled={props.commandBusy}
-              onClick={() => props.onRefreshPreview(captureNode)}
-              tone="canvas"
-            >
-              {props.previewBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />}
-            </IconButton>
-          ) : null}
+  if (!props.selectedDoc) {
+    const course = props.selectedCourse
+    return (
+      <section className="grid min-h-0 grid-rows-[auto_1fr] bg-background">
+        <div className="flex h-10 items-center justify-between border-b border-rule px-3">
+          <h2 className="text-xs font-medium text-foreground">Reader</h2>
           <a
             href={displayUrl(focusNode)}
             target="_blank"
@@ -734,74 +889,154 @@ function ContentPane(props: {
             <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
           </a>
         </div>
-      </div>
-      <div className="grid min-h-0 grid-cols-[minmax(0,1fr)_minmax(260px,0.42fr)]">
-        <div className="min-h-0 overflow-auto p-4">
-          <div className="grid gap-1">
-            <p className="break-words text-lg font-semibold leading-tight text-foreground">{focusNode.title}</p>
-            <p className="break-all text-[11px] leading-5 text-muted-foreground">{displayUrl(focusNode)}</p>
-          </div>
-          <div className="mt-3 flex flex-wrap gap-1.5">
-            {metadata.map((item) => (
-              <Badge key={item} variant="outline" className="rounded-sm border-rule text-[10px] text-muted-foreground">{item}</Badge>
-            ))}
-            {showingParentPageForItem ? (
-              <Badge variant="outline" className={cn("rounded-sm text-[10px]", CANVAS_ACCENT_BORDER, CANVAS_ACCENT_TEXT)}>showing tab page</Badge>
-            ) : null}
-          </div>
-          {props.selectedItem && !selectedItemPreview ? (
-            <div className="mt-4 grid gap-2 border border-rule bg-secondary/10 px-3 py-3">
-              <div className="flex items-center justify-between gap-2">
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-medium text-foreground">{props.selectedItem.title}</p>
-                  <p className="truncate text-[11px] text-muted-foreground">{nodePathLabel(props.selectedItem)}</p>
-                </div>
-                <Button
-                  type="button"
-                  size="sm"
-                  className={cn("h-8 rounded-sm border px-2.5 text-xs", CANVAS_ACCENT_BORDER, CANVAS_ACCENT_BG, CANVAS_ACCENT_TEXT, CANVAS_ACCENT_HOVER_BG)}
-                  disabled={props.commandBusy}
-                  onClick={() => props.selectedItem && props.onRefreshPreview(props.selectedItem)}
-                >
-                  {props.previewBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />}
-                  Capture
-                </Button>
-              </div>
-            </div>
-          ) : null}
-          <div className="mt-4">
-            {pagePreview ? (
-              <PagePreview
-                preview={pagePreview}
-                disabled={props.commandBusy}
-                clientReady={props.clientReady}
-                onCaptureUrl={(url) => props.onCapturePreviewUrl(pageNode, url)}
-              />
-            ) : (
-              <ExpandPrompt
-                title={nodeLevel(pageNode) === "course" ? "No captured course page yet." : "No captured page modules yet."}
-                disabled={props.commandBusy}
-                busy={props.previewBusy}
-                onExpand={() => props.onRefreshPreview(pageNode)}
-              />
-            )}
-          </div>
-          {focusNode.sourceSnapshotId || focusNode.sourceFileId ? (
-            <div className="mt-4 grid gap-2">
-              <h3 className="text-xs font-medium text-foreground">Source</h3>
-              <div className="grid gap-1 border border-rule bg-secondary/10 px-3 py-2 text-[11px] text-muted-foreground">
-                {focusNode.sourceSnapshotId ? <p className="truncate">Snapshot {focusNode.sourceSnapshotId}</p> : null}
-                {focusNode.sourceFileId ? <p className="truncate">File {focusNode.sourceFileId}</p> : null}
-              </div>
-            </div>
-          ) : null}
+        <div className="min-h-0 overflow-auto p-6">
+          <p className="break-words text-lg font-semibold leading-tight text-foreground">{course?.title}</p>
+          <p className="mt-3 max-w-prose text-sm leading-6 text-muted-foreground">
+            Sync this course to pull its syllabus, home page, pages, assignments, announcements, and discussions straight from Canvas. Then pick a document on the left to read it, and tick the ones you want Jarvis to use.
+          </p>
+          <Button
+            type="button"
+            className={cn("mt-4 h-9 rounded-sm border px-3 text-sm", CANVAS_ACCENT_BORDER, CANVAS_ACCENT_BG, CANVAS_ACCENT_TEXT, CANVAS_ACCENT_HOVER_BG)}
+            disabled={props.commandBusy}
+            onClick={() => course && props.onSyncCourse(course)}
+          >
+            {props.courseSyncing ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <RefreshCw className="h-4 w-4" aria-hidden="true" />}
+            Sync course
+          </Button>
         </div>
-        <ItemRail
-          items={props.items}
-          activeItem={props.selectedItem}
-          onSelect={props.onSelectNode}
-          onToggle={props.onToggleNode}
-        />
+      </section>
+    )
+  }
+
+  const doc = props.selectedDoc
+  const legacyPreview = content?.markdown ? null : pagePreviewFor(doc)
+  const isExternalLink = doc.kind === "external_link"
+  const loginRequired = isExternalLink && doc.metadata.loginRequired === true
+  const externalHost = typeof doc.metadata.host === "string" ? doc.metadata.host : null
+  const apiSourceLabel = isExternalLink
+    ? "webpage"
+    : typeof doc.metadata.apiSource === "string"
+      ? doc.metadata.apiSource
+      : doc.kind
+  const dueAt = typeof doc.metadata.dueAt === "string" ? doc.metadata.dueAt : null
+  const metadata = [
+    apiSourceLabel,
+    doc.importedAt ? `in Jarvis · ${formatTime(doc.importedAt, props.clientReady)}` : "not imported",
+    dueAt ? `due ${formatTime(dueAt, props.clientReady)}` : null,
+  ].filter((value): value is string => Boolean(value))
+
+  return (
+    <section className="grid min-h-0 grid-rows-[auto_1fr] bg-background">
+      <div className="flex h-10 items-center justify-between border-b border-rule px-3">
+        <h2 className="text-xs font-medium text-foreground">Reader</h2>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            className={cn(
+              "inline-flex h-7 items-center gap-1.5 rounded-sm border px-2 text-[11px]",
+              doc.selected
+                ? cn(CANVAS_ACCENT_BORDER, CANVAS_ACCENT_BG, CANVAS_ACCENT_TEXT)
+                : "border-rule text-muted-foreground hover:bg-secondary/30 hover:text-foreground",
+            )}
+            onClick={() => props.onToggleNode(doc)}
+          >
+            {doc.selected ? (
+              <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
+            ) : (
+              <span className="h-3.5 w-3.5 rounded-[3px] border border-rule bg-background" aria-hidden="true" />
+            )}
+            {doc.selected ? "Selected for Jarvis" : "Select for Jarvis"}
+          </button>
+          <a
+            href={displayUrl(doc)}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex h-7 items-center justify-center rounded-sm border border-rule px-2 text-muted-foreground hover:bg-secondary/30 hover:text-foreground"
+            aria-label={isExternalLink ? "Open original" : "Open in Canvas"}
+          >
+            <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+          </a>
+          <button
+            type="button"
+            onClick={() => props.onDeleteNode(doc)}
+            className="inline-flex h-7 items-center justify-center rounded-sm border border-rule px-2 text-muted-foreground hover:border-destructive/50 hover:bg-destructive/10 hover:text-destructive"
+            aria-label="Delete this content"
+            title="Delete this content"
+          >
+            <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+          </button>
+        </div>
+      </div>
+      <div className="min-h-0 overflow-auto p-4">
+        {props.capturingFile ? (
+          <div className={cn("mb-3 flex items-center gap-2 rounded-sm border px-3 py-2 text-xs", CANVAS_ACCENT_BORDER, CANVAS_ACCENT_BG, CANVAS_ACCENT_TEXT)}>
+            <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+            Fetching the linked content and reading it…
+          </div>
+        ) : null}
+        {loginRequired ? (
+          <div className="mb-3 flex items-start gap-2 rounded-sm border border-yellow-500/40 bg-yellow-500/[0.06] px-3 py-2.5 text-xs leading-5 text-foreground">
+            <KeyRound className="mt-0.5 h-3.5 w-3.5 shrink-0 text-yellow-500" aria-hidden="true" />
+            <span className="min-w-0">
+              <span className="font-medium">Sign-in needed{externalHost ? ` at ${externalHost}` : ""}.</span>{" "}
+              Open the original (top-right) and sign in — e.g. through your Northwestern library access — then try again.
+              <button
+                type="button"
+                onClick={() => props.onCaptureFile(displayUrl(doc))}
+                disabled={props.capturingFile}
+                className="ml-1 font-medium text-yellow-500 underline underline-offset-2 hover:text-yellow-400 disabled:opacity-60"
+              >
+                Try again
+              </button>
+            </span>
+          </div>
+        ) : null}
+        <div className="grid gap-1">
+          <p className="break-words text-lg font-semibold leading-tight text-foreground">{doc.title}</p>
+          <p className="break-all text-[11px] leading-5 text-muted-foreground">{displayUrl(doc)}</p>
+        </div>
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          {metadata.map((item) => (
+            <Badge key={item} variant="outline" className="rounded-sm border-rule text-[10px] capitalize text-muted-foreground">{item}</Badge>
+          ))}
+        </div>
+        <div className="mt-4">
+          {isViewableFile ? (
+            fileLoading ? (
+              <div className="flex items-center gap-2 border border-rule bg-secondary/10 px-4 py-6 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> Loading file…
+              </div>
+            ) : fileView ? (
+              <FileView file={fileView} />
+            ) : (
+              <div className="border border-rule bg-secondary/10 px-4 py-6 text-center text-sm leading-6 text-muted-foreground">
+                Couldn&apos;t load this file. Open it in Canvas.
+              </div>
+            )
+          ) : content?.markdown ? (
+            <section className="grid gap-2">
+              {content.truncated ? <p className="text-[11px] text-yellow-500">Content was truncated.</p> : null}
+              <MarkdownContent markdown={content.markdown} onLinkNavigate={handleLinkNavigate} />
+            </section>
+          ) : contentLoading ? (
+            <div className="flex items-center gap-2 border border-rule bg-secondary/10 px-4 py-6 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> Loading content…
+            </div>
+          ) : legacyPreview ? (
+            <PagePreview
+              preview={legacyPreview}
+              disabled={props.commandBusy || props.capturingFile}
+              clientReady={props.clientReady}
+              onCaptureUrl={(url) => {
+                if (!handleLinkNavigate(url)) window.open(url, "_blank", "noreferrer")
+              }}
+            />
+          ) : (
+            <div className="border border-rule bg-secondary/10 px-4 py-6 text-center text-sm leading-6 text-muted-foreground">
+              No readable content for this item. Re-sync the course to refresh it.
+            </div>
+          )}
+        </div>
       </div>
     </section>
   )
@@ -819,6 +1054,7 @@ export default function CanvasExtensionSetupPage() {
   const [error, setError] = useState<StateError | null>(null)
   const [wakeWarning, setWakeWarning] = useState<string | null>(null)
   const [activityOpen, setActivityOpen] = useState(false)
+  const [pendingFile, setPendingFile] = useState<string | null>(null)
 
   const activeCommand = state?.health.activeCommand ?? state?.commands.find((command) => isActiveCommand(command)) ?? null
   const visibleNodes = useMemo(
@@ -839,11 +1075,12 @@ export default function CanvasExtensionSetupPage() {
   const courses = useMemo(() => tree.filter((node) => node.kind === "course"), [tree])
   const selectedTreeNode = selectedNode ? treeNodesById.get(selectedNode.id) ?? null : null
   const selectedCourse = ancestorByLevel(selectedTreeNode, treeNodesById, "course")
-  const selectedTab = ancestorByLevel(selectedTreeNode, treeNodesById, "tab")
-  const selectedItem = selectedTreeNode && nodeLevel(selectedTreeNode) === "item" ? selectedTreeNode : null
-  const tabs = selectedCourse?.children ?? []
-  const items = selectedTab?.children ?? []
-  const contentFocusNode = selectedItem || selectedTab || selectedCourse
+  const selectedDoc = selectedTreeNode && Boolean(selectedTreeNode.parentId) ? selectedTreeNode : null
+  const courseDocs = selectedCourse?.children ?? []
+  const courseSyncing = Boolean(selectedCourse) && (
+    busyAction === `sync_course:${selectedCourse?.id}:` ||
+    (activeCommand?.targetNodeId === selectedCourse?.id && isActiveCommand(activeCommand))
+  )
   const selectedCount = visibleNodes.filter((node) => node.selected && !node.importedAt).length
   const commandBusy = Boolean(busyAction || isActiveCommand(activeCommand))
   const status = statusCopy({
@@ -904,6 +1141,32 @@ export default function CanvasExtensionSetupPage() {
     return () => window.clearInterval(intervalId)
   }, [activeCommand?.id, activeCommand?.status])
 
+  useEffect(() => {
+    if (!pendingFile) return
+    const key = normalizeUrlForMatch(pendingFile)
+    if (!key) {
+      setPendingFile(null)
+      return
+    }
+
+    const match = (state?.nodes ?? []).find((node) => {
+      if (normalizeUrlForMatch(node.url) === key) return true
+      const actual = typeof node.metadata.actualUrl === "string" ? node.metadata.actualUrl : null
+      return actual ? normalizeUrlForMatch(actual) === key : false
+    })
+
+    if (match) {
+      setSelectedNode(match)
+      setPendingFile(null)
+    }
+  }, [state?.nodes, pendingFile])
+
+  useEffect(() => {
+    if (!pendingFile) return
+    const timeout = window.setTimeout(() => setPendingFile(null), 60_000)
+    return () => window.clearTimeout(timeout)
+  }, [pendingFile])
+
   async function createPairingCode() {
     setPairing({ status: "loading" })
 
@@ -923,7 +1186,7 @@ export default function CanvasExtensionSetupPage() {
   }
 
   async function runCommand(
-    type: "discover" | "expand_node" | "import_selected" | "capture_url" | "stop" | "resume",
+    type: "discover" | "expand_node" | "import_selected" | "capture_url" | "sync_course" | "stop" | "resume",
     targetNodeId?: string,
     payload: { url?: string } = {},
   ) {
@@ -960,6 +1223,12 @@ export default function CanvasExtensionSetupPage() {
     }
   }
 
+  async function captureFile(href: string) {
+    if (!selectedCourse) return
+    setPendingFile(href)
+    await runCommand("capture_url", selectedCourse.id, { url: href })
+  }
+
   async function toggleNode(node: CanvasExtensionNode) {
     setError(null)
     try {
@@ -977,6 +1246,31 @@ export default function CanvasExtensionSetupPage() {
         code: "selection_failed",
         message: "Selection failed.",
         details: selectionError instanceof Error ? selectionError.message : "Failed to update selection.",
+      })
+    }
+  }
+
+  async function deleteNode(node: CanvasExtensionNode) {
+    if (typeof window !== "undefined" && !window.confirm(`Delete "${node.title}" from the reader? This can't be undone.`)) {
+      return
+    }
+    setError(null)
+    try {
+      await readJson(
+        await fetch("/api/integrations/canvas/extension/nodes", {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ nodeId: node.id }),
+        }),
+        "Failed to delete this content.",
+      )
+      if (selectedNode?.id === node.id) setSelectedNode(null)
+      await refreshState()
+    } catch (deleteError) {
+      setError({
+        code: "delete_failed",
+        message: "Delete failed.",
+        details: deleteError instanceof Error ? deleteError.message : "Failed to delete content.",
       })
     }
   }
@@ -1202,17 +1496,17 @@ export default function CanvasExtensionSetupPage() {
                 <Badge variant="outline" className="rounded-sm border-rule text-[10px] text-muted-foreground">{selectedCount} selected</Badge>
               </div>
               <div className="grid grid-cols-4 gap-1.5">
-                <IconButton label="Discover All Courses" disabled={commandBusy} onClick={() => runCommand("discover")}>
+                <IconButton label="Discover courses" disabled={commandBusy} onClick={() => runCommand("discover")}>
                   <RefreshCw className="h-4 w-4" aria-hidden="true" />
                 </IconButton>
-                <IconButton label="Import selected" disabled={selectedCount === 0 || commandBusy} onClick={() => runCommand("import_selected")}>
+                <IconButton label="Sync selected course" disabled={!selectedCourse || commandBusy} onClick={() => selectedCourse && runCommand("sync_course", selectedCourse.id)} tone="canvas">
+                  <Download className="h-4 w-4" aria-hidden="true" />
+                </IconButton>
+                <IconButton label="Import selected into Jarvis" disabled={selectedCount === 0 || commandBusy} onClick={() => runCommand("import_selected")}>
                   <Play className="h-4 w-4" aria-hidden="true" />
                 </IconButton>
                 <IconButton label="Stop command" disabled={!activeCommand || activeCommand.status === "cancel_requested"} onClick={() => runCommand("stop")}>
                   <Square className="h-4 w-4" aria-hidden="true" />
-                </IconButton>
-                <IconButton label="Resume import" disabled={commandBusy || selectedCount === 0} onClick={() => runCommand("resume")}>
-                  <Clock3 className="h-4 w-4" aria-hidden="true" />
                 </IconButton>
               </div>
             </section>
@@ -1231,46 +1525,78 @@ export default function CanvasExtensionSetupPage() {
               )) : <EmptyColumn>Discover All Courses after opening Canvas.</EmptyColumn>}
             </Column>
 
-            <Column title="Tabs" count={tabs.length}>
-              {selectedCourse ? (
-                tabs.length > 0 ? tabs.map((node) => (
-                  <NodeRow
-                    key={node.id}
-                    node={node}
-                    active={selectedTab?.id === node.id}
-                    onSelect={setSelectedNode}
-                    onToggle={toggleNode}
-                  />
-                )) : (
-                  <ExpandPrompt
-                    title="No tabs yet."
+            <section className="grid min-h-0 grid-rows-[auto_1fr_auto] border-r border-rule bg-secondary/10">
+              <div className="flex h-9 items-center justify-between border-b border-rule px-3">
+                <h2 className="text-xs font-medium text-foreground">Course content</h2>
+                <span className="text-[11px] text-muted-foreground">{courseDocs.length}</span>
+              </div>
+              <div className="min-h-0 overflow-auto">
+                {!selectedCourse ? (
+                  <EmptyColumn>Select a course.</EmptyColumn>
+                ) : courseDocs.length > 0 ? (
+                  courseDocs.map((node) => (
+                    <NodeRow
+                      key={node.id}
+                      node={node}
+                      active={selectedDoc?.id === node.id}
+                      onSelect={setSelectedNode}
+                      onToggle={toggleNode}
+                    />
+                  ))
+                ) : (
+                  <div className="grid gap-3 px-3 py-4">
+                    <p className="text-xs leading-5 text-muted-foreground">
+                      No content yet. Sync this course to pull its syllabus, pages, assignments, and announcements from Canvas.
+                    </p>
+                    <Button
+                      type="button"
+                      className={cn("h-8 rounded-sm border px-2.5 text-xs", CANVAS_ACCENT_BORDER, CANVAS_ACCENT_BG, CANVAS_ACCENT_TEXT, CANVAS_ACCENT_HOVER_BG)}
+                      disabled={commandBusy}
+                      onClick={() => selectedCourse && runCommand("sync_course", selectedCourse.id)}
+                    >
+                      {courseSyncing ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : <Download className="h-3.5 w-3.5" aria-hidden="true" />}
+                      Sync course
+                    </Button>
+                  </div>
+                )}
+              </div>
+              {selectedCourse && courseDocs.length > 0 ? (
+                <div className="grid grid-cols-2 gap-1.5 border-t border-rule p-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-8 rounded-sm text-xs"
                     disabled={commandBusy}
-                    busy={busyAction === `expand_node:${selectedCourse.id}` || activeCommand?.targetNodeId === selectedCourse.id}
-                    onExpand={() => runCommand("expand_node", selectedCourse.id)}
-                  />
-                )
-              ) : <EmptyColumn>Select a course.</EmptyColumn>}
-            </Column>
+                    onClick={() => runCommand("sync_course", selectedCourse.id)}
+                  >
+                    {courseSyncing ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />}
+                    Re-sync
+                  </Button>
+                  <Button
+                    type="button"
+                    className={cn("h-8 rounded-sm border px-2.5 text-xs", CANVAS_ACCENT_BORDER, CANVAS_ACCENT_BG, CANVAS_ACCENT_TEXT, CANVAS_ACCENT_HOVER_BG)}
+                    disabled={selectedCount === 0 || commandBusy}
+                    onClick={() => runCommand("import_selected")}
+                  >
+                    <Play className="h-3.5 w-3.5" aria-hidden="true" />
+                    Import{selectedCount > 0 ? ` ${selectedCount}` : ""}
+                  </Button>
+                </div>
+              ) : null}
+            </section>
 
-            <ContentPane
+            <ReaderPane
               selectedCourse={selectedCourse}
-              selectedTab={selectedTab}
-              selectedItem={selectedItem}
-              items={items}
+              selectedDoc={selectedDoc}
               clientReady={clientReady}
               commandBusy={commandBusy}
-              previewBusy={
-                Boolean(contentFocusNode) &&
-                (
-                  busyAction?.startsWith(`expand_node:${contentFocusNode?.id}:`) ||
-                  busyAction?.startsWith(`capture_url:${contentFocusNode?.id}:`) ||
-                  activeCommand?.targetNodeId === contentFocusNode?.id
-                )
-              }
-              onRefreshPreview={(node) => runCommand("expand_node", node.id)}
-              onCapturePreviewUrl={(node, url) => runCommand("capture_url", node.id, { url })}
-              onSelectNode={setSelectedNode}
+              courseSyncing={courseSyncing}
+              capturingFile={Boolean(pendingFile)}
+              onSyncCourse={(node) => runCommand("sync_course", node.id)}
               onToggleNode={toggleNode}
+              onSelectNode={setSelectedNode}
+              onCaptureFile={captureFile}
+              onDeleteNode={deleteNode}
             />
           </section>
         </div>

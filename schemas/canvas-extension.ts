@@ -7,6 +7,17 @@ const canvasUrlSchema = z.string().url().refine((value) => {
   return url.protocol === "https:" || (process.env.NODE_ENV !== "production" && url.hostname === "localhost")
 }, "Canvas URLs must use HTTPS.")
 
+// A capture target may be an off-Canvas reading whose external_url Canvas stored as legacy
+// http (e.g. JSTOR); the extension upgrades it to https before fetching and storing.
+const captureUrlSchema = z.string().url().refine((value) => {
+  try {
+    const url = new URL(value)
+    return url.protocol === "https:" || url.protocol === "http:"
+  } catch {
+    return false
+  }
+}, "Capture URLs must use http or https.")
+
 export const canvasExtensionLinkSchema = z.object({
   url: canvasUrlSchema,
   text: z.string().trim().max(180).nullable(),
@@ -84,6 +95,40 @@ export const canvasExtensionPageSnapshotSchema = z.object({
   })
 })
 
+export const canvasExtensionApiSourceSchema = z.enum([
+  "front_page",
+  "page",
+  "assignment",
+  "syllabus",
+  "announcement",
+  "discussion",
+  "module",
+  "calendar",
+  "external_link",
+])
+
+export const canvasExtensionApiContentSchema = z.object({
+  scanId: z.string().trim().min(8).max(120),
+  canvasOrigin: z.string().url(),
+  url: canvasUrlSchema,
+  title: z.string().trim().min(1).max(240),
+  courseHint: z.string().trim().min(1).max(180).nullable(),
+  pageKindHint: z.string().trim().min(1).max(80).nullable(),
+  apiSource: canvasExtensionApiSourceSchema,
+  nodeId: z.string().uuid().nullable().optional(),
+  contentHtml: z.string().max(500_000).nullable(),
+  links: z.array(canvasExtensionLinkSchema).max(250).optional(),
+  capturedAt: z.string().datetime({ offset: true }),
+}).superRefine((value, context) => {
+  if (new URL(value.canvasOrigin).origin !== new URL(value.url).origin) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Canvas page URL must match the declared Canvas origin.",
+      path: ["url"],
+    })
+  }
+})
+
 export const canvasExtensionPairingCodeResponseSchema = z.object({
   success: z.literal(true),
   code: z.string().min(8),
@@ -102,7 +147,10 @@ export const canvasExtensionPairResponseSchema = z.object({
   expiresAt: z.null(),
 })
 
-export const canvasExtensionImportPageRequestSchema = canvasExtensionPageSnapshotSchema
+export const canvasExtensionImportPageRequestSchema = z.union([
+  canvasExtensionPageSnapshotSchema,
+  canvasExtensionApiContentSchema,
+])
 
 export const canvasExtensionCrawlLedgerItemSchema = z.object({
   url: z.string().url(),
@@ -149,7 +197,7 @@ export const canvasExtensionNodeKindSchema = z.enum([
   "unknown",
 ])
 
-export const canvasExtensionCommandTypeSchema = z.enum(["discover", "expand_node", "import_selected", "capture_url"])
+export const canvasExtensionCommandTypeSchema = z.enum(["discover", "expand_node", "import_selected", "capture_url", "sync_course"])
 export const canvasExtensionCommandStatusSchema = z.enum([
   "pending",
   "running",
@@ -240,10 +288,39 @@ export const canvasExtensionStateResponseSchema = z.object({
 })
 
 export const canvasExtensionCreateCommandRequestSchema = z.object({
-  type: z.enum(["discover", "expand_node", "import_selected", "capture_url", "stop", "resume"]),
+  type: z.enum(["discover", "expand_node", "import_selected", "capture_url", "sync_course", "stop", "resume"]),
   targetNodeId: z.string().uuid().nullable().optional(),
   nodeIds: z.array(z.string().uuid()).max(200).optional(),
-  url: canvasUrlSchema.optional(),
+  url: captureUrlSchema.optional(),
+})
+
+export const canvasExtensionSyncContentItemSchema = z.object({
+  url: canvasUrlSchema,
+  title: z.string().trim().min(1).max(240),
+  kind: canvasExtensionNodeKindSchema,
+  apiSource: canvasExtensionApiSourceSchema,
+  contentHtml: z.string().max(500_000).nullable(),
+  dueAt: z.string().trim().max(60).nullable().optional(),
+  metadata: z.record(z.unknown()).optional(),
+})
+
+export const canvasExtensionSyncContentRequestSchema = z.object({
+  scanId: z.string().trim().min(8).max(120),
+  canvasOrigin: z.string().url(),
+  courseUrl: canvasUrlSchema,
+  courseId: z.string().trim().min(1).max(40),
+  courseTitle: z.string().trim().min(1).max(240).nullable().optional(),
+  replace: z.boolean().optional().default(true),
+  items: z.array(canvasExtensionSyncContentItemSchema).max(400),
+}).superRefine((value, context) => {
+  const origin = new URL(value.canvasOrigin).origin
+  if (new URL(value.courseUrl).origin !== origin) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Canvas course URL must match the declared Canvas origin.",
+      path: ["courseUrl"],
+    })
+  }
 })
 
 export const canvasExtensionSelectNodeRequestSchema = z.object({
@@ -290,6 +367,20 @@ export const canvasExtensionWorkerReportRequestSchema = z.object({
   result: z.record(z.unknown()).optional(),
 })
 
+export const canvasExtensionFileContentMetadataSchema = z.object({
+  scanId: z.string().trim().min(8).max(120),
+  canvasOrigin: z.string().url(),
+  courseUrl: canvasUrlSchema,
+  courseId: z.string().trim().min(1).max(40),
+  courseTitle: z.string().trim().min(1).max(240).nullable().optional(),
+  url: canvasUrlSchema,
+  title: z.string().trim().min(1).max(240),
+  fileName: z.string().trim().min(1).max(240),
+  mimeType: z.string().trim().min(1).max(160),
+  sizeBytes: z.number().int().nonnegative(),
+  fileId: z.union([z.number(), z.string()]).nullable().optional(),
+})
+
 export const canvasExtensionImportFileMetadataSchema = z.object({
   nodeId: z.string().uuid().nullable().optional(),
   canvasOrigin: z.string().url(),
@@ -303,6 +394,10 @@ export const canvasExtensionImportFileMetadataSchema = z.object({
 })
 
 export type CanvasExtensionPageSnapshot = z.infer<typeof canvasExtensionPageSnapshotSchema>
+export type CanvasExtensionApiContent = z.infer<typeof canvasExtensionApiContentSchema>
+export type CanvasExtensionImportPageRequest = z.infer<typeof canvasExtensionImportPageRequestSchema>
+export type CanvasExtensionSyncContentRequest = z.infer<typeof canvasExtensionSyncContentRequestSchema>
+export type CanvasExtensionSyncContentItem = z.infer<typeof canvasExtensionSyncContentItemSchema>
 export type CanvasExtensionExtractionResult = z.infer<typeof canvasExtensionExtractionResultSchema>
 export type CanvasExtensionPairingCodeResponse = z.infer<typeof canvasExtensionPairingCodeResponseSchema>
 export type CanvasExtensionImportPageResponse = z.infer<typeof canvasExtensionImportPageResponseSchema>

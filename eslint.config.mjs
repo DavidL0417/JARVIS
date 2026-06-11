@@ -10,6 +10,8 @@ export default tseslint.config(
       "pnpm-lock.yaml",
       "tsconfig.tsbuildinfo",
       "public/**",
+      // Vendored third-party library (Mozilla Readability) injected into reader tabs.
+      "extensions/canvas-reader/src/readability.js",
     ],
   },
   js.configs.recommended,

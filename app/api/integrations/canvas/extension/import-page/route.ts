@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 
 import { extractCanvasExtensionPage } from "@/lib/sources/canvas-extension-extraction"
+import { canvasHtmlToMarkdown } from "@/lib/sources/canvas-html-to-markdown"
 import { insertAndAutoApproveSourceCandidates, insertSourceSnapshot } from "@/lib/sources/persistence"
 import {
   markCanvasExtensionTokenUsed,
@@ -11,7 +12,10 @@ import {
   canvasExtensionImportPageRequestSchema,
   canvasExtensionImportPageResponseSchema,
 } from "@/schemas/canvas-extension"
-import type { CanvasExtensionImportPageResponse } from "@/schemas/canvas-extension"
+import type {
+  CanvasExtensionImportPageResponse,
+  CanvasExtensionPageSnapshot,
+} from "@/schemas/canvas-extension"
 
 function originFor(value: string) {
   return new URL(value).origin
@@ -39,8 +43,8 @@ export async function POST(request: Request) {
 
   try {
     const { tokenRecord } = auth
-    const snapshot = parsedBody.data
-    const canvasOrigin = originFor(snapshot.canvasOrigin)
+    const data = parsedBody.data
+    const canvasOrigin = originFor(data.canvasOrigin)
 
     if (tokenRecord.canvas_origin && tokenRecord.canvas_origin !== canvasOrigin) {
       return NextResponse.json(
@@ -50,6 +54,35 @@ export async function POST(request: Request) {
         { status: 403 },
       )
     }
+
+    let markdown: string | null = null
+    let truncated = false
+    let apiSource: string | null = null
+    let contentNodeId: string | null = null
+    let snapshot: CanvasExtensionPageSnapshot
+
+    if ("apiSource" in data) {
+      const converted = canvasHtmlToMarkdown(data.contentHtml, { origin: canvasOrigin })
+      markdown = converted.markdown
+      truncated = converted.truncated
+      apiSource = data.apiSource
+      contentNodeId = data.nodeId ?? null
+      snapshot = {
+        scanId: data.scanId,
+        canvasOrigin: data.canvasOrigin,
+        url: data.url,
+        title: data.title,
+        courseHint: data.courseHint,
+        pageKindHint: data.pageKindHint ?? data.apiSource,
+        visibleText: markdown || data.title,
+        links: data.links ?? [],
+        capturedAt: data.capturedAt,
+      }
+    } else {
+      snapshot = data
+    }
+
+    const isApiContent = apiSource !== null
 
     const adminClient = createSupabaseAdminClient()
     await markCanvasExtensionTokenUsed({
@@ -85,22 +118,47 @@ export async function POST(request: Request) {
       freshness: extraction.skippedReason ? "partial" : "fresh",
       summary: extraction.summary,
       payload: {
-        mode: "extension_page_reader",
+        mode: isApiContent ? "extension_api_reader" : "extension_page_reader",
         scanId: snapshot.scanId,
         canvasOrigin,
         url: snapshot.url,
         title: snapshot.title,
         courseHint: snapshot.courseHint,
         pageKindHint: snapshot.pageKindHint,
+        apiSource,
         pageKind: extraction.pageKind,
         confidence: extraction.confidence,
         skippedReason: extraction.skippedReason,
         model: extraction.model,
         textPreview: snapshot.visibleText.slice(0, 1600),
         linkCount: snapshot.links.length,
+        truncated,
         capturedAt: snapshot.capturedAt,
       },
     })
+
+    if (isApiContent && markdown) {
+      const { error: contentError } = await adminClient.from("canvas_extension_page_content").upsert(
+        {
+          user_id: tokenRecord.user_id,
+          node_id: contentNodeId,
+          canvas_origin: canvasOrigin,
+          url: snapshot.url,
+          title: snapshot.title,
+          content_markdown: markdown,
+          api_source: apiSource,
+          source_snapshot_id: sourceSnapshot.id,
+          truncated,
+          captured_at: snapshot.capturedAt,
+        },
+        { onConflict: "user_id,canvas_origin,url" },
+      )
+
+      if (contentError) {
+        throw new Error(contentError.message)
+      }
+    }
+
     const candidates = extraction.skippedReason
       ? []
       : await insertAndAutoApproveSourceCandidates({

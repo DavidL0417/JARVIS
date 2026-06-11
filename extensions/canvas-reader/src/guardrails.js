@@ -63,6 +63,84 @@ export function isAllowedCanvasUrl(url, origin) {
   return ALLOWED_PATH_PATTERNS.some((pattern) => pattern.test(parsed.pathname))
 }
 
+// A cross-origin web link worth pulling in as a read-only reading (an off-Canvas course
+// reading). Same-origin Canvas links are handled by the Canvas-native capture path instead.
+// http is accepted because Canvas often stores legacy http external_urls (e.g. JSTOR); the
+// capture upgrades the scheme to https before fetching.
+export function isCaptureableExternalUrl(url, canvasOrigin) {
+  let parsed
+  try {
+    parsed = new URL(url)
+  } catch {
+    return false
+  }
+  if (parsed.protocol !== "https:" && parsed.protocol !== "http:") return false
+  if (canvasOrigin && parsed.origin === canvasOrigin) return false
+  return true
+}
+
+const LOGIN_URL_PATTERN = /(\/login\b|\/log-in|\/signin|\/sign-in|\/sso\/|\bsso\.|samlsso|saml2?\/|shibboleth|\/idp\/|\/openam|\/nusso|\bnusso\b|\/xui\b|openathens|ezproxy|\/cas\/|\/adfs\/|duosecurity|\bduo\b|\/action\/showlogin|\/action\/dologin|accounts\.google\.com|login\.microsoftonline|\boauth\/authorize|auth0\.com|\bwebsso\b|\bwebauth\b)/i
+
+// True when a URL is (or redirected to) an authentication wall, so the reader can route the
+// user through an interactive sign-in rather than store a useless login page.
+export function looksLikeLoginUrl(url) {
+  try {
+    return LOGIN_URL_PATTERN.test(new URL(url).href.toLowerCase())
+  } catch {
+    return false
+  }
+}
+
+function hostOf(url) {
+  try {
+    return new URL(url).host.toLowerCase()
+  } catch {
+    return null
+  }
+}
+
+// Decide whether a captured response is actually a sign-in / paywall gate rather than the
+// reading itself. Combines URL signals with content signals so JS-rendered SSO shells (which
+// carry no login URL markers in their initial HTML) are still caught.
+export function looksLikeGatedCapture({ target, destination, finalUrl, html, readableTextLength }) {
+  if (looksLikeLoginUrl(finalUrl) || looksLikeLoginUrl(target)) return true
+
+  const finalHost = hostOf(finalUrl)
+  const targetHost = hostOf(target)
+  const destHost = hostOf(destination)
+  const lower = (html || "").toLowerCase()
+  const hasPasswordField = /<input[^>]+type=["']?password["']?/i.test(html || "")
+  const hasAuthWords = /(single sign-?on|online passport|log ?in|sign ?in|enter your password|netid)/i.test(lower)
+
+  // Bounced to a third host that is neither the link nor its intended destination — classic
+  // SSO/IdP redirect.
+  const redirectedToThirdHost =
+    Boolean(finalHost) && finalHost !== targetHost && finalHost !== destHost
+
+  if (hasPasswordField) return true
+  if (redirectedToThirdHost && hasAuthWords) return true
+  // A tiny JS shell ("Loading…") with auth wording and almost no readable text.
+  if ((readableTextLength ?? 0) < 250 && hasAuthWords) return true
+
+  return false
+}
+
+// EZproxy / library-proxy links wrap the real article in a `?url=` (or `?qurl=`) parameter.
+// Unwrap to the underlying reading so it can be matched and stored canonically.
+export function unwrapProxyUrl(url) {
+  try {
+    const parsed = new URL(url)
+    const inner = parsed.searchParams.get("url") || parsed.searchParams.get("qurl")
+    if (inner) {
+      const innerUrl = new URL(inner)
+      if (innerUrl.protocol === "https:" || innerUrl.protocol === "http:") return innerUrl.toString()
+    }
+  } catch {
+    // not a proxy url
+  }
+  return url
+}
+
 export function isLikelyCanvasTabUrl(url) {
   let parsed
 
