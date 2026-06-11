@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>JARVIS Canvas Reader</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1>Canvas Reader</h1>
+        <span id="status-pill">checking</span>
+      </header>
+
+      <section id="pair-section" class="stack">
+        <label>
+          JARVIS app URL
+          <input id="app-url" type="url" placeholder="https://mydearestjarvis.vercel.app" />
+        </label>
+        <label>
+          Pairing code
+          <input id="pairing-code" type="text" placeholder="JCV-XXXX-XXXX" />
+        </label>
+        <button id="pair-button" type="button">Pair extension</button>
+      </section>
+
+      <section id="status-section" class="stack">
+        <p id="app-url-display"></p>
+        <p id="command-status"></p>
+        <p id="last-error" hidden></p>
+        <button id="open-control-button" type="button">Open JARVIS controls</button>
+        <button id="poll-button" class="secondary-button" type="button">Check for commands</button>
+      </section>
+
+      <p id="message"></p>
+      <footer id="version"></footer>
+    </main>
+    <script type="module" src="popup.js"></script>
+  </body>
+</html>

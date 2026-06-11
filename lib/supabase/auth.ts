@@ -15,8 +15,68 @@ export class AuthenticationRequiredError extends Error {
   }
 }
 
+export class AuthBackendDependencyError extends Error {
+  code: "backend_timeout" | "backend_error"
+
+  constructor(message: string, code: "backend_timeout" | "backend_error" = "backend_error") {
+    super(message)
+    this.name = "AuthBackendDependencyError"
+    this.code = code
+  }
+}
+
 export function isAuthenticationRequiredError(error: unknown): error is AuthenticationRequiredError {
   return error instanceof AuthenticationRequiredError
+}
+
+export function isAuthBackendDependencyError(error: unknown): error is AuthBackendDependencyError {
+  return error instanceof AuthBackendDependencyError
+}
+
+function errorField(error: unknown, key: "code" | "message" | "name" | "status" | "cause"): unknown {
+  return error && typeof error === "object" && key in error
+    ? (error as Record<string, unknown>)[key]
+    : null
+}
+
+function isTransientAuthFetchError(error: unknown): boolean {
+  const code = String(errorField(error, "code") || "")
+  const message = String(errorField(error, "message") || "").toLowerCase()
+  const name = String(errorField(error, "name") || "")
+  const cause = errorField(error, "cause")
+
+  if (
+    code.includes("TIMEOUT") ||
+    code.includes("ECONNRESET") ||
+    code.includes("ENOTFOUND") ||
+    code.includes("UND_ERR") ||
+    name.includes("Timeout") ||
+    message.includes("fetch failed") ||
+    message.includes("connect timeout") ||
+    message.includes("network")
+  ) {
+    return true
+  }
+
+  return Boolean(cause && isTransientAuthFetchError(cause))
+}
+
+function isDefinitiveAuthFailure(error: unknown): boolean {
+  const status = errorField(error, "status")
+  const message = String(errorField(error, "message") || "").toLowerCase()
+  const name = String(errorField(error, "name") || "").toLowerCase()
+
+  return status === 401 ||
+    status === 403 ||
+    name.includes("authsessionmissing") ||
+    message.includes("auth session missing") ||
+    message.includes("missing auth session")
+}
+
+export function classifySupabaseAuthError(error: unknown): "auth_required" | "backend_timeout" | "backend_error" {
+  if (isTransientAuthFetchError(error)) return "backend_timeout"
+  if (isDefinitiveAuthFailure(error)) return "auth_required"
+  return "backend_error"
 }
 
 function normalizeNullableText(value: string | null | undefined) {
@@ -98,6 +158,16 @@ export async function requireAuthenticatedUser(
     data: { user: authUser },
     error,
   } = await serverClient.auth.getUser()
+
+  const authErrorKind = error ? classifySupabaseAuthError(error) : null
+
+  if (authErrorKind === "backend_timeout") {
+    throw new AuthBackendDependencyError("Supabase auth request timed out before JARVIS could confirm the session.", "backend_timeout")
+  }
+
+  if (error && authErrorKind === "backend_error") {
+    throw new AuthBackendDependencyError(error.message || "Supabase auth request failed.", "backend_error")
+  }
 
   if (error || !authUser) {
     throw new AuthenticationRequiredError()

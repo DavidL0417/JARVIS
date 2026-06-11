@@ -4,13 +4,17 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import type { ReactNode } from "react"
 import {
   AlertTriangle,
+  ArrowUpRight,
   BookOpen,
   Cable,
   CalendarDays,
   CheckCircle2,
+  ChevronDown,
+  Database,
   FileUp,
   Github,
   GraduationCap,
+  KeyRound,
   ListChecks,
   Loader2,
   Mail,
@@ -20,7 +24,6 @@ import {
 } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
 
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import {
   Field,
@@ -377,25 +380,27 @@ function FailedSourceAlert({ sources }: { sources: SourceSnapshotSummary[] }) {
   }
 
   return (
-    <Alert variant="destructive" className="min-w-0 rounded-sm border-destructive/40 bg-destructive/5 text-[12px]">
-      <AlertTriangle aria-hidden="true" />
-      <AlertTitle className="min-w-0 text-[12px]">
-        {sources.length} refresh issue{sources.length === 1 ? "" : "s"}
-      </AlertTitle>
-      <AlertDescription className="min-w-0 text-[12px]">
-        <div className="flex min-w-0 flex-col gap-2">
-          {sources.map((source) => (
-            <div key={source.id} className="min-w-0">
-              <div className="flex items-center justify-between gap-2">
-                <span className="font-medium capitalize text-foreground">{source.source.replace("_", " ")}</span>
-                <span className="num shrink-0 text-[10px] uppercase text-destructive/80">{formatCapturedAt(source.capturedAt)}</span>
-              </div>
-              <p className="mt-1 max-w-full leading-5 text-destructive/90 [overflow-wrap:anywhere]">{source.summary}</p>
+    <div className="min-w-0 overflow-hidden rounded-sm border border-destructive/30 bg-destructive/[0.05]">
+      <div className="flex items-center gap-2 border-b border-destructive/20 px-3 py-2">
+        <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-destructive" strokeWidth={1.75} aria-hidden="true" />
+        <span className="text-[11px] font-semibold uppercase tracking-[0.1em] text-destructive">
+          {sources.length} refresh issue{sources.length === 1 ? "" : "s"}
+        </span>
+      </div>
+      <div className="flex min-w-0 flex-col">
+        {sources.map((source) => (
+          <div key={source.id} className="min-w-0 border-b border-destructive/10 px-3 py-2 last:border-b-0">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[12px] font-medium capitalize text-foreground">{source.source.replace("_", " ")}</span>
+              <span className="num shrink-0 text-[10px] uppercase tracking-[0.08em] text-muted-foreground">
+                {formatCapturedAt(source.capturedAt)}
+              </span>
             </div>
-          ))}
-        </div>
-      </AlertDescription>
-    </Alert>
+            <p className="mt-1 text-[12px] leading-5 text-muted-foreground [overflow-wrap:anywhere]">{source.summary}</p>
+          </div>
+        ))}
+      </div>
+    </div>
   )
 }
 
@@ -405,13 +410,13 @@ function InlineError({ message }: { message: string }) {
   }
 
   return (
-    <Alert variant="destructive" className="min-w-0 rounded-sm border-destructive/40 bg-destructive/5 text-[12px]">
-      <AlertTriangle aria-hidden="true" />
-      <AlertTitle className="text-[12px]">Source action failed</AlertTitle>
-      <AlertDescription className="max-w-full text-[12px] leading-5 [overflow-wrap:anywhere]">
-        {message}
-      </AlertDescription>
-    </Alert>
+    <div className="flex min-w-0 items-start gap-2.5 rounded-sm border border-destructive/30 bg-destructive/[0.05] px-3 py-2.5">
+      <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-destructive" strokeWidth={1.75} aria-hidden="true" />
+      <div className="min-w-0">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-destructive">Action failed</p>
+        <p className="mt-0.5 text-[12px] leading-5 text-muted-foreground [overflow-wrap:anywhere]">{message}</p>
+      </div>
+    </div>
   )
 }
 
@@ -546,6 +551,9 @@ export function SourceSetupPanel({
   const [notionDatabaseInput, setNotionDatabaseInput] = useState(notionConnector.selectedSourceId ?? "")
   const [canvasBaseUrlInput, setCanvasBaseUrlInput] = useState(canvasConnector.selectedSourceId ?? "")
   const [canvasTokenInput, setCanvasTokenInput] = useState("")
+  const [showCanvasToken, setShowCanvasToken] = useState(
+    canvasConnector.status === "connected" || canvasConnector.status === "ready",
+  )
   const [status, setStatus] = useState<ActionStatus>("idle")
   const [errorMessage, setErrorMessage] = useState("")
   const [dedupeStatus, setDedupeStatus] = useState<"idle" | "busy" | "done" | "error">("idle")
@@ -638,8 +646,11 @@ export function SourceSetupPanel({
         return "disabled"
       }
 
+      // The browser-extension Canvas Reader is the primary path, so an unused or
+      // failed legacy API-token connection reads as "not connected" here rather than
+      // a hard failure. The real token status is still shown inside its own section.
       if (canvasConnector.status === "failed") {
-        return "refresh_issue"
+        return "auth_needed"
       }
 
       return canvasConnector.status
@@ -1180,6 +1191,8 @@ export function SourceSetupPanel({
     }
 
     if (selectedConnector.id === "canvas") {
+      const tokenConnected = canvasConnector.status === "ready" || canvasConnector.status === "connected"
+
       return (
         <div className="flex min-w-0 flex-col gap-5">
           <DetailHeader
@@ -1190,54 +1203,122 @@ export function SourceSetupPanel({
             disabled={busy}
           />
           <FailedSourceAlert sources={failedSourcesByKind.canvas ?? []} />
-          <div className="flex flex-wrap gap-2">
-            <ActionButton
-              icon={GraduationCap}
-              label={canvasConnector.status === "ready" || canvasConnector.status === "connected" ? "Update token" : "Connect Canvas"}
-              onClick={handleCanvasConnect}
-              disabled={busy || !canvasConnector.enabled || canvasBaseUrlInput.trim().length === 0 || canvasTokenInput.trim().length === 0}
-            />
-            <ActionButton
-              icon={RefreshCw}
-              label="Import Canvas"
-              onClick={handleCanvasImport}
-              disabled={busy || !canvasConnector.canRun}
-            />
+
+          {/* Primary path — the browser-extension Canvas Reader */}
+          <div className="flex flex-col gap-3.5 rounded-sm border border-copper/30 bg-copper-soft px-4 py-4">
+            <div className="flex items-start gap-3">
+              <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-sm border border-copper/40 bg-background/40 text-copper">
+                <GraduationCap className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+              </span>
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <h3 className="text-[13px] font-semibold text-foreground">Canvas Reader</h3>
+                  <span className="rounded-full border border-copper/40 px-1.5 py-px text-[9px] font-semibold uppercase tracking-[0.1em] text-copper">
+                    Recommended
+                  </span>
+                </div>
+                <p className="mt-1 max-w-[54ch] text-[12px] leading-5 text-muted-foreground">
+                  Reads your courses through the browser extension on your signed-in Canvas
+                  session — no access token or password needed. Sync a course, skim the
+                  content, and import what JARVIS should plan around.
+                </p>
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-2 pl-11">
+              <Button
+                size="sm"
+                onClick={() => {
+                  window.location.href = "/dashboard/canvas-extension"
+                }}
+                className="h-8 gap-1.5 rounded-sm px-3 text-[11px] font-medium"
+              >
+                Open Canvas Reader
+                <ArrowUpRight aria-hidden="true" />
+              </Button>
+              <span className="text-[11px] text-muted-foreground">
+                First time? It walks you through installing the extension.
+              </span>
+            </div>
           </div>
-          <FieldGroup className="gap-3">
-            <Field className="gap-2">
-              <FieldLabel className="text-[12px]">Canvas URL</FieldLabel>
-              <InputGroup className="min-w-0 rounded-sm border-rule bg-secondary/20">
-                <InputGroupInput
-                  value={canvasBaseUrlInput}
-                  onChange={(event) => setCanvasBaseUrlInput(event.target.value)}
-                  placeholder="https://school.instructure.com"
-                  disabled={busy}
-                  className="min-w-0 text-[12px]"
+
+          {/* Secondary path — legacy personal API token (most SSO/MFA schools can't use it) */}
+          <div className="flex min-w-0 flex-col overflow-hidden rounded-sm border border-rule">
+            <button
+              type="button"
+              onClick={() => setShowCanvasToken((value) => !value)}
+              className="flex w-full items-center gap-2 px-3 py-2.5 text-left transition-colors hover:bg-secondary/15"
+              aria-expanded={showCanvasToken}
+            >
+              <KeyRound className="h-3.5 w-3.5 shrink-0 text-muted-foreground" strokeWidth={1.75} aria-hidden="true" />
+              <span className="text-[12px] font-medium text-foreground">Connect with an API token</span>
+              <span className="ml-auto inline-flex items-center gap-2.5">
+                <ConnectorStatusMark state={canvasConnector.status} />
+                <ChevronDown
+                  className={cn(
+                    "h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform",
+                    !showCanvasToken && "-rotate-90",
+                  )}
+                  aria-hidden="true"
                 />
-              </InputGroup>
-            </Field>
-            <Field className="gap-2">
-              <FieldLabel className="text-[12px]">Access Token</FieldLabel>
-              <InputGroup className="min-w-0 rounded-sm border-rule bg-secondary/20">
-                <InputGroupInput
-                  value={canvasTokenInput}
-                  onChange={(event) => setCanvasTokenInput(event.target.value)}
-                  placeholder="Paste token from Canvas settings"
-                  type="password"
-                  disabled={busy}
-                  className="min-w-0 text-[12px]"
-                />
-              </InputGroup>
-              <FieldDescription className="text-[11px]">
-                In Canvas, use Settings → New Access Token with purpose JARVIS Canvas pilot.
-              </FieldDescription>
-            </Field>
-          </FieldGroup>
-          <div className="rounded-sm border border-rule px-3">
-            <InfoLine label="Account" value={canvasConnector.account} />
-            <InfoLine label="Canvas host" value={canvasConnector.selectedSourceName} />
-            <InfoLine label="Status" value={connectorStatusLabel(state)} />
+              </span>
+            </button>
+            {showCanvasToken ? (
+              <div className="flex min-w-0 flex-col gap-4 border-t border-rule px-3 py-4">
+                <p className="text-[11px] leading-5 text-muted-foreground">
+                  For schools that issue personal Canvas API tokens. If your school uses single
+                  sign-on or two-factor (most do), use the Canvas Reader above instead.
+                </p>
+                <FieldGroup className="gap-3">
+                  <Field className="gap-2">
+                    <FieldLabel className="text-[12px]">Canvas URL</FieldLabel>
+                    <InputGroup className="min-w-0 rounded-sm border-rule bg-secondary/20">
+                      <InputGroupInput
+                        value={canvasBaseUrlInput}
+                        onChange={(event) => setCanvasBaseUrlInput(event.target.value)}
+                        placeholder="https://school.instructure.com"
+                        disabled={busy}
+                        className="min-w-0 text-[12px]"
+                      />
+                    </InputGroup>
+                  </Field>
+                  <Field className="gap-2">
+                    <FieldLabel className="text-[12px]">Access Token</FieldLabel>
+                    <InputGroup className="min-w-0 rounded-sm border-rule bg-secondary/20">
+                      <InputGroupInput
+                        value={canvasTokenInput}
+                        onChange={(event) => setCanvasTokenInput(event.target.value)}
+                        placeholder="Paste token from Canvas settings"
+                        type="password"
+                        disabled={busy}
+                        className="min-w-0 text-[12px]"
+                      />
+                    </InputGroup>
+                    <FieldDescription className="text-[11px]">
+                      In Canvas, use Settings → New Access Token with purpose JARVIS Canvas pilot.
+                    </FieldDescription>
+                  </Field>
+                </FieldGroup>
+                <div className="flex flex-wrap gap-2">
+                  <ActionButton
+                    icon={GraduationCap}
+                    label={tokenConnected ? "Update token" : "Connect Canvas"}
+                    onClick={handleCanvasConnect}
+                    disabled={busy || canvasBaseUrlInput.trim().length === 0 || canvasTokenInput.trim().length === 0}
+                  />
+                  <ActionButton
+                    icon={RefreshCw}
+                    label="Import Canvas"
+                    onClick={handleCanvasImport}
+                    disabled={busy || !canvasConnector.canRun}
+                  />
+                </div>
+                <div className="rounded-sm border border-rule px-3">
+                  <InfoLine label="Account" value={canvasConnector.account} />
+                  <InfoLine label="Canvas host" value={canvasConnector.selectedSourceName} />
+                  <InfoLine label="Status" value={connectorStatusLabel(canvasConnector.status)} />
+                </div>
+              </div>
+            ) : null}
           </div>
         </div>
       )

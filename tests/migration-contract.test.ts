@@ -30,6 +30,34 @@ const canvasAccessTokenMigration = readFileSync(
   "supabase/migrations/20260516032701_canvas_access_token_integration.sql",
   "utf8",
 )
+const canvasExtensionMigration = readFileSync(
+  "supabase/migrations/20260518033729_canvas_extension_reader.sql",
+  "utf8",
+)
+const canvasExtensionControlPlaneMigration = readFileSync(
+  "supabase/migrations/20260518191000_canvas_extension_control_plane.sql",
+  "utf8",
+)
+const canvasExtensionCommandEventsMigration = readFileSync(
+  "supabase/migrations/20260519180734_canvas_extension_command_events.sql",
+  "utf8",
+)
+const caldavProviderContractMigration = readFileSync(
+  "supabase/migrations/20260528012138_caldav_provider_contract.sql",
+  "utf8",
+)
+const canvasExtensionPagePreviewsMigration = readFileSync(
+  "supabase/migrations/20260528062929_canvas_extension_page_previews.sql",
+  "utf8",
+)
+const canvasExtensionPageContentMigration = readFileSync(
+  "supabase/migrations/20260528120000_canvas_extension_page_content.sql",
+  "utf8",
+)
+const canvasExtensionSyncCourseMigration = readFileSync(
+  "supabase/migrations/20260528130000_canvas_extension_sync_course.sql",
+  "utf8",
+)
 const caldavConnectorSettingsMigration = readFileSync(
   "supabase/migrations/20260518034200_caldav_connector_settings.sql",
   "utf8",
@@ -146,6 +174,13 @@ describe("production Supabase migration", () => {
     expect(canvasAccessTokenMigration).not.toContain("disable row level security")
   })
 
+  it("allows CalDAV integration metadata without exposing private tokens", () => {
+    expect(caldavProviderContractMigration).toContain("check (provider in ('google', 'notion', 'canvas', 'caldav'))")
+    expect(caldavProviderContractMigration).toContain("token_provider in ('google', 'notion', 'canvas', 'caldav')")
+    expect(caldavProviderContractMigration).toContain("revoke all on function public.get_integration_token(uuid, text) from public, anon, authenticated;")
+    expect(caldavProviderContractMigration).not.toContain("disable row level security")
+  })
+
   it("adds CalDAV and connector enablement without exposing private tokens", () => {
     expect(caldavConnectorSettingsMigration).toContain("check (provider in ('google', 'notion', 'canvas', 'caldav'))")
     expect(caldavConnectorSettingsMigration).toContain("source in ('local', 'google', 'caldav', 'imported', 'task')")
@@ -166,5 +201,64 @@ describe("production Supabase migration", () => {
     expect(repairIntegrationProviderChecksMigration).toContain("token_provider in ('google', 'notion', 'canvas', 'caldav')")
     expect(repairIntegrationProviderChecksMigration).toContain("revoke all on function public.get_integration_token(uuid, text) from public, anon, authenticated;")
     expect(repairIntegrationProviderChecksMigration).not.toContain("disable row level security")
+  })
+
+  it("stores Canvas extension pairing data in private service-role-only tables", () => {
+    expect(canvasExtensionMigration).toContain("create table if not exists app_private.canvas_extension_pairing_codes")
+    expect(canvasExtensionMigration).toContain("create table if not exists app_private.canvas_extension_tokens")
+    expect(canvasExtensionMigration).toContain("alter table app_private.canvas_extension_tokens enable row level security")
+    expect(canvasExtensionMigration).toContain("revoke all on app_private.canvas_extension_tokens from public, anon, authenticated")
+    expect(canvasExtensionMigration).toContain("grant select, insert, update, delete on app_private.canvas_extension_tokens to service_role")
+    expect(canvasExtensionMigration).toContain("create or replace function public.consume_canvas_extension_pairing_code")
+    expect(canvasExtensionMigration).toContain("grant execute on function public.get_canvas_extension_token(text) to service_role")
+  })
+
+  it("stores Canvas extension control-plane metadata with RLS and no credentials", () => {
+    expect(canvasExtensionControlPlaneMigration).toContain("create table public.canvas_extension_sessions")
+    expect(canvasExtensionControlPlaneMigration).toContain("create table public.canvas_extension_commands")
+    expect(canvasExtensionControlPlaneMigration).toContain("create table public.canvas_extension_nodes")
+    expect(canvasExtensionControlPlaneMigration).toContain("create table public.canvas_extension_command_events")
+    expect(canvasExtensionCommandEventsMigration).toContain("create table if not exists public.canvas_extension_command_events")
+    expect(canvasExtensionControlPlaneMigration).toContain("alter table public.canvas_extension_sessions enable row level security")
+    expect(canvasExtensionControlPlaneMigration).toContain("alter table public.canvas_extension_commands enable row level security")
+    expect(canvasExtensionControlPlaneMigration).toContain("alter table public.canvas_extension_nodes enable row level security")
+    expect(canvasExtensionControlPlaneMigration).toContain("alter table public.canvas_extension_command_events enable row level security")
+    expect(canvasExtensionCommandEventsMigration).toContain("alter table public.canvas_extension_command_events enable row level security")
+    expect(canvasExtensionControlPlaneMigration).toContain("canvas_extension_nodes_select_own")
+    expect(canvasExtensionControlPlaneMigration).toContain("canvas_extension_command_events_select_own")
+    expect(canvasExtensionCommandEventsMigration).toContain("canvas_extension_command_events_select_own")
+    expect(canvasExtensionControlPlaneMigration).not.toContain("access_token")
+    expect(canvasExtensionControlPlaneMigration).not.toContain("refresh_token")
+    expect(canvasExtensionCommandEventsMigration).not.toContain("access_token")
+    expect(canvasExtensionCommandEventsMigration).not.toContain("refresh_token")
+  })
+
+  it("allows Canvas preview-link capture commands without storing executable page archives", () => {
+    expect(canvasExtensionPagePreviewsMigration).toContain("'capture_url'")
+    expect(canvasExtensionPagePreviewsMigration).toContain("sanitized inert page previews")
+    expect(canvasExtensionPagePreviewsMigration).toContain("must never contain credentials")
+    expect(canvasExtensionPagePreviewsMigration).not.toContain("disable row level security")
+    expect(canvasExtensionPagePreviewsMigration).not.toContain("raw MHTML")
+    expect(canvasExtensionPagePreviewsMigration).not.toContain("access_token")
+    expect(canvasExtensionPagePreviewsMigration).not.toContain("refresh_token")
+  })
+
+  it("allows the sync_course command type for full-course content pulls", () => {
+    expect(canvasExtensionSyncCourseMigration).toContain("'sync_course'")
+    expect(canvasExtensionSyncCourseMigration).toContain("canvas_extension_commands_type_check")
+    expect(canvasExtensionSyncCourseMigration).not.toContain("disable row level security")
+  })
+
+  it("stores Canvas extension page markdown content with RLS and no credentials", () => {
+    expect(canvasExtensionPageContentMigration).toContain("create table public.canvas_extension_page_content")
+    expect(canvasExtensionPageContentMigration).toContain("content_markdown text not null")
+    expect(canvasExtensionPageContentMigration).toContain(
+      "alter table public.canvas_extension_page_content enable row level security",
+    )
+    expect(canvasExtensionPageContentMigration).toContain("canvas_extension_page_content_select_own")
+    expect(canvasExtensionPageContentMigration).toContain("must never contain credentials")
+    expect(canvasExtensionPageContentMigration).not.toContain("disable row level security")
+    expect(canvasExtensionPageContentMigration).not.toContain("access_token")
+    expect(canvasExtensionPageContentMigration).not.toContain("refresh_token")
   })
 })

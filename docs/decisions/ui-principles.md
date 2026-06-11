@@ -33,6 +33,9 @@
 - The Claude Sonnet/Opus planner choice belongs beside the daily planning controls as a compact segmented control, not in a modal or settings detour.
 - In the right rail, prefer spacing and muted surfaces for local grouping. Reserve strong rules for major region breaks so the panel does not become a stack of equal dividers.
 - Imported Google events default to medium priority and fixed in place. Do not expose the full backlog as a review queue; event-level changes belong on the calendar event context menu.
+- The Canvas Reader control surface should use a dense Finder-style browser on wide screens: left rail for setup/actions, then Courses, Tabs, Items, and Detail columns. Keep status visible at the top and surface real command events/errors rather than generic sync copy.
+- Canvas Reader queued commands should read as waiting on the Chrome extension, and the UI should offer an explicit wake action because command creation and browser-extension execution are separate steps.
+- Canvas Reader expansion controls belong in the empty target column after the user selects a course or tab. Avoid row-level refresh icons for this flow; use a clear orange `Expand` command where tabs/items will appear.
 
 ## Layout Rules
 
