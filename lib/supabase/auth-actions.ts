@@ -102,3 +102,17 @@ export async function fetchGoogleEvents() {
 
   return payload.events || []
 }
+
+export async function fetchCalDavEvents() {
+  const response = await fetch("/api/integrations/caldav/import", {
+    method: "POST",
+    cache: "no-store",
+  })
+  const payload = (await response.json().catch(() => null)) as
+    | { success?: boolean; error?: string; details?: string; needsAuthorization?: boolean }
+    | null
+
+  if (!response.ok || !payload?.success) {
+    throw new Error(payload?.details || payload?.error || `CalDAV sync failed with status ${response.status}.`)
+  }
+}
