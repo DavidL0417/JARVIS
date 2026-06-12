@@ -42,18 +42,13 @@ import {
   TASKS_CALENDAR_ID,
 } from "@/lib/task-calendar-constants"
 import { normalizeHexColor } from "@/lib/color"
+import { buildTimedEventLayoutMap } from "@/lib/schedule-layout"
 import type { Priority, ScheduleEvent, ScheduleEventUpdateRequest, ScheduleEventUpdateResponse, Task } from "@/types"
 import type { Calendar } from "./calendars-sidebar"
 import { TaskQueuePopover } from "./task-queue-popover"
 
 type ViewMode = "1day" | "3days" | "7days" | "1month"
 type SyncStatus = "idle" | "syncing" | "success" | "error"
-
-type TimedEventLayout = {
-  leftPct: number
-  widthPct: number
-  zIndex: number
-}
 
 export interface CalendarEvent {
   id: string
@@ -86,13 +81,26 @@ const fallbackHues: Record<CalendarEvent["color"], number> = {
   cyan: 200,
 }
 
+// Tiles are SOLID blends of the calendar color into the page background: a
+// translucent fill over near-black washed every hue toward gray, so the body never
+// matched the full-opacity accent bar — and opaque tiles are required for the
+// Apple-style cascade overlap to read correctly.
 function fallbackEventStyle(color: CalendarEvent["color"]) {
   const hue = fallbackHues[color]
   return {
-    backgroundColor: `oklch(0.46 0.07 ${hue} / 0.55)`,
-    color: `oklch(0.95 0.01 ${hue})`,
-    borderTop: `1px solid oklch(0.66 0.10 ${hue})`,
+    backgroundColor: `oklch(0.31 0.045 ${hue})`,
+    color: `oklch(0.88 0.06 ${hue})`,
+    borderLeft: `3px solid oklch(0.66 0.10 ${hue})`,
+    boxShadow: "0 0 0 1px var(--background)",
   }
+}
+
+function formatTileTimeRange(startIso: string, endIso: string) {
+  const format = (iso: string) => {
+    const date = new Date(iso)
+    return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`
+  }
+  return `${format(startIso)} – ${format(endIso)}`
 }
 
 function isSameCalendarDay(left: Date, right: Date) {
@@ -370,13 +378,6 @@ function getApiErrorMessage(payload: unknown, fallback: string) {
   return fallback
 }
 
-function getTimedEventBounds(event: CalendarEvent) {
-  const start = event.startHour * 60
-  const end = start + Math.max(event.duration * 60, 1)
-
-  return { start, end }
-}
-
 function assignAllDayLanes(events: CalendarEvent[]): Map<string, number> {
   const sorted = [...events].sort((a, b) => {
     if (a.day !== b.day) return a.day - b.day
@@ -400,76 +401,6 @@ function assignAllDayLanes(events: CalendarEvent[]): Map<string, number> {
     result.set(event.id, lane)
   }
   return result
-}
-
-function buildTimedEventLayoutMap(events: CalendarEvent[]) {
-  const layouts = new Map<string, TimedEventLayout>()
-  const eventsByDay = new Map<number, CalendarEvent[]>()
-
-  for (const event of events) {
-    const current = eventsByDay.get(event.day) ?? []
-    current.push(event)
-    eventsByDay.set(event.day, current)
-  }
-
-  for (const dayEvents of eventsByDay.values()) {
-    const sortedEvents = [...dayEvents].sort((left, right) => {
-      const leftBounds = getTimedEventBounds(left)
-      const rightBounds = getTimedEventBounds(right)
-      return leftBounds.start - rightBounds.start || leftBounds.end - rightBounds.end || left.title.localeCompare(right.title)
-    })
-    const groups: CalendarEvent[][] = []
-    let currentGroup: CalendarEvent[] = []
-    let currentGroupEnd = -Infinity
-
-    for (const event of sortedEvents) {
-      const { start, end } = getTimedEventBounds(event)
-
-      if (currentGroup.length === 0 || start < currentGroupEnd) {
-        currentGroup.push(event)
-        currentGroupEnd = Math.max(currentGroupEnd, end)
-      } else {
-        groups.push(currentGroup)
-        currentGroup = [event]
-        currentGroupEnd = end
-      }
-    }
-
-    if (currentGroup.length > 0) {
-      groups.push(currentGroup)
-    }
-
-    for (const group of groups) {
-      const columns: number[] = []
-      const assignments: Array<{ event: CalendarEvent; column: number }> = []
-
-      for (const event of group) {
-        const { start, end } = getTimedEventBounds(event)
-        let column = columns.findIndex((columnEnd) => columnEnd <= start)
-
-        if (column === -1) {
-          column = columns.length
-          columns.push(end)
-        } else {
-          columns[column] = end
-        }
-
-        assignments.push({ event, column })
-      }
-
-      const columnCount = Math.max(columns.length, 1)
-
-      for (const assignment of assignments) {
-        layouts.set(assignment.event.id, {
-          leftPct: (assignment.column / columnCount) * 100,
-          widthPct: 100 / columnCount,
-          zIndex: 10 + assignment.column,
-        })
-      }
-    }
-  }
-
-  return layouts
 }
 
 export function ScheduleView({
@@ -817,11 +748,15 @@ export function ScheduleView({
     const calendar = calendars?.find((cal) => cal.id === event.calendarId)
     const hex = normalizeHexColor(calendar?.color)
     if (hex) {
+      // One color story per calendar: the accent bar is the raw calendar color, the
+      // body is the same color blended (opaquely) into the page background, and the
+      // text is the same color lifted toward white. The background ring separates
+      // tiles that cascade on top of each other.
       return {
-        backgroundColor: `${hex}45`,
-        color: "oklch(0.96 0.01 80)",
-        borderTop: `1px solid ${hex}`,
-        textShadow: "0 1px 1px oklch(0.10 0.01 60 / 0.55)",
+        backgroundColor: `color-mix(in srgb, ${hex} 26%, var(--background))`,
+        color: `color-mix(in srgb, ${hex} 70%, white)`,
+        borderLeft: `3px solid ${hex}`,
+        boxShadow: "0 0 0 1px var(--background)",
       }
     }
     return fallbackEventStyle(event.color)
@@ -832,62 +767,84 @@ export function ScheduleView({
     const hex = normalizeHexColor(calendar?.color)
     if (hex) {
       return {
-        backgroundColor: `${hex}22`,
-        color: "oklch(0.88 0.01 80)",
-        borderLeft: `2px solid ${hex}80`,
+        backgroundColor: `color-mix(in srgb, ${hex} 18%, var(--background))`,
+        color: `color-mix(in srgb, ${hex} 62%, white)`,
+        borderLeft: `2px solid ${hex}`,
       }
     }
     const fallback = fallbackEventStyle(event.color)
     return {
-      backgroundColor: fallback.backgroundColor.replace(/\/\s*0\.55\)/, "/ 0.22)"),
+      backgroundColor: fallback.backgroundColor,
       color: fallback.color,
-      borderLeft: `2px solid ${fallback.borderTop.replace(/^1px solid\s*/, "")}80`,
+      borderLeft: fallback.borderLeft.replace("3px", "2px"),
     }
   }
 
+  // Every event gets a right-click menu. Editable events expose controls;
+  // read-only ones (planner blocks, due reminders) explain what they are instead.
   const renderEventContextMenu = (event: CalendarEvent, trigger: ReactElement) => {
-    if (!event.canEdit) {
-      return trigger
-    }
+    const kicker =
+      event.renderVariant === "task-due"
+        ? "Due reminder"
+        : event.source === "task"
+          ? "Task block"
+          : "Calendar event"
+    const readOnlyNote =
+      event.renderVariant === "task-due"
+        ? "Reminder of a task deadline. Manage it from the task queue."
+        : event.source === "task"
+          ? "Planned block managed by the scheduler. Re-plan to move it."
+          : "This event is read-only."
 
     return (
       <ContextMenu>
         <ContextMenuTrigger asChild>{trigger}</ContextMenuTrigger>
         <ContextMenuContent className="min-w-48 border-rule-strong bg-popover text-popover-foreground">
           <ContextMenuLabel className="num px-2 py-1 text-[10px] uppercase text-muted-foreground">
-            Calendar event
+            {kicker}
           </ContextMenuLabel>
           <ContextMenuLabel className="truncate px-2 pb-1 pt-0 text-[13px] font-medium text-foreground">
             {event.title}
           </ContextMenuLabel>
-          <ContextMenuSeparator />
-          <ContextMenuLabel className="num px-2 py-1 text-[10px] uppercase text-muted-foreground">
-            Priority
-          </ContextMenuLabel>
-          <ContextMenuRadioGroup
-            value={event.priority}
-            onValueChange={(value) => {
-              if (value !== event.priority) {
-                void handleEventSettingsChange(event, { priority: value as Priority })
-              }
-            }}
-          >
-            {PRIORITY_OPTIONS.map((priority) => (
-              <ContextMenuRadioItem key={priority.value} value={priority.value} className="text-[13px]">
-                {priority.label}
-              </ContextMenuRadioItem>
-            ))}
-          </ContextMenuRadioGroup>
-          <ContextMenuSeparator />
-          <ContextMenuCheckboxItem
-            checked={event.isReadOnly}
-            onCheckedChange={(checked) => {
-              void handleEventSettingsChange(event, { isImmutable: checked === true })
-            }}
-            className="text-[13px]"
-          >
-            Fixed in place
-          </ContextMenuCheckboxItem>
+          {event.canEdit ? (
+            <>
+              <ContextMenuSeparator />
+              <ContextMenuLabel className="num px-2 py-1 text-[10px] uppercase text-muted-foreground">
+                Priority
+              </ContextMenuLabel>
+              <ContextMenuRadioGroup
+                value={event.priority}
+                onValueChange={(value) => {
+                  if (value !== event.priority) {
+                    void handleEventSettingsChange(event, { priority: value as Priority })
+                  }
+                }}
+              >
+                {PRIORITY_OPTIONS.map((priority) => (
+                  <ContextMenuRadioItem key={priority.value} value={priority.value} className="text-[13px]">
+                    {priority.label}
+                  </ContextMenuRadioItem>
+                ))}
+              </ContextMenuRadioGroup>
+              <ContextMenuSeparator />
+              <ContextMenuCheckboxItem
+                checked={event.isReadOnly}
+                onCheckedChange={(checked) => {
+                  void handleEventSettingsChange(event, { isImmutable: checked === true })
+                }}
+                className="text-[13px]"
+              >
+                Fixed in place
+              </ContextMenuCheckboxItem>
+            </>
+          ) : (
+            <>
+              <ContextMenuSeparator />
+              <ContextMenuLabel className="max-w-56 whitespace-normal px-2 py-1.5 text-[11px] leading-snug text-muted-foreground">
+                {readOnlyNote}
+              </ContextMenuLabel>
+            </>
+          )}
         </ContextMenuContent>
       </ContextMenu>
     )
@@ -1240,20 +1197,24 @@ export function ScheduleView({
                 {taskReminderEvents.map((event) => {
                   const lane = allDayLanes.get(event.id) ?? 0
                   return (
-                    <button
-                      type="button"
-                      key={event.id}
-                      onClick={() => setSelectedTaskReminder(event)}
-                      style={{
-                        gridColumnStart: event.day + 1,
-                        gridColumnEnd: (event.daySpanEnd ?? event.day) + 2,
-                        gridRowStart: lane + 1,
-                      }}
-                      className="num mx-1 flex items-center gap-1 overflow-hidden rounded-sm bg-copper-soft px-1.5 py-0.5 text-left text-[10px] uppercase text-foreground hover:bg-copper-soft hover:brightness-110"
-                    >
-                      <span className="copper shrink-0">●</span>
-                      <span className="truncate">{event.title}</span>
-                    </button>
+                    <Fragment key={event.id}>
+                      {renderEventContextMenu(
+                        event,
+                        <button
+                          type="button"
+                          onClick={() => setSelectedTaskReminder(event)}
+                          style={{
+                            gridColumnStart: event.day + 1,
+                            gridColumnEnd: (event.daySpanEnd ?? event.day) + 2,
+                            gridRowStart: lane + 1,
+                          }}
+                          className="num mx-1 flex items-center gap-1 overflow-hidden rounded-sm bg-copper-soft px-1.5 py-0.5 text-left text-[10px] uppercase text-foreground hover:bg-copper-soft hover:brightness-110"
+                        >
+                          <span className="copper shrink-0">●</span>
+                          <span className="truncate">{event.title}</span>
+                        </button>,
+                      )}
+                    </Fragment>
                   )
                 })}
                 {regularAllDayEvents.map((event) => {
@@ -1343,28 +1304,53 @@ export function ScheduleView({
                         widthPct: 100,
                         zIndex: 10,
                       }
+                      // Content priority is title > location > time: the title may
+                      // wrap but is never dropped; location and time appear only
+                      // when the tile has lines to spare.
+                      const tileHeightPx = Math.max(event.duration * HOUR_PX, 20)
+                      const lineBudget = Math.max(Math.floor((tileHeightPx - 8) / 14), 1)
+                      const showLocation = Boolean(event.location) && lineBudget >= 2
+                      const showTime = lineBudget - (showLocation ? 1 : 0) >= 2
+                      const titleLines = Math.min(
+                        Math.max(lineBudget - (showLocation ? 1 : 0) - (showTime ? 1 : 0), 1),
+                        3,
+                      )
 
                       return (
                         <Fragment key={event.id}>
                           {renderEventContextMenu(
                             event,
                             <div
-                              className="absolute overflow-hidden px-1.5 py-1"
+                              className="absolute overflow-hidden rounded-[3px] px-1.5 py-1"
                               style={{
                                 ...getEventStyle(event),
                                 left: `calc(${layout.leftPct}% + 1px)`,
                                 width: `calc(${layout.widthPct}% - 2px)`,
                                 zIndex: layout.zIndex,
                                 ...(calendars ? getEventColorStyle(event) : fallbackEventStyle(event.color)),
-                                opacity: event.isReadOnly ? 0.85 : 1,
                               }}
                             >
-                              <p className="truncate text-[11px] font-medium leading-tight">{event.title}</p>
-                              {event.location && event.duration >= 0.75 ? (
-                                <div className="mt-0.5 flex items-center gap-0.5 text-[10px] opacity-80">
+                              <p
+                                className="text-[11px] font-medium leading-[14px]"
+                                style={{
+                                  display: "-webkit-box",
+                                  WebkitBoxOrient: "vertical",
+                                  WebkitLineClamp: titleLines,
+                                  overflow: "hidden",
+                                }}
+                              >
+                                {event.title}
+                              </p>
+                              {showLocation ? (
+                                <div className="flex items-center gap-0.5 text-[10px] leading-[14px] opacity-80">
                                   <MapPin className="h-2.5 w-2.5 shrink-0" />
                                   <span className="truncate">{event.location}</span>
                                 </div>
+                              ) : null}
+                              {showTime ? (
+                                <p className="num text-[10px] leading-[14px] opacity-70">
+                                  {formatTileTimeRange(event.start, event.end)}
+                                </p>
                               ) : null}
                             </div>,
                           )}
