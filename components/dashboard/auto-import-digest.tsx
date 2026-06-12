@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react"
 import { Loader2, Sparkles, Undo2 } from "lucide-react"
 
-import { Badge } from "@/components/ui/badge"
+import { RailSection } from "@/components/dashboard/rail-section"
 import type { SourceCandidate } from "@/types"
 
 const DIGEST_WINDOW_MS = 24 * 60 * 60 * 1000
@@ -61,17 +61,7 @@ export function AutoImportDigest({
   }
 
   return (
-    <section className="flex flex-col gap-3 border-b border-rule pb-5">
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <Sparkles className="h-4 w-4 text-copper" aria-hidden="true" />
-          <h2 className="text-[13px] font-semibold uppercase text-foreground">JARVIS added</h2>
-        </div>
-        <Badge variant="outline" className="rounded-sm">
-          {recent.length}
-        </Badge>
-      </div>
-
+    <RailSection title="JARVIS added" icon={Sparkles} count={recent.length}>
       <p className="text-[11px] leading-4 text-muted-foreground">
         Auto-imported in the last 24h. Undo anything that shouldn&apos;t be here.
       </p>
@@ -86,7 +76,7 @@ export function AutoImportDigest({
           return (
             <li
               key={candidate.id}
-              className="flex items-start justify-between gap-2 rounded-sm border border-rule bg-secondary/15 p-3"
+              className="flex items-start justify-between gap-2 border-b border-rule/50 pb-2 last:border-b-0 last:pb-0"
             >
               <div className="min-w-0">
                 <p className="line-clamp-2 text-[12px] font-medium leading-5 text-foreground">{candidate.title}</p>
@@ -128,6 +118,6 @@ export function AutoImportDigest({
           Show fewer
         </button>
       ) : null}
-    </section>
+    </RailSection>
   )
 }

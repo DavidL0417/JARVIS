@@ -16,6 +16,7 @@ import {
 
 import { Input } from "@/components/ui/input"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
+import { RailSection } from "@/components/dashboard/rail-section"
 import type { Calendar } from "./calendars-sidebar"
 import type { CreateTaskRequest, ScheduleEvent, Task, UpdateTaskRequest } from "@/types"
 
@@ -457,14 +458,10 @@ export function TaskManager({
   ]
 
   return (
-    <section className="flex flex-col pt-1">
-      <header className="mb-4 flex items-center justify-between gap-2">
-        <div className="flex items-baseline gap-2">
-          <h2 className="eyebrow">{headerTitle}</h2>
-          <span className="num text-[11px] font-medium uppercase text-muted-foreground">
-            {activeTasks.length}
-          </span>
-        </div>
+    <RailSection
+      title={headerTitle}
+      count={activeTasks.length}
+      action={
         <Tooltip>
           <TooltipTrigger asChild>
             <button
@@ -481,8 +478,8 @@ export function TaskManager({
           </TooltipTrigger>
           <TooltipContent side="left" className="text-[11px]">Add task</TooltipContent>
         </Tooltip>
-      </header>
-
+      }
+    >
       {errorMessage ? (
         <p className="mb-2 text-[12px] text-destructive">{errorMessage}</p>
       ) : null}
@@ -608,6 +605,6 @@ export function TaskManager({
           ) : null}
         </div>
       </div>
-    </section>
+    </RailSection>
   )
 }

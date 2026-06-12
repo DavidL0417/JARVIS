@@ -6,19 +6,25 @@ import { X } from "lucide-react"
 
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 
+const RAIL_SHEET_WIDTHS = {
+  narrow: 420,
+  wide: 760,
+} as const
+
 export function RailSheet({
   isOpen,
   onClose,
   title,
-  width = 380,
+  width = "narrow",
   children,
 }: {
   isOpen: boolean
   onClose: () => void
   title: string
-  width?: number
+  width?: keyof typeof RAIL_SHEET_WIDTHS
   children: ReactNode
 }) {
+  const widthPx = RAIL_SHEET_WIDTHS[width]
   useEffect(() => {
     if (!isOpen) return
 
@@ -46,7 +52,7 @@ export function RailSheet({
 
       <aside
         className="fixed left-0 top-0 z-50 h-full max-w-full border-r border-rule bg-background animate-in slide-in-from-left duration-200"
-        style={{ width: `min(${width}px, 100vw)` }}
+        style={{ width: `min(${widthPx}px, 100vw)` }}
         aria-label={title}
       >
         <div className="flex h-full flex-col">
