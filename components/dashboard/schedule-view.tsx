@@ -31,6 +31,7 @@ import {
   X,
 } from "lucide-react"
 import {
+  fetchCalDavEvents,
   fetchGoogleEvents,
   isGoogleCalendarAuthorizationError,
   startGoogleSourceAuthorizationRedirect,
@@ -40,6 +41,7 @@ import {
   getTaskDueTimeLabel,
   TASKS_CALENDAR_ID,
 } from "@/lib/task-calendar-constants"
+import { normalizeHexColor } from "@/lib/color"
 import type { Priority, ScheduleEvent, ScheduleEventUpdateRequest, ScheduleEventUpdateResponse, Task } from "@/types"
 import type { Calendar } from "./calendars-sidebar"
 import { TaskQueuePopover } from "./task-queue-popover"
@@ -514,7 +516,7 @@ export function ScheduleView({
     return () => window.clearInterval(id)
   }, [])
 
-  const syncGoogleEvents = useCallback(async () => {
+  const syncCalendars = useCallback(async () => {
     if (successResetTimeoutRef.current) {
       clearTimeout(successResetTimeoutRef.current)
       successResetTimeoutRef.current = null
@@ -532,10 +534,24 @@ export function ScheduleView({
     }, 60_000)
 
     try {
-      await fetchGoogleEvents()
+      // Refresh every connected calendar source. Google drives the authorization flow;
+      // CalDAV (Apple) is best-effort so it refreshes alongside without its own button —
+      // previously it only updated via the daily cron and could silently go stale.
+      const [googleResult, calDavResult] = await Promise.allSettled([
+        fetchGoogleEvents(),
+        fetchCalDavEvents(),
+      ])
 
       if (didTimeout) {
         return
+      }
+
+      if (googleResult.status === "rejected") {
+        throw googleResult.reason
+      }
+
+      if (calDavResult.status === "rejected") {
+        console.warn("CalDAV sync failed", calDavResult.reason)
       }
 
       setLastSyncedAt(new Date().toISOString())
@@ -594,7 +610,7 @@ export function ScheduleView({
       await handleAuthorizeGoogle()
       return
     }
-    await syncGoogleEvents()
+    await syncCalendars()
   }
 
   const updateEventSettings = useCallback(async (event: CalendarEvent, patch: ScheduleEventUpdateRequest) => {
@@ -751,16 +767,34 @@ export function ScheduleView({
       return
     }
 
+    const scrollContainer = gridScrollRef.current
     const isCurrentWeekVisible = displayDates.some((date) => isSameCalendarDay(date, now))
+    const startHours = timedEvents.map((event) => event.startHour)
     const earliestTimedHour =
-      timedEvents.length > 0
-        ? Math.max(Math.floor(Math.min(...timedEvents.map((event) => event.startHour))) - 1, 0)
-        : null
-    const targetHour = isCurrentWeekVisible
-      ? Math.max(now.getHours() - 1, 0)
-      : earliestTimedHour ?? 7
+      startHours.length > 0 ? Math.max(Math.floor(Math.min(...startHours)) - 1, 0) : null
 
-    gridScrollRef.current.scrollTo({
+    let targetHour = isCurrentWeekVisible ? Math.max(now.getHours() - 1, 0) : earliestTimedHour ?? 7
+
+    if (isCurrentWeekVisible) {
+      // Anchoring to "now" leaves the grid looking empty when it's the small hours
+      // and the day's events are all later (e.g. opening at 1:46 AM with a 3 PM exam).
+      // If the band visible from targetHour holds no events but events exist later,
+      // snap forward to one hour before the next one. Never snap backward — an empty
+      // evening is expected; an empty pre-event morning is the bug we're fixing.
+      const viewportHours = Math.max(scrollContainer.clientHeight / HOUR_PX, 6)
+      const bandHasEvents = timedEvents.some(
+        (event) =>
+          event.startHour < targetHour + viewportHours && event.startHour + event.duration > targetHour,
+      )
+      if (!bandHasEvents) {
+        const laterStarts = startHours.filter((hour) => hour >= targetHour)
+        if (laterStarts.length > 0) {
+          targetHour = Math.max(Math.floor(Math.min(...laterStarts)) - 1, 0)
+        }
+      }
+    }
+
+    scrollContainer.scrollTo({
       top: targetHour * HOUR_PX,
       behavior: "auto",
     })
@@ -796,8 +830,8 @@ export function ScheduleView({
 
   const getEventColorStyle = (event: CalendarEvent) => {
     const calendar = calendars?.find((cal) => cal.id === event.calendarId)
-    if (calendar) {
-      const hex = calendar.color
+    const hex = normalizeHexColor(calendar?.color)
+    if (hex) {
       return {
         backgroundColor: `${hex}45`,
         color: "oklch(0.96 0.01 80)",
@@ -810,8 +844,8 @@ export function ScheduleView({
 
   const getAllDayPillStyle = (event: CalendarEvent) => {
     const calendar = calendars?.find((cal) => cal.id === event.calendarId)
-    if (calendar) {
-      const hex = calendar.color
+    const hex = normalizeHexColor(calendar?.color)
+    if (hex) {
       return {
         backgroundColor: `${hex}22`,
         color: "oklch(0.88 0.01 80)",
@@ -1053,7 +1087,7 @@ export function ScheduleView({
                 type="button"
                 onClick={handleSyncWithGoogle}
                 disabled={syncStatus === "syncing" || isGoogleEventsLoading || isAuthorizingGoogle}
-                aria-label={syncNeedsAuthorization ? "Authorize Google Calendar" : "Sync Google"}
+                aria-label={syncNeedsAuthorization ? "Authorize Google Calendar" : "Sync calendars"}
                 className="flex h-8 items-center gap-1.5 rounded-sm border border-rule px-2.5 text-[12px] text-foreground hover:bg-accent hover:border-rule-strong disabled:opacity-50"
               >
                 {syncStatus === "syncing" || isGoogleEventsLoading || isAuthorizingGoogle ? (
@@ -1069,7 +1103,7 @@ export function ScheduleView({
               </button>
             </TooltipTrigger>
             <TooltipContent side="bottom" className="text-[11px]">
-              {syncNeedsAuthorization ? "Authorize Google Calendar" : "Sync Google"}
+              {syncNeedsAuthorization ? "Authorize Google Calendar" : "Sync calendars"}
             </TooltipContent>
           </Tooltip>
           {onOpenCalendars ? (

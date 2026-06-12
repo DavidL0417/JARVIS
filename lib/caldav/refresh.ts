@@ -16,6 +16,7 @@ import {
 } from "@/lib/supabase/caldav-integration"
 import { createSupabaseAdminClient } from "@/lib/supabase/server"
 import { parseCalDavEventsFromIcs, toCalDavScheduleEvent } from "@/lib/caldav/events"
+import { normalizeHexColor } from "@/lib/color"
 import { loadUserTimezone } from "@/lib/data/user-timezone"
 import type { ScheduleEvent, ScheduleEventRow, UserCalendar, UserCalendarRow } from "@/types"
 
@@ -23,11 +24,24 @@ const DAY_IN_MS = 24 * 60 * 60 * 1000
 const CALDAV_EVENT_LOOKBACK_DAYS = 90
 const CALDAV_EVENT_LOOKAHEAD_DAYS = 180
 const CALDAV_CALENDAR_ID_PREFIX = "caldav-calendar:"
+const AUTH_ERROR_PATTERN =
+  /authorization|authentication|unauthorized|forbidden|invalid credentials|status 401|status 403/i
 
 interface CalDavCalendar {
   url: string
   displayName?: string | Record<string, unknown>
   calendarColor?: string
+  components?: string[]
+}
+
+// Apple advertises each collection's supported component set. Reminder lists are
+// VTODO-only and should not surface as calendars (they inflate the calendar list vs
+// what Apple Calendar shows). Keep anything that supports VEVENT, and treat a missing
+// component set as "include" so servers that omit it don't lose their calendars.
+function supportsCalendarEvents(calendar: CalDavCalendar): boolean {
+  const components = calendar.components
+  if (!components || components.length === 0) return true
+  return components.some((component) => component.toUpperCase() === "VEVENT")
 }
 
 interface CalDavCalendarObject {
@@ -157,6 +171,51 @@ async function deleteMirroredCalDavEventsForCalendars(userId: string, calendarKe
   }
 }
 
+async function reconcileRemovedCalDavCalendars(userId: string, liveCalendarKeys: string[]) {
+  // Drop any persisted CalDAV calendar whose collection is no longer a real event
+  // calendar (e.g. reminder lists that were previously ingested before the VEVENT
+  // filter, or calendars deleted upstream). Guard on a non-empty live set so a
+  // transient empty fetch can never wipe every calendar.
+  if (liveCalendarKeys.length === 0) {
+    return
+  }
+
+  const adminClient = createSupabaseAdminClient()
+  const { data, error } = await adminClient
+    .from("calendars")
+    .select("calendar_key")
+    .eq("user_id", userId)
+    .eq("source", "caldav")
+
+  if (error) {
+    throw new Error(error.message)
+  }
+
+  const liveSet = new Set(liveCalendarKeys)
+  const staleKeys = (data ?? [])
+    .map((row) => (row as { calendar_key: string | null }).calendar_key)
+    .filter((key): key is string => typeof key === "string" && key.length > 0 && !liveSet.has(key))
+
+  if (staleKeys.length === 0) {
+    return
+  }
+
+  // Delete mirrored events first — the schedule view renders events whose calendar is
+  // unknown as always-visible, so an orphaned event would become an unhideable zombie.
+  await deleteMirroredCalDavEventsForCalendars(userId, staleKeys)
+
+  const { error: deleteError } = await adminClient
+    .from("calendars")
+    .delete()
+    .eq("user_id", userId)
+    .eq("source", "caldav")
+    .in("calendar_key", staleKeys)
+
+  if (deleteError) {
+    throw new Error(deleteError.message)
+  }
+}
+
 async function listMirroredCalDavCalendarsForUser(userId: string): Promise<UserCalendar[]> {
   const adminClient = createSupabaseAdminClient()
   const { data, error } = await adminClient
@@ -219,7 +278,7 @@ async function persistCalDavCalendars(userId: string, calendars: CalDavCalendar[
       user_id: userId,
       calendar_key: calendarKey,
       name,
-      color: existing?.color || calendar.calendarColor?.trim() || "#7ea69a",
+      color: existing?.color || normalizeHexColor(calendar.calendarColor) || "#7ea69a",
       source: "caldav" as const,
       google_calendar_id: null,
       remote_name: name,
@@ -290,16 +349,23 @@ async function persistCalDavEvents(userId: string, events: ScheduleEvent[]) {
   }
 }
 
-async function recordCalDavSourceSnapshot(userId: string, eventCount: number, calendarCount: number) {
+async function recordCalDavSourceSnapshot(
+  userId: string,
+  eventCount: number,
+  calendarCount: number,
+  failedCount = 0,
+) {
   const adminClient = createSupabaseAdminClient()
+  const failureNote = failedCount > 0 ? ` ${failedCount} calendar(s) failed to import.` : ""
   const { error } = await adminClient.from("source_snapshots").insert({
     user_id: userId,
     source: "caldav",
     freshness: "fresh",
-    summary: `Imported ${eventCount} CalDAV events from ${calendarCount} calendars.`,
+    summary: `Imported ${eventCount} CalDAV events from ${calendarCount} calendars.${failureNote}`,
     payload: {
       eventCount,
       calendarCount,
+      failedCount,
     },
   })
 
@@ -351,8 +417,15 @@ export async function refreshCalDavForUser(userId: string): Promise<CalDavSyncRe
     const rangeStart = new Date(Date.now() - CALDAV_EVENT_LOOKBACK_DAYS * DAY_IN_MS)
     const rangeEnd = new Date(Date.now() + CALDAV_EVENT_LOOKAHEAD_DAYS * DAY_IN_MS)
     const timeZone = await loadUserTimezone(userId)
-    const calendars = (await client.fetchCalendars()) as CalDavCalendar[]
+    const fetchedCalendars = (await client.fetchCalendars()) as CalDavCalendar[]
+    // Reminder lists (VTODO-only) are not event calendars — exclude them so Jarvis's
+    // calendar list matches what Apple Calendar shows.
+    const calendars = fetchedCalendars.filter(supportsCalendarEvents)
     await persistCalDavCalendars(userId, calendars)
+    await reconcileRemovedCalDavCalendars(
+      userId,
+      calendars.map((calendar) => toCalendarKey(calendar.url)),
+    )
 
     // Respect per-calendar sync preference: skip "ignored" calendars and remove
     // any events previously mirrored from them (CalDAV has no stale reconciler).
@@ -396,19 +469,25 @@ export async function refreshCalDavForUser(userId: string): Promise<CalDavSyncRe
       }),
     )
     const failedResults = eventResults.filter((result): result is PromiseRejectedResult => result.status === "rejected")
-
-    if (failedResults.length > 0) {
-      const firstReason = failedResults[0].reason
-      const detail = firstReason instanceof Error ? firstReason.message : String(firstReason)
-      throw new Error(`Failed to import ${failedResults.length} CalDAV calendar(s). ${detail}`)
-    }
-
     const events = eventResults
       .flatMap((result) => (result.status === "fulfilled" ? result.value : []))
       .sort((left, right) => new Date(left.start).getTime() - new Date(right.start).getTime())
 
+    // Persist whatever succeeded instead of discarding the whole sync when one calendar
+    // fails. Only escalate when *every* active calendar failed — and reserve re-auth for
+    // the auth-error case so a single shared-calendar 403 can't disable the integration.
+    if (activeCalendars.length > 0 && failedResults.length === activeCalendars.length) {
+      const firstReason = failedResults[0].reason
+      const detail = firstReason instanceof Error ? firstReason.message : String(firstReason)
+      throw new Error(
+        AUTH_ERROR_PATTERN.test(detail)
+          ? detail
+          : `Failed to import all ${failedResults.length} CalDAV calendar(s). ${detail}`,
+      )
+    }
+
     await persistCalDavEvents(userId, events)
-    await recordCalDavSourceSnapshot(userId, events.length, activeCalendars.length)
+    await recordCalDavSourceSnapshot(userId, events.length, activeCalendars.length, failedResults.length)
     await updateCalDavLastSyncedAt(userId)
 
     const [mirroredEvents, mirroredCalendars] = await Promise.all([
@@ -425,7 +504,7 @@ export async function refreshCalDavForUser(userId: string): Promise<CalDavSyncRe
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : "CalDAV sync failed."
-    const needsAuthorization = /authorization|authentication|unauthorized|forbidden|invalid credentials|status 401|status 403/i.test(message)
+    const needsAuthorization = AUTH_ERROR_PATTERN.test(message)
     await markCalDavIntegrationStatus({
       userId,
       status: needsAuthorization ? "needs_reauth" : "error",
