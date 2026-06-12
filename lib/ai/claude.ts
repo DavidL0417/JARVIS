@@ -10,7 +10,7 @@ import {
   type ClaudePlannerModelKey,
 } from "@/lib/ai/claude-models"
 import { schedulePlanResultSchema } from "@/schemas/schedule"
-import type { AvailabilityWindow, ReplanRequest, SchedulePlanResult, SchedulePreparationContext } from "@/types"
+import type { AvailabilityWindow, SchedulePlanResult, SchedulePreparationContext } from "@/types"
 
 const DEFAULT_TIMEZONE = "America/Chicago"
 const DEFAULT_WORKDAY_START = "09:00"
@@ -225,54 +225,6 @@ export function buildSchedulePromptPayloadForTest(input: SchedulePreparationCont
 
 export function deriveAvailabilityWindowsFromScheduleContext(input: SchedulePreparationContext): AvailabilityWindow[] {
   return buildPlanningContext(input).availabilityWindows
-}
-
-export async function replanSchedule(input: ReplanRequest) {
-  const userId =
-    input.pendingTasks[0]?.userId ??
-    input.preferences?.userId ??
-    null
-
-  if (!userId) {
-    return {
-      success: false,
-      reason: input.reason,
-      message: "Replan request is missing user context, so the planner could not derive a valid schedule.",
-    }
-  }
-
-  const schedule = await generateSchedule({
-    userId,
-    tasks: input.pendingTasks,
-    preferences: input.preferences ?? null,
-    hardEvents: input.existingEvents.map((event) => ({
-      id: event.id,
-      userId,
-      taskId: event.taskId ?? null,
-      title: event.title,
-      start: event.start,
-      end: event.end,
-      source: event.source,
-      priority: event.priority ?? "medium",
-      status: event.status ?? null,
-      location: event.location ?? null,
-      externalEventId: event.externalEventId ?? null,
-      gcalEventId: event.gcalEventId ?? null,
-      lastSyncedFrom: event.lastSyncedFrom ?? "local",
-      isImmutable: event.isImmutable ?? true,
-      isCheckedIn: event.isCheckedIn ?? false,
-      allDay: event.allDay ?? false,
-      calendarId: event.calendarId ?? null,
-      planId: event.planId ?? null,
-    })),
-  })
-
-  return {
-    success: true,
-    reason: input.reason,
-    message: "Replan generated from the current task list and existing event constraints.",
-    schedule,
-  }
 }
 
 function buildPlanningContext(input: SchedulePreparationContext): PlanningContext {

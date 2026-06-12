@@ -66,6 +66,10 @@ const repairIntegrationProviderChecksMigration = readFileSync(
   "supabase/migrations/20260518194828_repair_integration_provider_checks.sql",
   "utf8",
 )
+const dismissPermanentMigration = readFileSync(
+  "supabase/migrations/20260611120000_source_candidates_dismiss_permanent.sql",
+  "utf8",
+)
 
 describe("production Supabase migration", () => {
   it("keeps OAuth tokens outside public tables", () => {
@@ -191,6 +195,17 @@ describe("production Supabase migration", () => {
     expect(caldavConnectorSettingsMigration).toContain("token_provider in ('google', 'notion', 'canvas', 'caldav')")
     expect(caldavConnectorSettingsMigration).toContain("revoke all on function public.get_integration_token(uuid, text) from public, anon, authenticated;")
     expect(caldavConnectorSettingsMigration).not.toContain("disable row level security")
+  })
+
+  it("makes candidate dismissal permanent via a full dedup unique index", () => {
+    expect(dismissPermanentMigration).toContain("drop index if exists public.source_candidates_user_dedup_key")
+    expect(dismissPermanentMigration).toContain(
+      "create unique index if not exists source_candidates_user_dedup_key",
+    )
+    expect(dismissPermanentMigration).toContain("(user_id, kind, title, due_at, course)")
+    // The new index must NOT be partial on status — dismissed rows count too.
+    expect(dismissPermanentMigration).not.toContain("where status <> 'dismissed'")
+    expect(dismissPermanentMigration).not.toContain("disable row level security")
   })
 
   it("repairs stale provider checks for CalDAV without reopening token access", () => {

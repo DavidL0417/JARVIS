@@ -16,6 +16,7 @@ import {
 } from "@/lib/supabase/caldav-integration"
 import { createSupabaseAdminClient } from "@/lib/supabase/server"
 import { parseCalDavEventsFromIcs, toCalDavScheduleEvent } from "@/lib/caldav/events"
+import { loadUserTimezone } from "@/lib/data/user-timezone"
 import type { ScheduleEvent, ScheduleEventRow, UserCalendar, UserCalendarRow } from "@/types"
 
 const DAY_IN_MS = 24 * 60 * 60 * 1000
@@ -116,6 +117,44 @@ export async function verifyCalDavConnection(input: {
   }
 
   return calendars
+}
+
+async function loadIgnoredCalDavCalendarKeys(userId: string): Promise<Set<string>> {
+  const adminClient = createSupabaseAdminClient()
+  const { data, error } = await adminClient
+    .from("calendars")
+    .select("calendar_key, sync_preference")
+    .eq("user_id", userId)
+    .eq("source", "caldav")
+    .eq("sync_preference", "ignored")
+
+  if (error) {
+    throw new Error(error.message)
+  }
+
+  return new Set(
+    (data ?? [])
+      .map((row) => (row as { calendar_key: string | null }).calendar_key)
+      .filter((key): key is string => typeof key === "string" && key.length > 0),
+  )
+}
+
+async function deleteMirroredCalDavEventsForCalendars(userId: string, calendarKeys: string[]) {
+  if (calendarKeys.length === 0) {
+    return
+  }
+
+  const adminClient = createSupabaseAdminClient()
+  const { error } = await adminClient
+    .from("schedule_events")
+    .delete()
+    .eq("user_id", userId)
+    .eq("last_synced_from", "caldav")
+    .in("calendar_id", calendarKeys)
+
+  if (error) {
+    throw new Error(error.message)
+  }
 }
 
 async function listMirroredCalDavCalendarsForUser(userId: string): Promise<UserCalendar[]> {
@@ -311,11 +350,18 @@ export async function refreshCalDavForUser(userId: string): Promise<CalDavSyncRe
 
     const rangeStart = new Date(Date.now() - CALDAV_EVENT_LOOKBACK_DAYS * DAY_IN_MS)
     const rangeEnd = new Date(Date.now() + CALDAV_EVENT_LOOKAHEAD_DAYS * DAY_IN_MS)
+    const timeZone = await loadUserTimezone(userId)
     const calendars = (await client.fetchCalendars()) as CalDavCalendar[]
     await persistCalDavCalendars(userId, calendars)
 
+    // Respect per-calendar sync preference: skip "ignored" calendars and remove
+    // any events previously mirrored from them (CalDAV has no stale reconciler).
+    const ignoredCalendarKeys = await loadIgnoredCalDavCalendarKeys(userId)
+    await deleteMirroredCalDavEventsForCalendars(userId, [...ignoredCalendarKeys])
+    const activeCalendars = calendars.filter((calendar) => !ignoredCalendarKeys.has(toCalendarKey(calendar.url)))
+
     const eventResults = await Promise.allSettled(
-      calendars.map(async (calendar) => {
+      activeCalendars.map(async (calendar) => {
         const objects = (await client.fetchCalendarObjects({
           calendar,
           timeRange: {
@@ -330,6 +376,7 @@ export async function refreshCalDavForUser(userId: string): Promise<CalDavSyncRe
             calendarData,
             rangeStart,
             rangeEnd,
+            timeZone,
           })
 
           return parsedEvents.map((parsedEvent) =>
@@ -361,7 +408,7 @@ export async function refreshCalDavForUser(userId: string): Promise<CalDavSyncRe
       .sort((left, right) => new Date(left.start).getTime() - new Date(right.start).getTime())
 
     await persistCalDavEvents(userId, events)
-    await recordCalDavSourceSnapshot(userId, events.length, calendars.length)
+    await recordCalDavSourceSnapshot(userId, events.length, activeCalendars.length)
     await updateCalDavLastSyncedAt(userId)
 
     const [mirroredEvents, mirroredCalendars] = await Promise.all([
