@@ -29,6 +29,14 @@ export const dashboardCurrentTaskSchema = z.object({
   status: taskStatusSchema,
 })
 
+export const dashboardReentrySchema = z.object({
+  gapDays: z.number().int().nonnegative(),
+  unconfirmedCount: z.number().int().nonnegative(),
+  tasksReturnedToTodo: z.number().int().nonnegative(),
+  autoImportedCount: z.number().int().nonnegative(),
+  passedDeadlines: z.array(z.string()),
+})
+
 export const dashboardResponseSchema = z.object({
   stats: dashboardStatsSchema,
   currentTask: dashboardCurrentTaskSchema.nullable(),
@@ -41,6 +49,7 @@ export const dashboardResponseSchema = z.object({
   sourceFiles: z.array(sourceFileSummarySchema),
   sourceCandidates: z.array(sourceCandidateSchema),
   dailyPlan: dailyPlanSchema.nullable(),
+  reentry: dashboardReentrySchema.nullable().optional(),
 })
 
 export type DashboardResponseInput = z.infer<typeof dashboardResponseSchema>

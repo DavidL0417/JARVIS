@@ -6,6 +6,7 @@ import {
 } from "@/lib/ai/claude-models"
 import { loadLayeredSecretaryContext } from "@/lib/assistant/context"
 import { buildPlanRealitySummary } from "@/lib/assistant/feedback"
+import { reconcileStaleSchedule } from "@/lib/reconciliation"
 import {
   DAILY_PLAN_SELECT,
   mapDailyPlanRowToDailyPlan,
@@ -665,6 +666,9 @@ export async function buildDailyPlan(input: {
 }): Promise<{ dailyPlan: DailyPlan; schedule: SchedulePlanResult; taskCount: number }> {
   const now = new Date()
   const horizonEnd = addDays(now, HORIZON_DAYS)
+  // Reconcile any stale schedule before planning so unconfirmed blocks free up
+  // and returned-to-todo tasks are available for re-placement.
+  await reconcileStaleSchedule(input.adminClient, input.userId, now)
   const sourceRefresh = await refreshSourcesForUser({
     adminClient: input.adminClient,
     userId: input.userId,

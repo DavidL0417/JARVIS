@@ -74,6 +74,10 @@ const automationControlPlaneMigration = readFileSync(
   "supabase/migrations/20260611123000_automation_control_plane.sql",
   "utf8",
 )
+const reentryUnconfirmedMigration = readFileSync(
+  "supabase/migrations/20260612000000_reentry_unconfirmed_status.sql",
+  "utf8",
+)
 
 describe("production Supabase migration", () => {
   it("keeps OAuth tokens outside public tables", () => {
@@ -210,6 +214,16 @@ describe("production Supabase migration", () => {
     // The new index must NOT be partial on status — dismissed rows count too.
     expect(dismissPermanentMigration).not.toContain("where status <> 'dismissed'")
     expect(dismissPermanentMigration).not.toContain("disable row level security")
+  })
+
+  it("widens schedule_events status with 'unconfirmed' without touching tasks", () => {
+    expect(reentryUnconfirmedMigration).toContain("alter table public.schedule_events")
+    expect(reentryUnconfirmedMigration).toContain("drop constraint if exists schedule_events_status_check")
+    expect(reentryUnconfirmedMigration).toContain(
+      "check (status in ('todo', 'scheduled', 'completed', 'missed', 'unconfirmed'))",
+    )
+    expect(reentryUnconfirmedMigration).not.toContain("alter table public.tasks")
+    expect(reentryUnconfirmedMigration).not.toContain("disable row level security")
   })
 
   it("creates the automation control plane with RLS and no credentials", () => {

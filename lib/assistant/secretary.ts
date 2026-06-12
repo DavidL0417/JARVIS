@@ -39,6 +39,102 @@ function hasSchedulingImplication(text: string) {
   return /\b(schedule|reschedule|replan|plan|extend|shorten|spread|space|defer|move|once per|twice per|every|weekly|daily|monthly|hours?|hrs?|minutes?|mins?|monday|tuesday|wednesday|thursday|friday|saturday|sunday|today|tomorrow|next week|this week|due)\b/i.test(text)
 }
 
+function normalizeForMatch(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim()
+}
+
+function activityMatchesTask(activity: string, title: string) {
+  const a = normalizeForMatch(activity)
+  const t = normalizeForMatch(title)
+  if (!a || !t) return false
+  if (t.includes(a) || a.includes(t)) return true
+  const aWords = new Set(a.split(" ").filter((word) => word.length >= 4))
+  const shared = t.split(" ").filter((word) => word.length >= 4 && aWords.has(word))
+  return shared.length >= 2
+}
+
+async function handleLogActivity(
+  supabase: AdminClient,
+  userId: string,
+  intent: { activity: string; start: string | null; end: string | null },
+): Promise<string> {
+  const now = new Date()
+  const end = intent.end ? new Date(intent.end) : now
+  const start = intent.start ? new Date(intent.start) : new Date(end.getTime() - 60 * 60 * 1000)
+  const startIso = start.toISOString()
+  const endIso = end.toISOString()
+
+  const { data: taskRows } = await supabase
+    .from("tasks")
+    .select("id, title")
+    .eq("user_id", userId)
+    .in("status", ["todo", "scheduled"])
+
+  const matched = (taskRows ?? []).find((row) => activityMatchesTask(intent.activity, row.title as string)) as
+    | { id: string; title: string }
+    | undefined
+
+  await supabase.from("schedule_events").insert({
+    user_id: userId,
+    task_id: matched?.id ?? null,
+    title: matched?.title ?? intent.activity,
+    starts_at: startIso,
+    ends_at: endIso,
+    source: "task",
+    priority: "medium",
+    status: "completed",
+    is_immutable: false,
+    is_checked_in: true,
+    all_day: false,
+    last_synced_from: "local",
+  })
+
+  if (matched) {
+    await supabase
+      .from("tasks")
+      .update({ status: "completed", updated_at: now.toISOString() })
+      .eq("id", matched.id)
+      .eq("user_id", userId)
+    await supabase
+      .from("schedule_events")
+      .update({ status: "completed", is_checked_in: true, updated_at: now.toISOString() })
+      .eq("user_id", userId)
+      .eq("task_id", matched.id)
+      .eq("source", "task")
+      .eq("status", "scheduled")
+  }
+
+  // Displacement: other planned blocks overlapping this window are now unconfirmed.
+  let displaceQuery = supabase
+    .from("schedule_events")
+    .update({ status: "unconfirmed", updated_at: now.toISOString() })
+    .eq("user_id", userId)
+    .eq("source", "task")
+    .eq("status", "scheduled")
+    .lt("starts_at", endIso)
+    .gt("ends_at", startIso)
+  if (matched) {
+    displaceQuery = displaceQuery.neq("task_id", matched.id)
+  }
+  const { data: displacedRows } = await displaceQuery.select("title")
+  const displaced = (displacedRows ?? []).map((row) => row.title as string)
+
+  await supabase.from("change_logs").insert({
+    user_id: userId,
+    actor: "user",
+    action: "log_activity",
+    target_table: "schedule_events",
+    summary: `Logged activity: ${intent.activity}${matched ? ` (matched "${matched.title}")` : ""}`,
+  })
+
+  let reply = matched ? `Logged "${matched.title}" as done.` : `Logged "${intent.activity}".`
+  if (displaced.length > 0) {
+    const names = displaced.slice(0, 2).map((title) => `"${title}"`).join(", ")
+    reply += ` That overlapped ${displaced.length} planned block${displaced.length === 1 ? "" : "s"} (${names}) — marked unconfirmed. Want me to replan?`
+  }
+  return reply
+}
+
 function formatPauseUntil(iso: string, timezone: string | null) {
   const date = new Date(iso)
   if (!Number.isFinite(date.getTime())) {
@@ -423,6 +519,14 @@ export async function runSecretaryTurn(input: RunSecretaryTurnInput): Promise<As
     needsRefresh = true
     reply = "Automations resumed. Background refreshes and the daily cron will run again."
     toolCalls.push(makeReceipt("resume_automations", "completed", reply))
+  } else if (intent.kind === "log_activity") {
+    reply = await handleLogActivity(input.supabase, input.userId, {
+      activity: intent.activity,
+      start: intent.start,
+      end: intent.end,
+    })
+    needsRefresh = true
+    toolCalls.push(makeReceipt("log_activity", "completed", reply))
   } else if (intent.kind === "remember") {
     reply = "Remembered."
     needsRefresh = true

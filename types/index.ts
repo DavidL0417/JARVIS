@@ -1,5 +1,6 @@
 export type Priority = "low" | "medium" | "high"
 export type TaskStatus = "todo" | "scheduled" | "completed" | "missed"
+export type ScheduleEventStatus = TaskStatus | "unconfirmed"
 export type PreferredCheckInMode = "silent" | "quiet" | "gentle" | "active"
 export type ScheduleEventSource = "task" | "calendar" | "focus"
 export type CheckInMood = "good" | "okay" | "stuck"
@@ -107,7 +108,7 @@ export interface ScheduleEventRow {
   ends_at: string
   source: ScheduleEventSource
   priority: Priority
-  status: TaskStatus | null
+  status: ScheduleEventStatus | null
   location: string | null
   external_event_id: string | null
   gcal_event_id: string | null
@@ -378,7 +379,7 @@ export interface ScheduleEvent {
   end: string
   source: ScheduleEventSource
   priority: Priority
-  status: TaskStatus | null
+  status: ScheduleEventStatus | null
   location: string | null
   externalEventId: string | null
   gcalEventId: string | null
@@ -650,6 +651,14 @@ export interface DashboardCurrentTask {
   status: TaskStatus
 }
 
+export interface DashboardReentry {
+  gapDays: number
+  unconfirmedCount: number
+  tasksReturnedToTodo: number
+  autoImportedCount: number
+  passedDeadlines: string[]
+}
+
 export interface DashboardResponse {
   stats: DashboardStats
   currentTask: DashboardCurrentTask | null
@@ -662,6 +671,7 @@ export interface DashboardResponse {
   sourceFiles: SourceFileSummary[]
   sourceCandidates: SourceCandidate[]
   dailyPlan: DailyPlan | null
+  reentry: DashboardReentry | null
 }
 
 export interface CreateTaskRequest {
@@ -809,7 +819,7 @@ export interface ScheduleEventInput {
   source: ScheduleEventSource
   priority?: Priority
   taskId?: string | null
-  status?: TaskStatus | null
+  status?: ScheduleEventStatus | null
   location?: string | null
   externalEventId?: string | null
   gcalEventId?: string | null
