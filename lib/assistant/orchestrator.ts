@@ -37,6 +37,7 @@ export type SecretaryIntent =
   | { kind: "review_feedback"; command: string }
   | { kind: "pause_automations"; until: string | null; command: string }
   | { kind: "resume_automations"; command: string }
+  | { kind: "log_activity"; activity: string; start: string | null; end: string | null; command: string }
 
 export function normalizeAssistantCommand(value: string) {
   return value.trim().replace(/\s+/g, " ")
@@ -114,6 +115,43 @@ function parsePauseCommand(message: string): { action: "pause" | "resume"; until
   }
 
   return null
+}
+
+function parseActivityLog(
+  message: string,
+  timezone: string,
+  now: string | null,
+): { activity: string; start: string | null; end: string | null } | null {
+  const match = message
+    .trim()
+    .match(/^(?:i\s+)?(?:just\s+)?(?:did|finished|completed|wrapped up|knocked out|worked on|got through)\s+(.+)$/i)
+  if (!match) {
+    return null
+  }
+
+  let rest = match[1].trim()
+  let start: string | null = null
+  let end: string | null = null
+
+  const window =
+    rest.match(/\bfrom\s+(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)\s*(?:to|until|till|-|–)\s*(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)/i) ||
+    rest.match(/\b(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)\s*(?:-|–|to)\s*(\d{1,2}(?::\d{2})?\s*(?:am|pm))/i)
+
+  if (window) {
+    // Borrow the meridiem from the end time if the start omitted it ("2-4pm").
+    const endMeridiem = window[2].match(/(am|pm)/i)?.[0] ?? ""
+    const startText = /(am|pm)/i.test(window[1]) ? window[1] : `${window[1]}${endMeridiem}`
+    start = resolveNaturalDateTime(`today ${startText.trim()}`, timezone, { referenceNow: now })
+    end = resolveNaturalDateTime(`today ${window[2].trim()}`, timezone, { referenceNow: now })
+    rest = rest.replace(window[0], "").replace(/\bfrom\s*$/i, "").trim()
+  }
+
+  const activity = rest.replace(/[.,;:]+$/, "").replace(/\b(today|just now|earlier)\b/gi, "").trim()
+  if (!activity) {
+    return null
+  }
+
+  return { activity, start, end }
 }
 
 function isExternalWriteCommand(message: string) {
@@ -300,6 +338,18 @@ export async function classifySecretaryIntent(input: {
       kind: "create_task",
       title: taskTitle,
       priority: parsePriority(command),
+    }
+  }
+
+  const activityLog = parseActivityLog(command, input.timezone || DEFAULT_TIMEZONE, input.now)
+
+  if (activityLog) {
+    return {
+      kind: "log_activity",
+      activity: activityLog.activity,
+      start: activityLog.start,
+      end: activityLog.end,
+      command,
     }
   }
 

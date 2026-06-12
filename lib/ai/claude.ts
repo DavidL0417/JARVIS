@@ -35,6 +35,7 @@ const MASTER_SCHEDULING_PROMPT = [
   "Use the rendered memory summary to account for user-specific preferences, habits, and friction points.",
   "If a natural-language scheduling command is supplied, treat it as a first-class planning constraint unless it conflicts with hard events, deadlines, or explicit memory rules.",
   "Treat blockedIntervals as hard constraints. Never place a task over any blocked interval.",
+  "allDayContext lists deadlines, trips, and multi-day commitments by local date. They do not block specific hours, but treat them as context: do not pile heavy work onto travel days or the day an exam/deadline lands without noting the tradeoff in the summary.",
   `All planner-created task events must use calendarId "${DEFAULT_TASKS_CALENDAR_ID}".`,
   "Scheduling outside the preferred availability windows is allowed when needed. If you do that, mention the tradeoff in the summary.",
   "Prefer earlier placement for urgent tasks, align heavier work with stronger energy windows when possible, and leave tasks unscheduled if there is no valid slot.",
@@ -110,6 +111,29 @@ type PlanningContext = {
   schedulableTasks: PlanningTask[]
   planningTaskIds: string[]
   taskMap: Map<string, PlanningTask>
+  allDayContext: AllDayContextItem[]
+}
+
+type AllDayContextItem = {
+  date: string
+  endDate: string
+  title: string
+  calendarId: string | null
+}
+
+const ALL_DAY_CONTEXT_HORIZON_DAYS = 21
+
+function localDateKey(iso: string, timeZone: string): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date(iso))
+  const year = parts.find((part) => part.type === "year")?.value ?? "0000"
+  const month = parts.find((part) => part.type === "month")?.value ?? "01"
+  const day = parts.find((part) => part.type === "day")?.value ?? "01"
+  return `${year}-${month}-${day}`
 }
 
 export function getClaudePlannerConfig(modelKey?: ClaudePlannerModelKey | null) {
@@ -258,6 +282,26 @@ function buildPlanningContext(input: SchedulePreparationContext): PlanningContex
     .filter((event) => !event.allDay)
     .filter((event) => isEventInsidePlanningWindow(event.start, event.end, planningWindow))
 
+  // All-day events (deadlines, trips, multi-day commitments) don't block hours,
+  // but the planner needs them as context. Surface them by local date across the
+  // planning window plus a short forward horizon.
+  const allDayHorizonEndMs =
+    new Date(planningWindow.end).getTime() + ALL_DAY_CONTEXT_HORIZON_DAYS * 24 * 60 * 60 * 1000
+  const allDayContext: AllDayContextItem[] = input.hardEvents
+    .filter((event) => event.allDay)
+    .filter((event) => {
+      const startMs = new Date(event.start).getTime()
+      const endMs = new Date(event.end).getTime()
+      return endMs >= now.getTime() && startMs <= allDayHorizonEndMs
+    })
+    .map((event) => ({
+      date: localDateKey(event.start, preferences.timezone),
+      endDate: localDateKey(event.end, preferences.timezone),
+      title: event.title,
+      calendarId: event.calendarId ?? null,
+    }))
+    .sort((left, right) => left.date.localeCompare(right.date))
+
   const fixedTaskIds = new Set(fixedTaskEvents.map((event) => event.taskId).filter((taskId): taskId is string => Boolean(taskId)))
   const occupiedIntervals = [
     ...hardEvents
@@ -301,6 +345,7 @@ function buildPlanningContext(input: SchedulePreparationContext): PlanningContex
     schedulableTasks,
     planningTaskIds,
     taskMap,
+    allDayContext,
   }
 }
 
@@ -446,6 +491,7 @@ function buildPromptPayload(context: PlanningContext) {
       end: new Date(interval.endMs).toISOString(),
       label: interval.label,
     })),
+    allDayContext: context.allDayContext,
     availabilityWindows: context.availabilityWindows,
     tasks: context.schedulableTasks.map((task) => ({
       id: task.id,

@@ -31,6 +31,7 @@ import { ContextRailPanel } from "@/components/dashboard/context-rail-panel"
 import { DailyCommandStrip } from "@/components/dashboard/daily-command-strip"
 import { RailSheet } from "@/components/dashboard/rail-sheet"
 import { MemoryPanel } from "@/components/dashboard/memory-panel"
+import { ReentryRecap } from "@/components/dashboard/reentry-recap"
 import { SettingsPanel } from "@/components/dashboard/settings-panel"
 import { SecretaryOverlay } from "@/components/dashboard/secretary-overlay"
 import { SourceSetupPanel } from "@/components/dashboard/source-setup-panel"
@@ -551,6 +552,7 @@ export default function DashboardPage() {
           </div>
 
           <div className="rail-scroll flex min-h-0 min-w-0 flex-col gap-5 overflow-y-auto pb-2 pt-6 xl:pb-2 xl:pl-6 xl:pr-1 xl:pt-0 [&>*:last-child]:border-b-0 [&>*:last-child]:pb-0">
+            <ReentryRecap reentry={dashboardData.reentry} />
             <ContextRailPanel
               dailyPlan={dashboardData.dailyPlan}
               sources={dashboardData.sources}

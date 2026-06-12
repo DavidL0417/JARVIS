@@ -5,6 +5,8 @@ import {
   type ClaudePlannerModelKey,
 } from "@/lib/ai/claude-models"
 import { loadLayeredSecretaryContext } from "@/lib/assistant/context"
+import { buildPlanRealitySummary } from "@/lib/assistant/feedback"
+import { reconcileStaleSchedule } from "@/lib/reconciliation"
 import {
   DAILY_PLAN_SELECT,
   mapDailyPlanRowToDailyPlan,
@@ -271,7 +273,47 @@ function deriveRiskItems(input: {
     })
   }
 
+  // Forward-horizon compression: deadlines clustering into a heavy week ahead.
+  const horizonAheadMs = nowMs + HORIZON_SCAN_DAYS * 24 * 60 * 60 * 1000
+  const hoursByWeek = new Map<string, number>()
+
+  for (const task of input.tasks) {
+    if (task.status === "completed" || task.status === "missed" || !task.deadline) {
+      continue
+    }
+
+    const deadlineMs = new Date(task.deadline).getTime()
+    if (deadlineMs < nowMs || deadlineMs > horizonAheadMs) {
+      continue
+    }
+
+    const weekStart = isoWeekStart(task.deadline)
+    const hours = (task.durationMinutes ?? DEFAULT_TASK_HOURS_FALLBACK_MINUTES) / 60
+    hoursByWeek.set(weekStart, (hoursByWeek.get(weekStart) ?? 0) + hours)
+  }
+
+  for (const [weekStart, hours] of hoursByWeek) {
+    if (hours > WEEK_CAPACITY_HOURS * 0.8) {
+      risks.push({
+        title: "Compression ahead",
+        detail: `Week of ${weekStart} has ~${Math.round(hours)}h of work due against ~${WEEK_CAPACITY_HOURS}h of typical weekly capacity.`,
+        severity: hours > WEEK_CAPACITY_HOURS ? "high" : "medium",
+      })
+    }
+  }
+
   return risks.slice(0, 8)
+}
+
+const HORIZON_SCAN_DAYS = 21
+const WEEK_CAPACITY_HOURS = 30
+const DEFAULT_TASK_HOURS_FALLBACK_MINUTES = 50
+
+function isoWeekStart(iso: string): string {
+  const date = new Date(iso)
+  const mondayOffset = (date.getUTCDay() + 6) % 7
+  const monday = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate() - mondayOffset))
+  return monday.toISOString().slice(0, 10)
 }
 
 function deriveSourceCoverage(input: {
@@ -624,6 +666,9 @@ export async function buildDailyPlan(input: {
 }): Promise<{ dailyPlan: DailyPlan; schedule: SchedulePlanResult; taskCount: number }> {
   const now = new Date()
   const horizonEnd = addDays(now, HORIZON_DAYS)
+  // Reconcile any stale schedule before planning so unconfirmed blocks free up
+  // and returned-to-todo tasks are available for re-placement.
+  await reconcileStaleSchedule(input.adminClient, input.userId, now)
   const sourceRefresh = await refreshSourcesForUser({
     adminClient: input.adminClient,
     userId: input.userId,
@@ -637,15 +682,19 @@ export async function buildDailyPlan(input: {
     hardEvents: input.hardEvents,
   })
   const command = input.command?.trim() || null
+  const planReality = await buildPlanRealitySummary(input.adminClient, input.userId, now)
   loaded.context.memoryEntries = layeredContext.memoryEntries
   loaded.context.sourceSnapshots = layeredContext.sourceSnapshots
   loaded.context.command = command
-  loaded.context.layeredContextMarkdown = layeredContext.layeredContextMarkdown
+  loaded.context.layeredContextMarkdown = planReality
+    ? `${layeredContext.layeredContextMarkdown}\n\n## Plan vs Reality\n${planReality}`
+    : layeredContext.layeredContextMarkdown
   loaded.context.sourceStatus = loaded.sourceCoverage
   loaded.context.plannerTradeoffContext = [
     command ? `User planning command: ${command}` : null,
     ...sourceRefresh.items.map((item) => `${item.source}: ${item.status} - ${item.summary}`),
     ...layeredContext.recentChangeLogSummaries.slice(0, 5).map((summary) => `Recent schedule feedback: ${summary}`),
+    planReality ? `Plan vs reality (last 7 days):\n${planReality}` : null,
   ].filter((item): item is string => Boolean(item))
   const plannerModel = input.plannerModel ?? DEFAULT_CLAUDE_PLANNER_MODEL_KEY
   const schedule = await generateSchedule(loaded.context, {

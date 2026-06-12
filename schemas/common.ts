@@ -2,6 +2,7 @@ import { z } from "zod"
 
 export const prioritySchema = z.enum(["low", "medium", "high"])
 export const taskStatusSchema = z.enum(["todo", "scheduled", "completed", "missed"])
+export const scheduleEventStatusSchema = z.enum(["todo", "scheduled", "completed", "missed", "unconfirmed"])
 export const preferredCheckInModeSchema = z.enum(["silent", "quiet", "gentle", "active"])
 export const scheduleEventSourceSchema = z.enum(["task", "calendar", "focus"])
 export const checkInMoodSchema = z.enum(["good", "okay", "stuck"])
@@ -131,7 +132,7 @@ export const scheduleEventSchema = z.object({
   end: z.string().datetime({ offset: true }),
   source: scheduleEventSourceSchema,
   priority: prioritySchema,
-  status: taskStatusSchema.nullable(),
+  status: scheduleEventStatusSchema.nullable(),
   location: z.string().min(1).nullable(),
   externalEventId: z.string().min(1).nullable(),
   gcalEventId: z.string().min(1).nullable(),

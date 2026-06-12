@@ -1,7 +1,24 @@
 import { describe, expect, it } from "vitest"
 
 import { mapGoogleEventToScheduleEventForTest } from "../lib/google-calendar-events"
+import { dayKey, formatTime } from "../lib/time/format"
 import { zonedDateStartUtc, zonedDateTimeToUtc } from "../lib/time/zoned"
+
+describe("timezone display helpers", () => {
+  it("buckets an instant onto the correct local day per timezone", () => {
+    // 03:00 UTC is still the previous evening in Chicago but already that day in London.
+    const instant = "2026-05-20T03:00:00.000Z"
+    expect(dayKey(instant, "America/Chicago")).toBe("2026-05-19")
+    expect(dayKey(instant, "Europe/London")).toBe("2026-05-20")
+    expect(dayKey(instant, "UTC")).toBe("2026-05-20")
+  })
+
+  it("formats a time in the requested timezone", () => {
+    const instant = "2026-05-20T14:00:00.000Z"
+    // 14:00 UTC = 09:00 CDT.
+    expect(formatTime(instant, "America/Chicago")).toMatch(/9[:.]00/)
+  })
+})
 
 describe("zoned date helpers", () => {
   it("resolves a calendar date to midnight in the user's timezone", () => {

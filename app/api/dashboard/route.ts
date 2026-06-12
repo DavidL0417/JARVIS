@@ -39,6 +39,7 @@ import {
   type StoredGoogleIntegration,
 } from "@/lib/supabase/google-calendar-integration"
 import { getStoredIntegrationToken } from "@/lib/supabase/integration-tokens"
+import { reconcileStaleSchedule } from "@/lib/reconciliation"
 import { dashboardResponseSchema } from "@/schemas/dashboard"
 import type {
   DashboardResponse,
@@ -557,6 +558,21 @@ export async function GET() {
   try {
     const { adminClient, user } = await requireAuthenticatedUser()
 
+    // Quietly reconcile any schedule that went stale while the user was away,
+    // before fetching data so the dashboard reflects the reconciled state.
+    const recap = await reconcileStaleSchedule(adminClient, user.id)
+    const reentry =
+      recap.gapDays >= 2 &&
+      (recap.unconfirmedCount > 0 || recap.autoImportedCount > 0 || recap.passedDeadlines.length > 0)
+        ? {
+            gapDays: recap.gapDays,
+            unconfirmedCount: recap.unconfirmedCount,
+            tasksReturnedToTodo: recap.tasksReturnedToTodo,
+            autoImportedCount: recap.autoImportedCount,
+            passedDeadlines: recap.passedDeadlines,
+          }
+        : null
+
     const [
       tasksResult,
       eventsResult,
@@ -726,6 +742,7 @@ export async function GET() {
       sourceFiles,
       sourceCandidates,
       dailyPlan,
+      reentry,
     }
 
     const parsedPayload = dashboardResponseSchema.safeParse(dashboardPayload)
