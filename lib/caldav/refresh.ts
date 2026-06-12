@@ -17,6 +17,7 @@ import {
 import { createSupabaseAdminClient } from "@/lib/supabase/server"
 import { parseCalDavEventsFromIcs, toCalDavScheduleEvent } from "@/lib/caldav/events"
 import { normalizeHexColor } from "@/lib/color"
+import { pruneExpiredMirroredEvents } from "@/lib/supabase/schedule-events"
 import { loadUserTimezone } from "@/lib/data/user-timezone"
 import type { ScheduleEvent, ScheduleEventRow, UserCalendar, UserCalendarRow } from "@/types"
 
@@ -487,6 +488,7 @@ export async function refreshCalDavForUser(userId: string): Promise<CalDavSyncRe
     }
 
     await persistCalDavEvents(userId, events)
+    await pruneExpiredMirroredEvents(createSupabaseAdminClient(), userId)
     await recordCalDavSourceSnapshot(userId, events.length, activeCalendars.length, failedResults.length)
     await updateCalDavLastSyncedAt(userId)
 

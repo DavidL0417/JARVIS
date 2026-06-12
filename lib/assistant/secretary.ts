@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js"
 
 import { normalizeMemoryContent } from "@/lib/ai/memory-normalize"
 import { loadAssistantRuntimeContext } from "@/lib/assistant/context"
+import { overlapsSimilarBlock } from "@/lib/dedupe"
 import { generateSecretaryDialogueReply } from "@/lib/assistant/dialogue"
 import {
   classifySecretaryIntent,
@@ -74,20 +75,40 @@ async function handleLogActivity(
     | { id: string; title: string }
     | undefined
 
-  await supabase.from("schedule_events").insert({
-    user_id: userId,
-    task_id: matched?.id ?? null,
-    title: matched?.title ?? intent.activity,
-    starts_at: startIso,
-    ends_at: endIso,
-    source: "task",
-    priority: "medium",
-    status: "completed",
-    is_immutable: false,
-    is_checked_in: true,
-    all_day: false,
-    last_synced_from: "local",
-  })
+  // Skip the insert when a similar-titled block already covers this window —
+  // logging the same activity twice would put duplicate blocks on the grid.
+  const { data: overlappingRows } = await supabase
+    .from("schedule_events")
+    .select("title, starts_at, ends_at")
+    .eq("user_id", userId)
+    .lt("starts_at", endIso)
+    .gt("ends_at", startIso)
+    .limit(50)
+  const alreadyLogged = overlapsSimilarBlock(
+    { title: matched?.title ?? intent.activity, start: startIso, end: endIso },
+    ((overlappingRows ?? []) as Array<{ title: string; starts_at: string; ends_at: string }>).map((row) => ({
+      title: row.title,
+      start: row.starts_at,
+      end: row.ends_at,
+    })),
+  )
+
+  if (!alreadyLogged) {
+    await supabase.from("schedule_events").insert({
+      user_id: userId,
+      task_id: matched?.id ?? null,
+      title: matched?.title ?? intent.activity,
+      starts_at: startIso,
+      ends_at: endIso,
+      source: "task",
+      priority: "medium",
+      status: "completed",
+      is_immutable: false,
+      is_checked_in: true,
+      all_day: false,
+      last_synced_from: "local",
+    })
+  }
 
   if (matched) {
     await supabase

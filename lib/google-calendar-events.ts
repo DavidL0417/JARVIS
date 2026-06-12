@@ -12,6 +12,7 @@ import {
   updateGoogleLastSyncedAt,
 } from "@/lib/supabase/google-calendar-integration"
 import { createSupabaseAdminClient } from "@/lib/supabase/server"
+import { pruneExpiredMirroredEvents } from "@/lib/supabase/schedule-events"
 import { recordGoogleCalendarTaskFeedback } from "@/lib/sources/calendar-feedback"
 import { TASKS_CALENDAR_ID } from "@/lib/task-calendar-constants"
 import { loadUserTimezone } from "@/lib/data/user-timezone"
@@ -751,6 +752,7 @@ export async function syncGoogleCalendarEventsForUser(userId: string): Promise<G
       calendarKeys,
       syncWindow,
     })
+    await pruneExpiredMirroredEvents(createSupabaseAdminClient(), userId)
     await recordGoogleSourceSnapshot(userId, events.length, calendars.length, persistenceResult.removedStaleEventCount)
     await updateGoogleLastSyncedAt(userId)
 

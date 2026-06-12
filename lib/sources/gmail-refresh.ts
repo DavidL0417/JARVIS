@@ -1,7 +1,7 @@
 import { GMAIL_READONLY_SCOPE, hasOAuthScope } from "@/lib/google-oauth"
 import { extractCandidatesFromText } from "@/lib/sources/extraction"
 import { getLatestContentHash, hashSourceContent } from "@/lib/sources/idle-skip"
-import { insertAndAutoApproveSourceCandidates, insertSourceSnapshot } from "@/lib/sources/persistence"
+import { insertAndAutoApproveSourceCandidates, insertSourceSnapshot, loadExistingCommitments } from "@/lib/sources/persistence"
 import {
   getStoredGoogleIntegration,
   getValidGoogleAccessToken,
@@ -252,6 +252,7 @@ export async function refreshGmailForUser(userId: string): Promise<SourceIntakeR
     sourceRef: GMAIL_CONTEXT_SEARCH_QUERY,
     label: "Recent Gmail context scan",
     text: sourceText,
+    existingCommitments: await loadExistingCommitments(adminClient, userId),
   })
   const sourceSnapshot = await insertSourceSnapshot({
     adminClient,

@@ -5,6 +5,7 @@ import {
   insertAndAutoApproveSourceCandidates,
   insertSourceFile,
   insertSourceSnapshot,
+  loadExistingCommitments,
   updateSourceFileStatus,
 } from "@/lib/sources/persistence"
 import {
@@ -124,6 +125,7 @@ export async function POST(request: Request) {
         fileName,
         mimeType,
         buffer,
+        existingCommitments: await loadExistingCommitments(adminClient, user.id),
       })
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown source extraction error."

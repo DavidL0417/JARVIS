@@ -46,7 +46,7 @@ import type {
 
 export const USER_PROFILE_SELECT = "id, email, name, avatar_url, created_at, updated_at"
 export const PREFERENCES_SELECT =
-  "id, user_id, timezone, sleep_pattern, peak_energy_window, procrastination_pattern, workday_start, workday_end, default_task_duration_minutes, break_duration_minutes, preferred_focus_block_minutes, preferred_checkin_mode, calendar_id, created_at, updated_at"
+  "id, user_id, timezone, sleep_pattern, peak_energy_window, procrastination_pattern, workday_start, workday_end, default_task_duration_minutes, break_duration_minutes, preferred_focus_block_minutes, preferred_checkin_mode, calendar_id, planner_horizon_days, created_at, updated_at"
 export const TASK_SELECT =
   "id, user_id, title, description, deadline, duration_minutes, priority, status, scheduled_for, created_at, updated_at, is_immutable, all_day, calendar_id, tags, source_snapshot_id, source_candidate_id, plan_id"
 export const SCHEDULE_EVENT_SELECT =
@@ -358,6 +358,7 @@ export function mapPreferencesRowToPreferences(row: UserPreferencesRow | null): 
     preferredFocusBlockMinutes: row.preferred_focus_block_minutes,
     preferredCheckInMode: row.preferred_checkin_mode,
     calendarId: normalizeNullableText(row.calendar_id),
+    plannerHorizonDays: row.planner_horizon_days ?? 28,
   }
 }
 
@@ -375,6 +376,7 @@ export function mapPreferencesToUpsert(preferences: UserPreferences): UserPrefer
     preferred_focus_block_minutes: preferences.preferredFocusBlockMinutes,
     preferred_checkin_mode: preferences.preferredCheckInMode,
     calendar_id: normalizeNullableText(preferences.calendarId),
+    planner_horizon_days: preferences.plannerHorizonDays,
   }
 }
 

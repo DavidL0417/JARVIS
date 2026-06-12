@@ -21,6 +21,7 @@ export const updatePreferencesRequestSchema = z
     preferredFocusBlockMinutes: z.number().int().positive().nullable().optional(),
     preferredCheckInMode: preferredCheckInModeSchema.optional(),
     calendarId: nullableTrimmedTextSchema.optional(),
+    plannerHorizonDays: z.number().int().min(7).max(56).optional(),
   })
   .refine((value) => Object.keys(value).length > 0, {
     message: "At least one preference field must be provided.",

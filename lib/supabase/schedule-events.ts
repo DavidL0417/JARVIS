@@ -59,3 +59,23 @@ export async function listScheduleEventRowsInWindow(
 
   return { data: rows, error: null }
 }
+
+// Mirrored events accumulate forever otherwise: both sync windows look back 90 days,
+// but nothing deletes what falls out the back. Google/Apple remain the source of
+// truth for history, so events that ended over a year ago can go. Tasks, check-ins,
+// and locally-created events are never touched.
+const MIRRORED_EVENT_RETENTION_DAYS = 365
+
+export async function pruneExpiredMirroredEvents(client: SupabaseClient, userId: string) {
+  const cutoff = new Date(Date.now() - MIRRORED_EVENT_RETENTION_DAYS * DAY_IN_MS).toISOString()
+  const { error } = await client
+    .from("schedule_events")
+    .delete()
+    .eq("user_id", userId)
+    .in("last_synced_from", ["gcal", "caldav"])
+    .lt("ends_at", cutoff)
+
+  if (error) {
+    throw new Error(error.message)
+  }
+}

@@ -59,6 +59,7 @@ export const userPreferencesSchema = z.object({
   preferredFocusBlockMinutes: z.number().int().positive().nullable(),
   preferredCheckInMode: preferredCheckInModeSchema,
   calendarId: z.string().min(1).nullable(),
+  plannerHorizonDays: z.number().int().min(7).max(56),
 })
 
 export const taskSchema = z.object({

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 
 import { generateSchedule } from "@/lib/ai/claude"
+import { overlapsSimilarBlock } from "@/lib/dedupe"
 import {
   mapMemoryItemRowToSummary,
   mapPreferencesRowToPreferences,
@@ -55,11 +56,28 @@ async function persistSchedulePlan(
 
   const now = new Date().toISOString()
   const selectedTaskIdSet = new Set(selectedTaskIds)
-  const taskEvents = schedule.proposedEvents.filter(
+  const proposedTaskEvents = schedule.proposedEvents.filter(
     (event) =>
       event.source === "task" &&
       event.taskId &&
       selectedTaskIdSet.has(event.taskId),
+  )
+
+  // Don't write a block on top of a calendar event that already represents the same
+  // commitment (an extracted "Final Exam" task when the exam already sits on a
+  // mirrored calendar). Tasks whose block is dropped are left untouched.
+  const calendarBlocks = context.hardEvents
+    .filter((event) => event.source === "calendar")
+    .map((event) => ({ title: event.title, start: event.start, end: event.end }))
+  const taskEvents = proposedTaskEvents.filter(
+    (event) =>
+      !overlapsSimilarBlock({ title: event.title, start: event.start, end: event.end }, calendarBlocks),
+  )
+  const dedupeDroppedTaskIds = new Set(
+    proposedTaskEvents
+      .filter((event) => !taskEvents.includes(event))
+      .map((event) => event.taskId)
+      .filter((taskId): taskId is string => Boolean(taskId)),
   )
 
   const { data: existingTaskEvents, error: existingTaskEventsError } = await adminClient
@@ -126,7 +144,7 @@ async function persistSchedulePlan(
     selectedTaskIds.map(async (taskId) => {
       const task = selectedTaskMap.get(taskId)
 
-      if (!task) {
+      if (!task || dedupeDroppedTaskIds.has(taskId)) {
         return
       }
 
@@ -198,16 +216,25 @@ export async function POST(request: Request) {
       taskQuery = taskQuery.in("id", parsedBody.data.taskIds)
     }
 
-    const [tasksResult, preferencesResult, eventsResult, memoryResult, sourceResult] = await Promise.all([
+    // Preferences load first: the planner's event window is a user preference.
+    const preferencesResult = await adminClient
+      .from("preferences")
+      .select(PREFERENCES_SELECT)
+      .eq("user_id", user.id)
+      .maybeSingle<UserPreferencesRow>()
+    const preferences = preferencesResult.error
+      ? null
+      : mapPreferencesRowToPreferences(preferencesResult.data)
+
+    const [tasksResult, eventsResult, memoryResult, sourceResult] = await Promise.all([
       taskQuery,
-      adminClient
-        .from("preferences")
-        .select(PREFERENCES_SELECT)
-        .eq("user_id", user.id)
-        .maybeSingle<UserPreferencesRow>(),
       // Windowed + paginated: the unbounded read hit Supabase's 1000-row cap, so the
       // planner saw months of history but NO upcoming events (they fell past the cap).
-      listScheduleEventRowsInWindow(adminClient, user.id, { lookbackDays: 7, lookaheadDays: 180 }),
+      // Lookahead is the user-configurable planning horizon.
+      listScheduleEventRowsInWindow(adminClient, user.id, {
+        lookbackDays: 1,
+        lookaheadDays: preferences?.plannerHorizonDays ?? 28,
+      }),
       adminClient
         .from("memory_items")
         .select(MEMORY_ITEM_SELECT)
@@ -253,7 +280,7 @@ export async function POST(request: Request) {
     const scheduleContext: SchedulePreparationContext = {
       userId: user.id,
       tasks: (tasksResult.data || []).map((row) => mapTaskRowToTask(row as TaskRow)),
-      preferences: mapPreferencesRowToPreferences(preferencesResult.data),
+      preferences,
       hardEvents: [...requestHardEvents, ...persistedHardEvents],
       memoryEntries: (memoryResult.data || []).map((row) => mapMemoryItemRowToSummary(row as MemoryItemRow)),
       sourceSnapshots: (sourceResult.data || []).map((row) => mapSourceSnapshotRowToSummary(row as SourceSnapshotRow)),

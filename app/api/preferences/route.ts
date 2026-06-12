@@ -4,7 +4,7 @@
 import { NextResponse } from "next/server"
 import type { SupabaseClient } from "@supabase/supabase-js"
 
-import { mapPreferencesRowToPreferences, mapPreferencesToUpsert } from "@/lib/data/mappers"
+import { mapPreferencesRowToPreferences, mapPreferencesToUpsert, PREFERENCES_SELECT } from "@/lib/data/mappers"
 import {
   isAuthenticationRequiredError,
   requireAuthenticatedUser,
@@ -29,6 +29,7 @@ function buildDefaultPreferences(userId: string): UserPreferences {
     preferredFocusBlockMinutes: null,
     preferredCheckInMode: "quiet",
     calendarId: null,
+    plannerHorizonDays: 28,
   }
 }
 
@@ -51,15 +52,14 @@ function mergePreferences(
       updates.preferredFocusBlockMinutes ?? existing.preferredFocusBlockMinutes,
     preferredCheckInMode: updates.preferredCheckInMode ?? existing.preferredCheckInMode,
     calendarId: updates.calendarId ?? existing.calendarId,
+    plannerHorizonDays: updates.plannerHorizonDays ?? existing.plannerHorizonDays,
   }
 }
 
 async function getOrCreatePreferences(adminClient: SupabaseClient, userId: string) {
   const { data, error } = await adminClient
     .from("preferences")
-    .select(
-      "id, user_id, timezone, sleep_pattern, peak_energy_window, procrastination_pattern, workday_start, workday_end, default_task_duration_minutes, break_duration_minutes, preferred_focus_block_minutes, preferred_checkin_mode, calendar_id, created_at, updated_at",
-    )
+    .select(PREFERENCES_SELECT)
     .eq("user_id", userId)
     .maybeSingle<UserPreferencesRow>()
 
@@ -75,9 +75,7 @@ async function getOrCreatePreferences(adminClient: SupabaseClient, userId: strin
   const { data: inserted, error: insertError } = await adminClient
     .from("preferences")
     .upsert(mapPreferencesToUpsert(defaults), { onConflict: "user_id" })
-    .select(
-      "id, user_id, timezone, sleep_pattern, peak_energy_window, procrastination_pattern, workday_start, workday_end, default_task_duration_minutes, break_duration_minutes, preferred_focus_block_minutes, preferred_checkin_mode, calendar_id, created_at, updated_at",
-    )
+    .select(PREFERENCES_SELECT)
     .single<UserPreferencesRow>()
 
   if (insertError || !inserted) {

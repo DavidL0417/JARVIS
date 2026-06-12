@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react"
 import { CalendarClock, Clock, History, Loader2, Pause, SlidersHorizontal } from "lucide-react"
 
 import { RailSection } from "@/components/dashboard/rail-section"
+import { Slider } from "@/components/ui/slider"
 import { Switch } from "@/components/ui/switch"
 import type { AutomationRunSummary } from "@/lib/automation-runs"
 
@@ -17,6 +18,7 @@ interface PreferencesShape {
   breakDurationMinutes: number
   preferredFocusBlockMinutes: number | null
   preferredCheckInMode: (typeof CHECK_IN_MODES)[number]
+  plannerHorizonDays: number
 }
 
 function deviceTimezone() {
@@ -111,6 +113,7 @@ export function SettingsPanel({ onChanged }: { onChanged?: () => void }) {
           breakDurationMinutes: p.breakDurationMinutes,
           preferredFocusBlockMinutes: p.preferredFocusBlockMinutes,
           preferredCheckInMode: p.preferredCheckInMode,
+          plannerHorizonDays: typeof p.plannerHorizonDays === "number" ? p.plannerHorizonDays : 28,
         })
       }
       if (statusPayload && typeof statusPayload.paused === "boolean") {
@@ -258,6 +261,31 @@ export function SettingsPanel({ onChanged }: { onChanged?: () => void }) {
             ))}
           </select>
         </label>
+        <div className="flex flex-col gap-1.5">
+          <div className="flex items-center justify-between">
+            <span className={LABEL_CLASS}>Planner horizon</span>
+            <span className="num text-[11px] text-foreground">
+              {Math.round(preferences.plannerHorizonDays / 7)}w
+            </span>
+          </div>
+          <Slider
+            min={7}
+            max={56}
+            step={7}
+            value={[preferences.plannerHorizonDays]}
+            onValueChange={([value]) =>
+              setPreferences({ ...preferences, plannerHorizonDays: value ?? preferences.plannerHorizonDays })
+            }
+            onValueCommit={([value]) => {
+              if (typeof value === "number") void savePreference("plannerHorizonDays", value)
+            }}
+            aria-label="Planner horizon in weeks"
+            className="py-1"
+          />
+          <p className="text-[10px] leading-snug text-muted-foreground">
+            How far ahead the planner reads your calendar when scheduling.
+          </p>
+        </div>
       </RailSection>
 
       <RailSection title="Automations" icon={Pause}>
