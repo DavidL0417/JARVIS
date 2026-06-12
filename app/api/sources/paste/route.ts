@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 
 import { extractCandidatesFromText } from "@/lib/sources/extraction"
-import { insertAndAutoApproveSourceCandidates, insertSourceSnapshot } from "@/lib/sources/persistence"
+import { insertAndAutoApproveSourceCandidates, insertSourceSnapshot, loadExistingCommitments } from "@/lib/sources/persistence"
 import {
   isAuthenticationRequiredError,
   requireAuthenticatedUser,
@@ -30,6 +30,7 @@ export async function POST(request: Request) {
       sourceRef: parsedBody.data.sourceRef,
       label: parsedBody.data.label,
       text: parsedBody.data.text,
+      existingCommitments: await loadExistingCommitments(adminClient, user.id),
     })
     const sourceSnapshot = await insertSourceSnapshot({
       adminClient,

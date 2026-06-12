@@ -8,7 +8,9 @@ import {
   SOURCE_SNAPSHOT_SELECT,
   TASK_SELECT,
 } from "@/lib/data/mappers"
+import { findDuplicateCommitment, type CommitmentRef } from "@/lib/dedupe"
 import type { requireAuthenticatedUser } from "@/lib/supabase/auth"
+import { listScheduleEventRowsInWindow } from "@/lib/supabase/schedule-events"
 import { TASKS_CALENDAR_ID } from "@/lib/task-calendar-constants"
 import type {
   MemoryItemRow,
@@ -317,6 +319,44 @@ export async function insertSourceCandidates(input: {
   return (data || []).map(mapSourceCandidateRowToCandidate)
 }
 
+// Everything the user already has on the books, for duplicate checks: open tasks
+// (by deadline or scheduled time) plus upcoming calendar events. Capped windows keep
+// this cheap; it runs once per refresh/import.
+export async function loadExistingCommitments(
+  adminClient: AdminClient,
+  userId: string,
+): Promise<CommitmentRef[]> {
+  const [tasksResult, eventsResult] = await Promise.all([
+    adminClient
+      .from("tasks")
+      .select("title, deadline, scheduled_for")
+      .eq("user_id", userId)
+      .in("status", ["todo", "scheduled"])
+      .limit(300),
+    listScheduleEventRowsInWindow(adminClient, userId, { lookbackDays: 7, lookaheadDays: 120 }),
+  ])
+
+  if (tasksResult.error) {
+    throw new Error(tasksResult.error.message)
+  }
+  if (eventsResult.error) {
+    throw new Error(eventsResult.error.message)
+  }
+
+  const taskRefs: CommitmentRef[] = (tasksResult.data ?? []).map(
+    (row: { title: string; deadline: string | null; scheduled_for: string | null }) => ({
+      title: row.title,
+      at: row.scheduled_for ?? row.deadline ?? null,
+    }),
+  )
+  const eventRefs: CommitmentRef[] = (eventsResult.data ?? []).map((row) => ({
+    title: row.title,
+    at: row.starts_at,
+  }))
+
+  return [...taskRefs, ...eventRefs]
+}
+
 export async function insertAndAutoApproveSourceCandidates(input: {
   adminClient: AdminClient
   userId: string
@@ -330,7 +370,28 @@ export async function insertAndAutoApproveSourceCandidates(input: {
     return inserted
   }
 
-  const autoIds = inserted.filter(isAutoApprovableCandidate).map((candidate) => candidate.id)
+  const autoApprovable = inserted.filter(isAutoApprovableCandidate)
+
+  if (autoApprovable.length === 0) {
+    return inserted
+  }
+
+  // Duplicate gate: a candidate that looks like an existing task/event (or like a
+  // candidate approved earlier in this same batch) stays pending for manual review
+  // instead of auto-approving. Six emails about one piano jury → one task, not six.
+  const existingCommitments = await loadExistingCommitments(input.adminClient, input.userId)
+  const autoIds: string[] = []
+
+  for (const candidate of autoApprovable) {
+    const ref: CommitmentRef = { title: candidate.title, at: candidate.dueAt }
+
+    if (findDuplicateCommitment(ref, existingCommitments)) {
+      continue
+    }
+
+    existingCommitments.push(ref)
+    autoIds.push(candidate.id)
+  }
 
   if (autoIds.length === 0) {
     return inserted

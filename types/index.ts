@@ -57,6 +57,7 @@ export interface UserPreferencesRow {
   preferred_focus_block_minutes: number | null
   preferred_checkin_mode: PreferredCheckInMode
   calendar_id: string | null
+  planner_horizon_days: number | null
   created_at: string
   updated_at: string
 }
@@ -332,6 +333,7 @@ export interface UserPreferences {
   preferredFocusBlockMinutes: number | null
   preferredCheckInMode: PreferredCheckInMode
   calendarId: string | null
+  plannerHorizonDays: number
 }
 
 export interface UserCalendar {
@@ -779,6 +781,7 @@ export interface UpdatePreferencesRequest {
   preferredFocusBlockMinutes?: number | null
   preferredCheckInMode?: PreferredCheckInMode
   calendarId?: string | null
+  plannerHorizonDays?: number
 }
 
 export interface PreferencesResponse {

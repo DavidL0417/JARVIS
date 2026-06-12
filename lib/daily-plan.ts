@@ -6,6 +6,7 @@ import {
 } from "@/lib/ai/claude-models"
 import { loadLayeredSecretaryContext } from "@/lib/assistant/context"
 import { buildPlanRealitySummary } from "@/lib/assistant/feedback"
+import { overlapsSimilarBlock } from "@/lib/dedupe"
 import { reconcileStaleSchedule } from "@/lib/reconciliation"
 import {
   DAILY_PLAN_SELECT,
@@ -19,12 +20,12 @@ import {
   mapTaskRowToTask,
   MEMORY_ITEM_SELECT,
   PREFERENCES_SELECT,
-  SCHEDULE_EVENT_SELECT,
   SOURCE_CANDIDATE_SELECT,
   SOURCE_SNAPSHOT_SELECT,
   TASK_SELECT,
 } from "@/lib/data/mappers"
 import { refreshSourcesForUser } from "@/lib/sources/refresh"
+import { listScheduleEventRowsInWindow } from "@/lib/supabase/schedule-events"
 import type { requireAuthenticatedUser } from "@/lib/supabase/auth"
 import { isExcludedScheduleEventTitle, TASKS_CALENDAR_ID } from "@/lib/task-calendar-constants"
 import type {
@@ -384,9 +385,21 @@ async function loadScheduleContext(input: {
   failedSourceSummaries: string[]
   sourceCoverage: SourceCoverageItem[]
 }> {
+  // Preferences load first: the planner's event window is a user preference.
+  const preferencesResult = await input.adminClient
+    .from("preferences")
+    .select(PREFERENCES_SELECT)
+    .eq("user_id", input.userId)
+    .maybeSingle<UserPreferencesRow>()
+
+  if (preferencesResult.error) {
+    throw new Error(preferencesResult.error.message)
+  }
+
+  const preferences = mapPreferencesRowToPreferences(preferencesResult.data)
+
   const [
     tasksResult,
-    preferencesResult,
     eventsResult,
     memoryResult,
     sourceResult,
@@ -399,16 +412,13 @@ async function loadScheduleContext(input: {
       .select(TASK_SELECT)
       .eq("user_id", input.userId)
       .order("created_at", { ascending: true }),
-    input.adminClient
-      .from("preferences")
-      .select(PREFERENCES_SELECT)
-      .eq("user_id", input.userId)
-      .maybeSingle<UserPreferencesRow>(),
-    input.adminClient
-      .from("schedule_events")
-      .select(SCHEDULE_EVENT_SELECT)
-      .eq("user_id", input.userId)
-      .order("starts_at", { ascending: true }),
+    // Windowed + paginated (Supabase caps unbounded reads at 1000 rows, which
+    // silently hid all upcoming events from the planner). Lookahead is the
+    // user-configurable planning horizon.
+    listScheduleEventRowsInWindow(input.adminClient, input.userId, {
+      lookbackDays: 7,
+      lookaheadDays: preferences?.plannerHorizonDays ?? 28,
+    }),
     input.adminClient
       .from("memory_items")
       .select(MEMORY_ITEM_SELECT)
@@ -441,7 +451,6 @@ async function loadScheduleContext(input: {
 
   if (
     tasksResult.error ||
-    preferencesResult.error ||
     eventsResult.error ||
     memoryResult.error ||
     sourceResult.error ||
@@ -451,7 +460,6 @@ async function loadScheduleContext(input: {
   ) {
     throw new Error(
       tasksResult.error?.message ||
-        preferencesResult.error?.message ||
         eventsResult.error?.message ||
         memoryResult.error?.message ||
         sourceResult.error?.message ||
@@ -481,7 +489,7 @@ async function loadScheduleContext(input: {
     context: {
       userId: input.userId,
       tasks,
-      preferences: mapPreferencesRowToPreferences(preferencesResult.data),
+      preferences,
       hardEvents: [...requestHardEvents, ...persistedHardEvents],
       memoryEntries: (memoryResult.data || []).map((row) => mapMemoryItemRowToSummary(row as Parameters<typeof mapMemoryItemRowToSummary>[0])),
       sourceSnapshots: sources,
@@ -518,11 +526,27 @@ async function persistSchedulePlan(input: {
 
   const now = new Date().toISOString()
   const selectedTaskIdSet = new Set(selectedTaskIds)
-  const taskEvents = input.schedule.proposedEvents.filter(
+  const proposedTaskEvents = input.schedule.proposedEvents.filter(
     (event) =>
       event.source === "task" &&
       event.taskId &&
       selectedTaskIdSet.has(event.taskId),
+  )
+
+  // Don't write a block on top of a calendar event that already represents the same
+  // commitment. Tasks whose block is dropped are left untouched.
+  const calendarBlocks = input.context.hardEvents
+    .filter((event) => event.source === "calendar")
+    .map((event) => ({ title: event.title, start: event.start, end: event.end }))
+  const taskEvents = proposedTaskEvents.filter(
+    (event) =>
+      !overlapsSimilarBlock({ title: event.title, start: event.start, end: event.end }, calendarBlocks),
+  )
+  const dedupeDroppedTaskIds = new Set(
+    proposedTaskEvents
+      .filter((event) => !taskEvents.includes(event))
+      .map((event) => event.taskId)
+      .filter((taskId): taskId is string => Boolean(taskId)),
   )
 
   const { data: existingTaskEvents, error: existingTaskEventsError } = await input.adminClient
@@ -610,7 +634,7 @@ async function persistSchedulePlan(input: {
     selectedTaskIds.map(async (taskId) => {
       const task = selectedTaskMap.get(taskId)
 
-      if (!task) {
+      if (!task || dedupeDroppedTaskIds.has(taskId)) {
         return
       }
 

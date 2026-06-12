@@ -1,6 +1,7 @@
 import { z } from "zod"
 
 import { createOpenAIResponse, getOpenAIConfig, getOpenAIResponseText } from "@/lib/ai/openai"
+import type { CommitmentRef } from "@/lib/dedupe"
 import type { Priority, SourceCandidateKind, SourceKind } from "@/types"
 
 const MAX_TEXT_SOURCE_CHARS = 60_000
@@ -62,8 +63,23 @@ const SOURCE_EXTRACTION_PROMPT = [
   "Use ISO 8601 timestamps with timezone offsets for dueAt when the source gives enough information. Assume America/Chicago only when the source gives a date without a timezone.",
   "Use priority high only for imminent, graded, blocking, or explicitly important items.",
   "Return task/deadline/event candidates only when they need scheduler action. Return note candidates for useful context that should inform the secretary but should not become a task.",
+  "When an EXISTING COMMITMENTS list is provided, do NOT emit candidates that duplicate any entry — including reworded, partial, or differently-scoped descriptions of the same real-world item (a sign-up email, a reminder email, and a calendar event about one recital are ONE commitment). Only emit a candidate for a listed item when the source changes it (new due date, time, or location) and say what changed in evidence.",
   "Return at most 12 candidates. Keep the summary under 900 characters and each evidence field under 180 characters.",
 ].join("\n")
+
+const MAX_COMMITMENT_CONTEXT_ENTRIES = 80
+
+function buildExistingCommitmentsSection(commitments: CommitmentRef[] | undefined) {
+  if (!commitments || commitments.length === 0) {
+    return null
+  }
+
+  const lines = commitments
+    .slice(0, MAX_COMMITMENT_CONTEXT_ENTRIES)
+    .map((commitment) => `- ${commitment.at ? `${commitment.at} — ` : ""}${commitment.title}`)
+
+  return ["", "EXISTING COMMITMENTS (already tracked; do not duplicate):", ...lines].join("\n")
+}
 
 function candidateJsonSchema() {
   return {
@@ -155,6 +171,7 @@ function buildExtractionTextPrompt(input: {
   sourceRef?: string | null
   label?: string | null
   text?: string
+  existingCommitments?: CommitmentRef[]
 }) {
   return [
     `Source: ${sourceLabel(input.source)}`,
@@ -162,6 +179,7 @@ function buildExtractionTextPrompt(input: {
     input.label ? `Label: ${input.label}` : null,
     "",
     "Extract scheduler candidates from this source.",
+    buildExistingCommitmentsSection(input.existingCommitments),
     input.text ? `\nSOURCE TEXT:\n${input.text.slice(0, MAX_TEXT_SOURCE_CHARS)}` : null,
   ]
     .filter((part): part is string => typeof part === "string")
@@ -222,6 +240,7 @@ export async function extractCandidatesFromText(input: {
   sourceRef?: string | null
   label?: string | null
   text: string
+  existingCommitments?: CommitmentRef[]
 }): Promise<SourceExtractionResult> {
   const prompt = buildExtractionTextPrompt(input)
   return requestExtraction([{ type: "input_text", text: prompt }])
@@ -233,11 +252,13 @@ export async function extractCandidatesFromFile(input: {
   fileName: string
   mimeType: string
   buffer: Buffer
+  existingCommitments?: CommitmentRef[]
 }): Promise<SourceExtractionResult> {
   const prompt = buildExtractionTextPrompt({
     source: input.source,
     sourceRef: input.sourceRef,
     label: input.fileName,
+    existingCommitments: input.existingCommitments,
     text: SUPPORTED_TEXT_MIME_TYPES.has(input.mimeType)
       ? input.buffer.toString("utf8")
       : undefined,

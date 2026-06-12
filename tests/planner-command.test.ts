@@ -54,6 +54,7 @@ function makeContext(command: string): SchedulePreparationContext {
       preferredFocusBlockMinutes: null,
       preferredCheckInMode: "quiet",
       calendarId: null,
+      plannerHorizonDays: 28,
     },
     hardEvents: [],
   }

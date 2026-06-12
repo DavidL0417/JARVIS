@@ -50,6 +50,7 @@ const DEFAULT_PREFERENCES: UserPreferences = {
   preferredFocusBlockMinutes: null,
   preferredCheckInMode: "quiet",
   calendarId: null,
+  plannerHorizonDays: 28,
 }
 
 export interface AssistantRuntimeContext {
