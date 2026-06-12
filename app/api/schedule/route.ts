@@ -10,10 +10,10 @@ import {
   mapTaskRowToTask,
   MEMORY_ITEM_SELECT,
   PREFERENCES_SELECT,
-  SCHEDULE_EVENT_SELECT,
   SOURCE_SNAPSHOT_SELECT,
   TASK_SELECT,
 } from "@/lib/data/mappers"
+import { listScheduleEventRowsInWindow } from "@/lib/supabase/schedule-events"
 import {
   isAuthenticationRequiredError,
   requireAuthenticatedUser,
@@ -205,11 +205,9 @@ export async function POST(request: Request) {
         .select(PREFERENCES_SELECT)
         .eq("user_id", user.id)
         .maybeSingle<UserPreferencesRow>(),
-      adminClient
-        .from("schedule_events")
-        .select(SCHEDULE_EVENT_SELECT)
-        .eq("user_id", user.id)
-        .order("starts_at", { ascending: true }),
+      // Windowed + paginated: the unbounded read hit Supabase's 1000-row cap, so the
+      // planner saw months of history but NO upcoming events (they fell past the cap).
+      listScheduleEventRowsInWindow(adminClient, user.id, { lookbackDays: 7, lookaheadDays: 180 }),
       adminClient
         .from("memory_items")
         .select(MEMORY_ITEM_SELECT)

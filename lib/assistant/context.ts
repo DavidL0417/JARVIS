@@ -13,10 +13,10 @@ import {
   mapTaskRowToTask,
   MEMORY_ITEM_SELECT,
   PREFERENCES_SELECT,
-  SCHEDULE_EVENT_SELECT,
   SOURCE_SNAPSHOT_SELECT,
   TASK_SELECT,
 } from "@/lib/data/mappers"
+import { listScheduleEventRowsInWindow } from "@/lib/supabase/schedule-events"
 import type {
   AssistantContextData,
   MemoryEntrySummary,
@@ -304,11 +304,9 @@ export async function loadAssistantRuntimeContext(
       .select(TASK_SELECT)
       .eq("user_id", userId)
       .order("created_at", { ascending: true }),
-    supabase
-      .from("schedule_events")
-      .select(SCHEDULE_EVENT_SELECT)
-      .eq("user_id", userId)
-      .order("starts_at", { ascending: true }),
+    // Windowed + paginated: the unbounded read hit Supabase's 1000-row cap, hiding
+    // all upcoming events from the assistant once total mirrored events passed 1000.
+    listScheduleEventRowsInWindow(supabase, userId, { lookbackDays: 30, lookaheadDays: 180 }),
     supabase
       .from("memory_items")
       .select(MEMORY_ITEM_SELECT)

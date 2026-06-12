@@ -14,11 +14,11 @@ import {
   SOURCE_CANDIDATE_SELECT,
   SOURCE_FILE_SELECT,
   MEMORY_ITEM_SELECT,
-  SCHEDULE_EVENT_SELECT,
   SOURCE_SNAPSHOT_SELECT,
   TASK_SELECT,
   USER_INTEGRATION_SELECT,
 } from "@/lib/data/mappers"
+import { listScheduleEventRowsInWindow } from "@/lib/supabase/schedule-events"
 import { GMAIL_READONLY_SCOPE, GOOGLE_CALENDAR_READONLY_SCOPE, hasOAuthScope } from "@/lib/google-oauth"
 import { isExcludedScheduleEventTitle } from "@/lib/task-calendar-constants"
 import {
@@ -594,11 +594,9 @@ export async function GET() {
         .select(TASK_SELECT)
         .eq("user_id", user.id)
         .order("created_at", { ascending: true }),
-      adminClient
-        .from("schedule_events")
-        .select(SCHEDULE_EVENT_SELECT)
-        .eq("user_id", user.id)
-        .order("starts_at", { ascending: true }),
+      // Windowed + paginated: an unbounded read silently truncates at Supabase's
+      // 1000-row cap, which made every event after a cutoff date vanish from the grid.
+      listScheduleEventRowsInWindow(adminClient, user.id, { lookbackDays: 90, lookaheadDays: 400 }),
       adminClient.from("checkins").select("id").eq("user_id", user.id).limit(4),
       adminClient
         .from("memory_items")

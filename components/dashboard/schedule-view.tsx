@@ -770,29 +770,14 @@ export function ScheduleView({
     const scrollContainer = gridScrollRef.current
     const isCurrentWeekVisible = displayDates.some((date) => isSameCalendarDay(date, now))
     const startHours = timedEvents.map((event) => event.startHour)
+    // Content-first anchor: land on the earliest timed event in the visible range.
+    // The now-line still renders, but it never drives scroll — anchoring to "now"
+    // hides the day whenever the current time is far from the events (e.g. opening
+    // at 2 AM with a 3 PM exam scrolled the grid to an empty midnight band).
     const earliestTimedHour =
       startHours.length > 0 ? Math.max(Math.floor(Math.min(...startHours)) - 1, 0) : null
-
-    let targetHour = isCurrentWeekVisible ? Math.max(now.getHours() - 1, 0) : earliestTimedHour ?? 7
-
-    if (isCurrentWeekVisible) {
-      // Anchoring to "now" leaves the grid looking empty when it's the small hours
-      // and the day's events are all later (e.g. opening at 1:46 AM with a 3 PM exam).
-      // If the band visible from targetHour holds no events but events exist later,
-      // snap forward to one hour before the next one. Never snap backward — an empty
-      // evening is expected; an empty pre-event morning is the bug we're fixing.
-      const viewportHours = Math.max(scrollContainer.clientHeight / HOUR_PX, 6)
-      const bandHasEvents = timedEvents.some(
-        (event) =>
-          event.startHour < targetHour + viewportHours && event.startHour + event.duration > targetHour,
-      )
-      if (!bandHasEvents) {
-        const laterStarts = startHours.filter((hour) => hour >= targetHour)
-        if (laterStarts.length > 0) {
-          targetHour = Math.max(Math.floor(Math.min(...laterStarts)) - 1, 0)
-        }
-      }
-    }
+    const targetHour =
+      earliestTimedHour ?? (isCurrentWeekVisible ? Math.max(now.getHours() - 1, 0) : 7)
 
     scrollContainer.scrollTo({
       top: targetHour * HOUR_PX,
