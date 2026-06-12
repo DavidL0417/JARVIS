@@ -31,6 +31,12 @@ async function resolveTokenUserId(request: Request): Promise<string | null> {
     return explicit
   }
 
+  // Pin the operator when more than one profile exists (test accounts, etc.).
+  const owner = process.env.AUTOMATION_OWNER_USER_ID?.trim()
+  if (owner) {
+    return owner
+  }
+
   const adminClient = createSupabaseAdminClient()
   const { data, error } = await adminClient.from("profiles").select("id").limit(2)
   if (error) {
