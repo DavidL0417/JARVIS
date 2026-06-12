@@ -40,3 +40,8 @@ Spare. Precise. Honest about limits. The tone of a competent assistant who sends
 ## Technical Context
 
 Next.js App Router, TypeScript, Tailwind v4, shadcn/ui as the component baseline. Geist Sans + Geist Mono. Supabase for auth/state, Claude for secretary dialogue and schedule planning, OpenAI for source extraction and helper classification, Google Calendar mirrored into Supabase. Dashboard is a single authenticated page with three live regions: schedule, task/queue, and contextual sidebars (calendars, check-in approvals).
+
+## Known limitations
+
+- **Calendar sync is one-way (read-only).** Google Calendar and CalDAV are mirrored into Supabase as planning constraints; JARVIS writes task blocks out to Google Calendar but does not pull back edits made in Google/Apple, and never writes to CalDAV. Two-way sync is out of scope.
+- **Timezone model.** The planner and stored events are timezone-correct: planning windows and all-day events resolve against the user's configured timezone (Settings → Time). The visual schedule grid currently renders in the *device* timezone — identical to the configured timezone on the operator's own machine, but the grid (not the underlying data) can be a day off when viewing from a device in a different timezone than the configured one. `lib/time/format.ts` provides the timezone-aware helpers for a future grid pass.
