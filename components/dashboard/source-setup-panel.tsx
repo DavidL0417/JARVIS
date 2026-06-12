@@ -10,7 +10,6 @@ import {
   CalendarDays,
   CheckCircle2,
   ChevronDown,
-  Database,
   FileUp,
   Github,
   GraduationCap,
@@ -556,8 +555,6 @@ export function SourceSetupPanel({
   )
   const [status, setStatus] = useState<ActionStatus>("idle")
   const [errorMessage, setErrorMessage] = useState("")
-  const [dedupeStatus, setDedupeStatus] = useState<"idle" | "busy" | "done" | "error">("idle")
-  const [dedupeSummary, setDedupeSummary] = useState("")
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const pendingCount = sourceCandidates.filter((candidate) => candidate.status === "pending").length
   const busy = status === "busy"
@@ -679,35 +676,6 @@ export function SourceSetupPanel({
       await onSourcesChanged().catch(() => undefined)
       setStatus("error")
       setErrorMessage(error instanceof Error ? error.message : "Source action failed.")
-    }
-  }
-
-  async function handleDedupe() {
-    setDedupeStatus("busy")
-    setDedupeSummary("")
-    try {
-      const response = await fetch("/api/sources/candidates/dedupe", { method: "POST" })
-      const payload = (await response.json().catch(() => null)) as
-        | { success?: true; removedCandidates?: number; removedTasks?: number; removedEvents?: number; details?: string }
-        | null
-
-      if (!response.ok || !payload?.success) {
-        throw new Error(payload?.details || "Dedupe failed.")
-      }
-
-      const c = payload.removedCandidates ?? 0
-      const t = payload.removedTasks ?? 0
-      const e = payload.removedEvents ?? 0
-      setDedupeSummary(
-        c === 0 && t === 0 && e === 0
-          ? "Nothing to dedupe."
-          : `Removed ${c} duplicate candidate${c === 1 ? "" : "s"}, ${t} task${t === 1 ? "" : "s"}, ${e} event${e === 1 ? "" : "s"}.`,
-      )
-      setDedupeStatus("done")
-      await onSourcesChanged()
-    } catch (error) {
-      setDedupeStatus("error")
-      setDedupeSummary(error instanceof Error ? error.message : "Dedupe failed.")
     }
   }
 
@@ -1472,38 +1440,6 @@ export function SourceSetupPanel({
               { label: "Failed", value: failedSources.length, tone: "alert" },
             ]}
           />
-          <div className="flex flex-col gap-2 rounded-sm border border-rule bg-secondary/15 p-3">
-            <div className="flex items-center justify-between gap-3">
-              <div className="min-w-0">
-                <p className="text-[12px] font-medium text-foreground">Dedupe imports</p>
-                <p className="text-[11px] leading-4 text-muted-foreground">
-                  Collapse duplicate candidates and tasks that share kind, title, due date, and course. Keeps the
-                  oldest approved row.
-                </p>
-              </div>
-              <Button
-                size="sm"
-                variant="secondary"
-                onClick={() => void handleDedupe()}
-                disabled={dedupeStatus === "busy"}
-                className="h-7 gap-1.5 rounded-sm px-2 text-[11px] font-medium"
-              >
-                {dedupeStatus === "busy" ? (
-                  <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
-                ) : (
-                  <RefreshCw className="h-3 w-3" aria-hidden="true" />
-                )}
-                {dedupeStatus === "busy" ? "Dedupe-ing" : "Dedupe now"}
-              </Button>
-            </div>
-            {dedupeSummary ? (
-              <p
-                className={`text-[11px] leading-4 ${dedupeStatus === "error" ? "text-destructive" : "text-muted-foreground"}`}
-              >
-                {dedupeSummary}
-              </p>
-            ) : null}
-          </div>
         </div>
       </div>
     </section>

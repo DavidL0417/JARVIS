@@ -5,6 +5,8 @@ import {
   getOpenAIConfig,
   getOpenAIResponseText,
 } from "@/lib/ai/openai"
+import { resolveNaturalDateTime } from "@/lib/assistant/date-utils"
+import { DEFAULT_TIMEZONE } from "@/lib/time/zoned"
 import type { AssistantConversationEntry, Priority } from "@/types"
 
 const classifierSchema = z.object({
@@ -33,6 +35,8 @@ export type SecretaryIntent =
   | { kind: "refresh_sources"; command: string }
   | { kind: "request_external_write"; action: "google_task_event_sync" | "unsupported_external_write"; command: string }
   | { kind: "review_feedback"; command: string }
+  | { kind: "pause_automations"; until: string | null; command: string }
+  | { kind: "resume_automations"; command: string }
 
 export function normalizeAssistantCommand(value: string) {
   return value.trim().replace(/\s+/g, " ")
@@ -86,6 +90,27 @@ export function parseMemoryContent(message: string) {
     if (content) {
       return content
     }
+  }
+
+  return null
+}
+
+function parsePauseCommand(message: string): { action: "pause" | "resume"; untilText: string | null } | null {
+  const normalized = message.toLowerCase()
+  const targetsAutomations =
+    /\b(automation|automations|update|updates|refresh|refreshes|syncing|background|cron|brief|sentinel)\b/.test(normalized)
+
+  if (!targetsAutomations) {
+    return null
+  }
+
+  if (/\b(resume|unpause|un-pause|restart|re-?enable|turn (?:back )?on|wake up)\b/.test(normalized)) {
+    return { action: "resume", untilText: null }
+  }
+
+  if (/\b(pause|stop|halt|hold off|suspend|disable|turn off|quiet|mute|snooze)\b/.test(normalized)) {
+    const untilMatch = normalized.match(/\b(?:until|till|til|through|thru)\s+(.+)$/)
+    return { action: "pause", untilText: untilMatch ? untilMatch[1].trim() : null }
   }
 
   return null
@@ -276,6 +301,22 @@ export async function classifySecretaryIntent(input: {
       title: taskTitle,
       priority: parsePriority(command),
     }
+  }
+
+  const pauseCommand = parsePauseCommand(command)
+
+  if (pauseCommand) {
+    if (pauseCommand.action === "resume") {
+      return { kind: "resume_automations", command }
+    }
+
+    const until = pauseCommand.untilText
+      ? resolveNaturalDateTime(pauseCommand.untilText, input.timezone || DEFAULT_TIMEZONE, {
+          defaultTime: "09:00",
+        })
+      : null
+
+    return { kind: "pause_automations", until, command }
   }
 
   if (isExternalWriteCommand(command)) {

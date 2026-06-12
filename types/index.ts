@@ -869,13 +869,6 @@ export interface ScheduleEventUpdateResponse {
   event: ScheduleEvent
 }
 
-export interface ReplanRequest {
-  reason: string
-  pendingTasks: Task[]
-  existingEvents: ScheduleEventInput[]
-  preferences?: UserPreferences
-}
-
 export interface GoogleCalendarSyncResponse {
   success: boolean
   connected: boolean

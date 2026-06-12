@@ -46,6 +46,32 @@ END:VCALENDAR`,
     })
   })
 
+  it("anchors all-day events to local midnight when a timezone is supplied", () => {
+    const events = parseCalDavEventsFromIcs({
+      rangeStart,
+      rangeEnd,
+      timeZone: "America/Chicago",
+      calendarData: `BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:all-day-tz
+SUMMARY:Conference
+DTSTART;VALUE=DATE:20260520
+DTEND;VALUE=DATE:20260522
+END:VEVENT
+END:VCALENDAR`,
+    })
+
+    expect(events).toHaveLength(1)
+    expect(events[0]).toMatchObject({
+      uid: "all-day-tz",
+      // Local CDT midnight is 05:00 UTC; exclusive end day minus one minute.
+      start: "2026-05-20T05:00:00.000Z",
+      end: "2026-05-22T04:59:00.000Z",
+      allDay: true,
+    })
+  })
+
   it("skips cancelled events and expands recurrence instances in range", () => {
     const events = parseCalDavEventsFromIcs({
       rangeStart,

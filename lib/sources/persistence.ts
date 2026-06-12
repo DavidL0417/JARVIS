@@ -244,11 +244,13 @@ export async function insertSourceCandidates(input: {
 
   const existingKeys = new Set<string>()
 
+  // Dismissed candidates count toward the dedup key: dismissing an item is
+  // permanent, so the same (kind, title, due, course) never re-imports on a
+  // later refresh. A changed due date yields a new key and surfaces again.
   const { data: existingRows, error: existingError } = await input.adminClient
     .from("source_candidates")
     .select(SOURCE_CANDIDATE_SELECT)
     .eq("user_id", input.userId)
-    .neq("status", "dismissed")
     .limit(2000)
     .returns<SourceCandidateRow[]>()
 

@@ -9,6 +9,7 @@ import {
 } from "@/lib/assistant/orchestrator"
 import { buildDailyPlan } from "@/lib/daily-plan"
 import { refreshSourcesForUser } from "@/lib/sources/refresh"
+import { setAutomationPaused } from "@/lib/supabase/automation-settings"
 import type { requireAuthenticatedUser } from "@/lib/supabase/auth"
 import { TASKS_CALENDAR_ID } from "@/lib/task-calendar-constants"
 import { assistantMessageResponseSchema } from "@/schemas/assistant"
@@ -36,6 +37,25 @@ function normalizeText(value: string) {
 
 function hasSchedulingImplication(text: string) {
   return /\b(schedule|reschedule|replan|plan|extend|shorten|spread|space|defer|move|once per|twice per|every|weekly|daily|monthly|hours?|hrs?|minutes?|mins?|monday|tuesday|wednesday|thursday|friday|saturday|sunday|today|tomorrow|next week|this week|due)\b/i.test(text)
+}
+
+function formatPauseUntil(iso: string, timezone: string | null) {
+  const date = new Date(iso)
+  if (!Number.isFinite(date.getTime())) {
+    return iso
+  }
+  try {
+    return new Intl.DateTimeFormat("en-US", {
+      timeZone: timezone || undefined,
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    }).format(date)
+  } catch {
+    return date.toISOString()
+  }
 }
 
 function makeReceipt(
@@ -380,6 +400,29 @@ export async function runSecretaryTurn(input: RunSecretaryTurnInput): Promise<As
   } else if (intent.kind === "review_feedback") {
     reply = "Feedback observations and candidate memories are waiting in the review queue; I will not promote them automatically."
     toolCalls.push(makeReceipt("review_feedback", "completed", "Checked feedback review policy; promotion still requires review."))
+  } else if (intent.kind === "pause_automations") {
+    await setAutomationPaused({
+      userId: input.userId,
+      paused: true,
+      pausedUntil: intent.until,
+      pausedReason: "Paused from secretary chat.",
+      adminClient: input.supabase,
+    })
+    needsRefresh = true
+    const untilLabel = intent.until ? formatPauseUntil(intent.until, input.timezone) : null
+    reply = untilLabel
+      ? `Automations paused until ${untilLabel}. Background refreshes and the daily cron won't run; manual planning still works.`
+      : "Automations paused. Background refreshes and the daily cron won't run until you resume; manual planning still works."
+    toolCalls.push(makeReceipt("pause_automations", "completed", reply))
+  } else if (intent.kind === "resume_automations") {
+    await setAutomationPaused({
+      userId: input.userId,
+      paused: false,
+      adminClient: input.supabase,
+    })
+    needsRefresh = true
+    reply = "Automations resumed. Background refreshes and the daily cron will run again."
+    toolCalls.push(makeReceipt("resume_automations", "completed", reply))
   } else if (intent.kind === "remember") {
     reply = "Remembered."
     needsRefresh = true

@@ -1,12 +1,11 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useMemo, useState } from "react"
 import {
   AlertTriangle,
   Loader2,
   NotebookText,
   Pencil,
-  Tag,
   Trash2,
 } from "lucide-react"
 
@@ -59,17 +58,19 @@ function titleCase(value: string) {
     .replace(/\b\w/g, (char) => char.toUpperCase())
 }
 
+// Four-step importance glyph, consistent with the rest of the app: emphasis
+// comes from the copper accent and the dot's fill state — never a heavy fill.
 function importanceTone(importance: MemoryImportance) {
   if (importance === "critical") {
-    return "bg-copper shadow-[0_0_0_2px_rgba(255,255,255,0.05),0_0_8px_rgba(217,119,87,0.55)]"
+    return "bg-copper"
   }
 
   if (importance === "high") {
-    return "bg-copper/85"
+    return "border border-copper bg-transparent"
   }
 
   if (importance === "medium") {
-    return "bg-muted-foreground/55"
+    return "bg-muted-foreground/60"
   }
 
   return "border border-muted-foreground/40 bg-transparent"
@@ -113,87 +114,6 @@ function groupByCategory(entries: MemoryEntrySummary[]) {
     if (leftRank !== rightRank) return leftRank - rightRank
     return leftKey.localeCompare(rightKey)
   })
-}
-
-function CategoryRow({
-  category,
-  entries,
-  active,
-  onSelect,
-}: {
-  category: string
-  entries: MemoryEntrySummary[]
-  active: boolean
-  onSelect: () => void
-}) {
-  const headerImportance = topImportance(entries)
-
-  return (
-    <button
-      type="button"
-      onClick={onSelect}
-      className={cn(
-        "group flex w-full min-w-0 items-center gap-3 border-b border-rule/70 py-2.5 pl-3 pr-2 text-left transition-colors",
-        active ? "bg-secondary/25" : "hover:bg-secondary/15",
-      )}
-      aria-pressed={active}
-    >
-      <Tag
-        className={cn(
-          "h-3.5 w-3.5 shrink-0 transition-colors",
-          active ? "text-copper" : "text-muted-foreground/70 group-hover:text-foreground/80",
-        )}
-        aria-hidden="true"
-        strokeWidth={1.75}
-      />
-      <span
-        className={cn(
-          "min-w-0 flex-1 truncate text-[13px] font-medium transition-colors",
-          active ? "text-foreground" : "text-foreground/85",
-        )}
-      >
-        {titleCase(category)}
-      </span>
-      <span className="inline-flex shrink-0 items-center gap-1.5 text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
-        <span
-          className={cn("inline-block h-1.5 w-1.5 shrink-0 rounded-full", importanceTone(headerImportance))}
-          aria-hidden="true"
-        />
-        <span className="num">{entries.length}</span>
-      </span>
-    </button>
-  )
-}
-
-function CategoryDetailHeader({
-  category,
-  entries,
-}: {
-  category: string
-  entries: MemoryEntrySummary[]
-}) {
-  const headerImportance = topImportance(entries)
-
-  return (
-    <div className="flex flex-col gap-2 border-b border-rule pb-4">
-      <div className="flex items-center gap-2.5">
-        <Tag className="h-4 w-4 shrink-0 text-copper" aria-hidden="true" strokeWidth={1.75} />
-        <h2 className="truncate text-[15px] font-semibold leading-none text-foreground">
-          {titleCase(category)}
-        </h2>
-        <span className="ml-auto inline-flex shrink-0 items-center gap-1.5 text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
-          <span
-            className={cn("inline-block h-1.5 w-1.5 shrink-0 rounded-full", importanceTone(headerImportance))}
-            aria-hidden="true"
-          />
-          {importanceLabel(headerImportance)}
-        </span>
-      </div>
-      <p className="max-w-[64ch] text-[12px] leading-5 text-muted-foreground">
-        {entries.length} {entries.length === 1 ? "note" : "notes"} in this section. Click a note to refine.
-      </p>
-    </div>
-  )
 }
 
 function InlineError({ message }: { message: string }) {
@@ -322,7 +242,9 @@ function MemoryEntryItem({
               className={cn("inline-block h-1.5 w-1.5 rounded-full", importanceTone(entry.importance))}
               aria-hidden="true"
             />
-            <span>{importanceLabel(entry.importance)}</span>
+            <span className={cn(entry.importance === "critical" && "text-copper")}>
+              {importanceLabel(entry.importance)}
+            </span>
             <span aria-hidden="true">·</span>
             <span className="num">{formatRelative(entry.createdAt)}</span>
             {entry.source ? (
@@ -351,9 +273,6 @@ export function MemoryPanel({
   onMemoriesChanged: () => Promise<void>
 }) {
   const grouped = useMemo(() => groupByCategory(memories), [memories])
-  const [selectedCategory, setSelectedCategory] = useState<string | null>(
-    () => grouped[0]?.[0] ?? null,
-  )
   const [editingId, setEditingId] = useState<string | null>(null)
   const [draft, setDraft] = useState("")
   const [busyId, setBusyId] = useState<string | null>(null)
@@ -369,19 +288,6 @@ export function MemoryPanel({
     }
     return tally
   }, [memories])
-
-  useEffect(() => {
-    if (grouped.length === 0) {
-      if (selectedCategory !== null) {
-        setSelectedCategory(null)
-      }
-      return
-    }
-
-    if (!selectedCategory || !grouped.some(([key]) => key === selectedCategory)) {
-      setSelectedCategory(grouped[0][0])
-    }
-  }, [grouped, selectedCategory])
 
   function resetEditState() {
     setEditingId(null)
@@ -464,123 +370,70 @@ export function MemoryPanel({
     }
   }
 
-  const activeEntries = selectedCategory
-    ? grouped.find(([key]) => key === selectedCategory)?.[1] ?? []
-    : []
+  return (
+    <div className="flex min-w-0 flex-col gap-5">
+      <div className="flex items-center gap-2">
+        <NotebookText className="h-4 w-4 shrink-0 text-copper" aria-hidden="true" strokeWidth={1.75} />
+        <h2 className="eyebrow">Notes on you</h2>
+        <span className="num text-[11px] font-medium text-muted-foreground">{totalEntries}</span>
+        {busyId ? (
+          <span className="ml-auto inline-flex items-center gap-1.5 text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+            <Loader2 className="h-3 w-3 animate-spin text-copper" aria-hidden="true" />
+            Working
+          </span>
+        ) : null}
+      </div>
 
-  function renderDetail() {
-    if (totalEntries === 0) {
-      return (
-        <div className="flex min-w-0 flex-col gap-5">
-          <div className="flex flex-col gap-2 border-b border-rule pb-4">
-            <div className="flex items-center gap-2.5">
-              <NotebookText className="h-4 w-4 shrink-0 text-copper" aria-hidden="true" strokeWidth={1.75} />
-              <h2 className="truncate text-[15px] font-semibold leading-none text-foreground">
-                Notes on you
-              </h2>
+      <InlineError message={errorMessage} />
+
+      {totalEntries === 0 ? (
+        <p className="text-[12px] leading-5 text-muted-foreground">
+          What JARVIS believes about you. As it reads your sources and watches how you spend your time,
+          observations will form here.
+        </p>
+      ) : (
+        <div className="flex flex-col gap-6">
+          {grouped.map(([category, entries]) => (
+            <div key={category} className="flex flex-col gap-2">
+              <div className="flex items-center gap-2">
+                <span
+                  className={cn("inline-block h-1.5 w-1.5 shrink-0 rounded-full", importanceTone(topImportance(entries)))}
+                  aria-hidden="true"
+                />
+                <h3 className="eyebrow">{titleCase(category)}</h3>
+                <span className="num text-[11px] font-medium text-muted-foreground">{entries.length}</span>
+              </div>
+              <div className="flex flex-col">
+                {entries.map((entry) => (
+                  <MemoryEntryItem
+                    key={entry.id}
+                    entry={entry}
+                    isEditing={editingId === entry.id}
+                    isBusy={busyId === entry.id}
+                    draft={draft}
+                    onStartEdit={() => startEditing(entry)}
+                    onChangeDraft={setDraft}
+                    onCancel={resetEditState}
+                    onSave={() => void saveDraft(entry.id)}
+                    onDiscard={() => void discardEntry(entry.id)}
+                  />
+                ))}
+              </div>
             </div>
-            <p className="max-w-[64ch] text-[12px] leading-5 text-muted-foreground">
-              What JARVIS believes about you. As JARVIS reads your sources and watches how you spend
-              your time, observations will form here.
-            </p>
-          </div>
-          <div className="rounded-sm border border-rule bg-secondary/10 px-4 py-4">
-            <h3 className="text-[13px] font-medium text-foreground">No notes yet</h3>
-            <p className="mt-2 max-w-[58ch] text-[12px] leading-5 text-muted-foreground">
-              Connect sources or let JARVIS observe your scheduling habits to begin seeding memory.
-            </p>
-          </div>
-        </div>
-      )
-    }
-
-    if (!selectedCategory) {
-      return null
-    }
-
-    return (
-      <div className="flex min-w-0 flex-col gap-5">
-        <CategoryDetailHeader category={selectedCategory} entries={activeEntries} />
-        <div className="flex flex-col">
-          {activeEntries.map((entry) => (
-            <MemoryEntryItem
-              key={entry.id}
-              entry={entry}
-              isEditing={editingId === entry.id}
-              isBusy={busyId === entry.id}
-              draft={draft}
-              onStartEdit={() => startEditing(entry)}
-              onChangeDraft={setDraft}
-              onCancel={resetEditState}
-              onSave={() => void saveDraft(entry.id)}
-              onDiscard={() => void discardEntry(entry.id)}
-            />
           ))}
         </div>
-      </div>
-    )
-  }
+      )}
 
-  return (
-    <section className="grid min-h-[calc(100vh-6rem)] min-w-0 grid-cols-1 gap-0 overflow-hidden rounded-sm border border-rule md:grid-cols-[18rem_minmax(0,1fr)]">
-      <div className="flex min-w-0 flex-col border-b border-rule bg-background md:border-b-0 md:border-r">
-        <header className="flex flex-col gap-2 border-b border-rule px-3 py-4">
-          <div className="flex items-center gap-2">
-            <NotebookText className="h-4 w-4 shrink-0 text-copper" aria-hidden="true" strokeWidth={1.75} />
-            <h2 className="truncate text-[13px] font-semibold uppercase tracking-[0.08em] text-foreground">
-              Notes on you
-            </h2>
-            {busyId ? (
-              <span className="ml-auto inline-flex items-center gap-1.5 text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
-                <Loader2 className="h-3 w-3 animate-spin text-copper" aria-hidden="true" />
-                Working
-              </span>
-            ) : null}
-          </div>
-          <p className="max-w-[40ch] text-[12px] leading-5 text-muted-foreground">
-            Choose a section to read or refine.
-          </p>
-        </header>
-
-        <div className="flex flex-col">
-          <h3 className="border-b border-rule/70 pb-2 pl-3 pt-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/70">
-            Sections
-          </h3>
-          {grouped.length === 0 ? (
-            <p className="px-3 py-4 text-[12px] leading-5 text-muted-foreground">
-              No notes yet.
-            </p>
-          ) : (
-            grouped.map(([category, entries]) => (
-              <CategoryRow
-                key={category}
-                category={category}
-                entries={entries}
-                active={selectedCategory === category}
-                onSelect={() => {
-                  resetEditState()
-                  setSelectedCategory(category)
-                }}
-              />
-            ))
-          )}
-        </div>
-      </div>
-
-      <div className="min-w-0 overflow-y-auto bg-secondary/5 px-5 py-5">
-        <div className="mx-auto flex w-full max-w-2xl flex-col gap-5">
-          {renderDetail()}
-          <InlineError message={errorMessage} />
-          <LedgerStrip
-            items={[
-              { label: "Notes", value: totalEntries },
-              { label: "Sections", value: totalCategories },
-              { label: "Core", value: importanceTotals.critical },
-              { label: "Strong", value: importanceTotals.high },
-            ]}
-          />
-        </div>
-      </div>
-    </section>
+      {totalEntries > 0 ? (
+        <LedgerStrip
+          items={[
+            { label: "Notes", value: totalEntries },
+            { label: "Sections", value: totalCategories },
+            { label: "Core", value: importanceTotals.critical },
+            { label: "Strong", value: importanceTotals.high },
+          ]}
+        />
+      ) : null}
+    </div>
   )
 }

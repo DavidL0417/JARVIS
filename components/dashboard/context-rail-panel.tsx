@@ -2,7 +2,7 @@
 
 import { AlertTriangle, CheckCircle2, CircleDashed, Loader2, RefreshCw, ShieldAlert } from "lucide-react"
 
-import { Badge } from "@/components/ui/badge"
+import { RailSection } from "@/components/dashboard/rail-section"
 import type { DailyPlan, DailyPlanRiskItem, SourceSnapshotSummary } from "@/types"
 
 const OPTIONAL_SOURCE_LABELS = new Set(["notion", "gmail", "files"])
@@ -50,14 +50,14 @@ function latestSourcePerKind(sources: SourceSnapshotSummary[]) {
 
 function riskTone(severity: "low" | "medium" | "high") {
   if (severity === "high") {
-    return "destructive"
+    return "text-destructive"
   }
 
   if (severity === "medium") {
-    return "secondary"
+    return "text-copper"
   }
 
-  return "outline"
+  return "text-muted-foreground"
 }
 
 function dedupeRisks(risks: DailyPlanRiskItem[]) {
@@ -117,12 +117,12 @@ export function ContextRailPanel({
   const dimContent = isErrorState || isStale
 
   return (
-    <div className="flex flex-col gap-5 border-b border-rule pb-5">
+    <>
       {isErrorState ? (
-        <div className="flex flex-col gap-2 rounded-sm border border-destructive/50 bg-destructive/10 p-3">
+        <div className="flex flex-col gap-2 border-b border-rule pb-5">
           <div className="flex items-center gap-2">
             <AlertTriangle className="h-4 w-4 text-destructive" aria-hidden="true" />
-            <span className="text-[12px] font-semibold uppercase text-destructive">Latest rebuild failed</span>
+            <span className="eyebrow text-destructive">Latest rebuild failed</span>
           </div>
           {planError ? (
             <p className="line-clamp-3 text-[12px] leading-5 text-foreground/90">{planError}</p>
@@ -134,7 +134,7 @@ export function ContextRailPanel({
             type="button"
             onClick={onRetry}
             disabled={isRetrying}
-            className="inline-flex h-7 w-fit items-center gap-1.5 rounded-sm border border-destructive/60 bg-destructive/20 px-2 text-[11px] font-medium uppercase text-destructive transition-colors hover:bg-destructive/30 disabled:opacity-50"
+            className="inline-flex h-7 w-fit items-center gap-1.5 rounded-sm border border-destructive/60 px-2 text-[11px] font-medium uppercase text-destructive transition-colors hover:bg-destructive/15 disabled:opacity-50"
           >
             {isRetrying ? (
               <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
@@ -146,15 +146,8 @@ export function ContextRailPanel({
         </div>
       ) : null}
 
-      <section className={`flex flex-col gap-5 transition-opacity ${dimContent ? "opacity-60" : ""}`}>
-        <div className="flex flex-col gap-3">
-          <div className="flex items-center justify-between gap-3">
-            <h2 className="text-[13px] font-semibold uppercase text-foreground">Plan Basis</h2>
-            <Badge variant="outline" className="rounded-sm">
-              {basisCount}
-            </Badge>
-          </div>
-
+      <RailSection title="Plan Basis" count={basisCount}>
+        <div className={`flex flex-col gap-3 transition-opacity ${dimContent ? "opacity-60" : ""}`}>
           {builtLabel ? (
             <p className="text-[11px] text-muted-foreground">
               {isScheduling ? "Building…" : builtLabel}
@@ -202,37 +195,28 @@ export function ContextRailPanel({
             <p className="text-[12px] leading-5 text-muted-foreground">No plan basis recorded.</p>
           )}
         </div>
+      </RailSection>
 
-        <div className="flex flex-col gap-3">
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <ShieldAlert className="h-4 w-4 text-copper" aria-hidden="true" />
-              <h2 className="text-[13px] font-semibold uppercase text-foreground">Risk Radar</h2>
-            </div>
-            <Badge variant={risks.some((risk) => risk.severity === "high") ? "destructive" : "outline"} className="rounded-sm">
-              {risks.length}
-            </Badge>
-          </div>
-
+      <RailSection title="Risk Radar" icon={ShieldAlert} count={risks.length}>
+        <div className={`flex flex-col gap-2 transition-opacity ${dimContent ? "opacity-60" : ""}`}>
           {risks.length > 0 ? (
-            <div className="flex flex-col gap-2">
-              {risks.slice(0, 5).map((risk, index) => (
-                <div key={`${risk.title}-${index}`} className="rounded-sm border border-rule bg-secondary/15 p-3">
+            risks.slice(0, 5).map((risk, index) => (
+              <div key={`${risk.title}-${index}`} className="grid grid-cols-[1rem_minmax(0,1fr)] gap-2">
+                <ShieldAlert className={`mt-0.5 h-3.5 w-3.5 ${risk.severity === "high" ? "text-destructive" : "text-copper"}`} aria-hidden="true" />
+                <div className="min-w-0">
                   <div className="flex items-center justify-between gap-2">
                     <span className="line-clamp-1 text-[12px] font-medium text-foreground">{risk.title}</span>
-                    <Badge variant={riskTone(risk.severity)} className="rounded-sm">
-                      {risk.severity}
-                    </Badge>
+                    <span className={`num text-[10px] uppercase ${riskTone(risk.severity)}`}>{risk.severity}</span>
                   </div>
-                  <p className="mt-1 line-clamp-2 text-[12px] leading-5 text-muted-foreground">{risk.detail}</p>
+                  <p className="mt-0.5 line-clamp-2 text-[12px] leading-5 text-muted-foreground">{risk.detail}</p>
                 </div>
-              ))}
-            </div>
+              </div>
+            ))
           ) : (
             <p className="text-[12px] leading-5 text-muted-foreground">No plan risks recorded.</p>
           )}
         </div>
-      </section>
-    </div>
+      </RailSection>
+    </>
   )
 }

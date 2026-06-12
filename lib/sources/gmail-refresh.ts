@@ -1,5 +1,6 @@
 import { GMAIL_READONLY_SCOPE, hasOAuthScope } from "@/lib/google-oauth"
 import { extractCandidatesFromText } from "@/lib/sources/extraction"
+import { getLatestContentHash, hashSourceContent } from "@/lib/sources/idle-skip"
 import { insertAndAutoApproveSourceCandidates, insertSourceSnapshot } from "@/lib/sources/persistence"
 import {
   getStoredGoogleIntegration,
@@ -216,6 +217,36 @@ export async function refreshGmailForUser(userId: string): Promise<SourceIntakeR
         .join("\n")
     })
     .join("\n\n---\n\n")
+
+  const contentHash = hashSourceContent(sourceText)
+  const previousHash = await getLatestContentHash(adminClient, userId, "gmail")
+
+  if (previousHash && previousHash === contentHash) {
+    const sourceSnapshot = await insertSourceSnapshot({
+      adminClient,
+      userId,
+      source: "gmail",
+      sourceRef: GMAIL_CONTEXT_SEARCH_QUERY,
+      freshness: "fresh",
+      summary: "Gmail unchanged since last scan; extraction skipped.",
+      payload: {
+        latestQuery: GMAIL_LATEST_CONTEXT_QUERY,
+        keywordQuery: GMAIL_CONTEXT_SEARCH_QUERY,
+        messageCount: messages.length,
+        dedupedMessageCount: messageIds.length,
+        contentHash,
+        extractionSkipped: true,
+      },
+    })
+
+    return {
+      success: true,
+      sourceSnapshot,
+      sourceFile: null,
+      candidates: [],
+    }
+  }
+
   const extraction = await extractCandidatesFromText({
     source: "gmail",
     sourceRef: GMAIL_CONTEXT_SEARCH_QUERY,
@@ -242,6 +273,7 @@ export async function refreshGmailForUser(userId: string): Promise<SourceIntakeR
         id: message.id,
         lanes: Array.from(message.lanes),
       })),
+      contentHash,
       model: extraction.model,
       candidateCount: extraction.candidates.length,
     },

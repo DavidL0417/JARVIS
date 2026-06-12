@@ -14,6 +14,8 @@ import {
 import { createSupabaseAdminClient } from "@/lib/supabase/server"
 import { recordGoogleCalendarTaskFeedback } from "@/lib/sources/calendar-feedback"
 import { TASKS_CALENDAR_ID } from "@/lib/task-calendar-constants"
+import { loadUserTimezone } from "@/lib/data/user-timezone"
+import { zonedDateStartUtc } from "@/lib/time/zoned"
 import type { GoogleCalendarSyncResponse, ScheduleEvent, ScheduleEventRow, UserCalendar, UserCalendarRow } from "@/types"
 
 const DAY_IN_MS = 24 * 60 * 60 * 1000
@@ -136,42 +138,46 @@ export function getStaleGoogleMirrorEventIdsForTest(input: {
     .map((event) => event.id)
 }
 
-function toEventTimestamp(value: GoogleCalendarEventDateTime | undefined, fallbackHour: string) {
-  if (!value) {
+function toEventTimestamp(value: GoogleCalendarEventDateTime | undefined) {
+  if (!value?.dateTime) {
     return null
   }
 
-  if (value.dateTime) {
-    return new Date(value.dateTime).toISOString()
-  }
-
-  if (value.date) {
-    return new Date(`${value.date}T${fallbackHour}:00`).toISOString()
-  }
-
-  return null
+  return new Date(value.dateTime).toISOString()
 }
 
-function toAllDayEndTimestamp(value: GoogleCalendarEventDateTime | undefined) {
+function toAllDayStartTimestamp(value: GoogleCalendarEventDateTime | undefined, timeZone: string) {
   if (!value?.date) {
     return null
   }
 
-  return new Date(new Date(`${value.date}T00:00:00`).getTime() - 60_000).toISOString()
+  return zonedDateStartUtc(value.date, timeZone).toISOString()
+}
+
+function toAllDayEndTimestamp(value: GoogleCalendarEventDateTime | undefined, timeZone: string) {
+  if (!value?.date) {
+    return null
+  }
+
+  // Google all-day `end.date` is exclusive (the day after the event). Store the
+  // event ending one minute before midnight (user timezone) of that exclusive
+  // day so the [start, end] interval stays within the user's calendar days.
+  return new Date(zonedDateStartUtc(value.date, timeZone).getTime() - 60_000).toISOString()
 }
 
 function mapGoogleEventToScheduleEvent(
   item: GoogleCalendarEventItem,
   googleCalendarId: string,
   userId: string,
+  timeZone: string,
 ): ScheduleEvent | null {
   if (item.status === "cancelled") {
     return null
   }
 
-  const start = toEventTimestamp(item.start, "00:00")
   const isAllDay = Boolean(item.start?.date && !item.start?.dateTime)
-  const end = isAllDay ? toAllDayEndTimestamp(item.end) : toEventTimestamp(item.end, "23:59")
+  const start = isAllDay ? toAllDayStartTimestamp(item.start, timeZone) : toEventTimestamp(item.start)
+  const end = isAllDay ? toAllDayEndTimestamp(item.end, timeZone) : toEventTimestamp(item.end)
 
   if (!start || !end) {
     return null
@@ -202,6 +208,15 @@ function mapGoogleEventToScheduleEvent(
   }
 }
 
+export function mapGoogleEventToScheduleEventForTest(
+  item: GoogleCalendarEventItem,
+  googleCalendarId: string,
+  userId: string,
+  timeZone: string,
+) {
+  return mapGoogleEventToScheduleEvent(item, googleCalendarId, userId, timeZone)
+}
+
 async function fetchGoogleCalendarList(accessToken: string) {
   const response = await fetch("https://www.googleapis.com/calendar/v3/users/me/calendarList", {
     headers: {
@@ -224,6 +239,7 @@ async function fetchGoogleEventsForCalendar(
   googleCalendarId: string,
   userId: string,
   syncWindow: GoogleCalendarSyncWindow,
+  timeZone: string,
 ) {
   const searchParams = new URLSearchParams({
     timeMin: syncWindow.timeMin,
@@ -250,7 +266,7 @@ async function fetchGoogleEventsForCalendar(
 
   const payload = (await response.json()) as GoogleCalendarEventsResponse
   return (payload.items || [])
-    .map((item) => mapGoogleEventToScheduleEvent(item, googleCalendarId, userId))
+    .map((item) => mapGoogleEventToScheduleEvent(item, googleCalendarId, userId, timeZone))
     .filter((event): event is ScheduleEvent => event !== null)
 }
 
@@ -268,6 +284,26 @@ export async function loadMirroredGoogleCalendarEventsForUser(userId: string) {
   }
 
   return (data ?? []).map((row) => mapScheduleEventRowToScheduleEvent(row as ScheduleEventRow))
+}
+
+async function loadIgnoredGoogleCalendarIds(userId: string): Promise<Set<string>> {
+  const adminClient = createSupabaseAdminClient()
+  const { data, error } = await adminClient
+    .from("calendars")
+    .select("google_calendar_id, sync_preference")
+    .eq("user_id", userId)
+    .eq("source", "google")
+    .eq("sync_preference", "ignored")
+
+  if (error) {
+    throw new Error(error.message)
+  }
+
+  return new Set(
+    (data ?? [])
+      .map((row) => (row as { google_calendar_id: string | null }).google_calendar_id)
+      .filter((id): id is string => typeof id === "string" && id.length > 0),
+  )
 }
 
 async function listMirroredGoogleCalendarsForUser(userId: string): Promise<UserCalendar[]> {
@@ -677,14 +713,24 @@ export async function syncGoogleCalendarEventsForUser(userId: string): Promise<G
 
   try {
     const syncWindow = getGoogleCalendarSyncWindow()
+    const timeZone = await loadUserTimezone(userId)
     const calendars = await fetchGoogleCalendarList(accessToken)
     await persistGoogleCalendars(userId, calendars)
-    const calendarKeys = calendars
-      .filter((calendar): calendar is GoogleCalendarListItem & { id: string } => typeof calendar.id === "string")
-      .map((calendar) => toCalendarKey(calendar.id))
+
+    // Respect per-calendar sync preference: calendars marked "ignored" are not
+    // fetched, and dropping them from calendarKeys lets the stale-event cleanup
+    // remove any events previously mirrored from them.
+    const ignoredGoogleCalendarIds = await loadIgnoredGoogleCalendarIds(userId)
+    const activeCalendars = calendars.filter(
+      (calendar): calendar is GoogleCalendarListItem & { id: string } =>
+        typeof calendar.id === "string" && !ignoredGoogleCalendarIds.has(calendar.id),
+    )
+    const calendarKeys = activeCalendars.map((calendar) => toCalendarKey(calendar.id))
 
     const eventResults = await Promise.allSettled(
-      calendars.map((calendar) => fetchGoogleEventsForCalendar(accessToken, calendar.id as string, userId, syncWindow)),
+      activeCalendars.map((calendar) =>
+        fetchGoogleEventsForCalendar(accessToken, calendar.id, userId, syncWindow, timeZone),
+      ),
     )
     const failedResults = eventResults.filter((result): result is PromiseRejectedResult => result.status === "rejected")
 

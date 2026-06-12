@@ -1,5 +1,6 @@
 import ICAL from "ical.js"
 
+import { zonedDateStartUtc } from "@/lib/time/zoned"
 import type { Priority, ScheduleEvent } from "@/types"
 
 export interface CalDavParsedEvent {
@@ -24,11 +25,21 @@ function isCancelled(component: ICAL.Component) {
   return typeof status === "string" && status.toUpperCase() === "CANCELLED"
 }
 
-function timeToIso(time: ICAL.Time, allDayEnd = false) {
-  const timestamp = time.isDate
-    ? Date.UTC(time.year, time.month - 1, time.day) - (allDayEnd ? 60_000 : 0)
-    : time.toJSDate().getTime()
-  return new Date(timestamp).toISOString()
+function pad2(value: number) {
+  return String(value).padStart(2, "0")
+}
+
+function timeToIso(time: ICAL.Time, allDayEnd = false, timeZone: string | null = null) {
+  if (time.isDate) {
+    // All-day dates are timezone-naive. When a user timezone is supplied, anchor
+    // them to local midnight there; otherwise fall back to UTC midnight (legacy).
+    const baseMs = timeZone
+      ? zonedDateStartUtc(`${time.year}-${pad2(time.month)}-${pad2(time.day)}`, timeZone).getTime()
+      : Date.UTC(time.year, time.month - 1, time.day)
+    return new Date(baseMs - (allDayEnd ? 60_000 : 0)).toISOString()
+  }
+
+  return new Date(time.toJSDate().getTime()).toISOString()
 }
 
 function overlapsRange(start: string, end: string, rangeStart: Date, rangeEnd: Date) {
@@ -44,10 +55,11 @@ function mapOccurrence(
   },
   rangeStart: Date,
   rangeEnd: Date,
+  timeZone: string | null = null,
 ): CalDavParsedEvent | null {
   const allDay = occurrence.startDate.isDate
-  const start = timeToIso(occurrence.startDate)
-  const end = timeToIso(occurrence.endDate, allDay)
+  const start = timeToIso(occurrence.startDate, false, timeZone)
+  const end = timeToIso(occurrence.endDate, allDay, timeZone)
 
   if (!overlapsRange(start, end, rangeStart, rangeEnd)) {
     return null
@@ -68,10 +80,13 @@ export function parseCalDavEventsFromIcs(input: {
   calendarData: string
   rangeStart: Date
   rangeEnd: Date
+  timeZone?: string | null
 }): CalDavParsedEvent[] {
   if (!input.calendarData.trim()) {
     return []
   }
+
+  const timeZone = input.timeZone ?? null
 
   const component = new ICAL.Component(ICAL.parse(input.calendarData))
   const eventComponents = component.getAllSubcomponents("vevent")
@@ -98,6 +113,7 @@ export function parseCalDavEventsFromIcs(input: {
         },
         input.rangeStart,
         input.rangeEnd,
+        timeZone,
       )
 
       if (mapped) {
@@ -116,7 +132,7 @@ export function parseCalDavEventsFromIcs(input: {
 
     while (next && count < MAX_OCCURRENCES_PER_EVENT) {
       const details = event.getOccurrenceDetails(next)
-      const mapped = mapOccurrence(event, details, input.rangeStart, input.rangeEnd)
+      const mapped = mapOccurrence(event, details, input.rangeStart, input.rangeEnd, timeZone)
 
       if (mapped) {
         events.push(mapped)
