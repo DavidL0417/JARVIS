@@ -32,6 +32,7 @@ import type {
   DailyPlanRow,
   DailyPlan,
   MemoryLayer,
+  MemoryImportance,
 } from "@/types"
 
 const DEFAULT_TIMEZONE = "America/Chicago"
@@ -77,6 +78,67 @@ export const MEMORY_LAYER_ORDER: MemoryLayer[] = [
   "feedback_observations",
   "candidate_memories",
 ]
+
+// How many memories of each layer the planner sees. Operating rules and durable
+// preferences earn the most slots (they govern judgment); status/candidate
+// layers earn the fewest (they churn and are lower-signal).
+const PLANNER_MEMORY_LAYER_CAPS: Record<MemoryLayer, number> = {
+  operating_rules: 15,
+  planning_profile: 10,
+  durable_preferences: 15,
+  task_context: 8,
+  deadline_context: 10,
+  calendar_context: 6,
+  source_status: 4,
+  feedback_observations: 8,
+  candidate_memories: 5,
+}
+const PLANNER_MEMORY_TOTAL_CAP = 60
+const PLANNER_MEMORY_IMPORTANCE_RANK: Record<MemoryImportance, number> = {
+  critical: 0,
+  high: 1,
+  medium: 2,
+  low: 3,
+}
+
+/**
+ * Pick the memories the planner should see, importance-weighted rather than
+ * merely recent. Sort by layer priority → importance → recency, then apply
+ * per-layer caps and an overall cap so high-signal rules are never crowded out
+ * by a burst of low-signal candidate notes.
+ */
+export function selectPlannerMemories(entries: MemoryEntrySummary[]): MemoryEntrySummary[] {
+  const layerRank = new Map(MEMORY_LAYER_ORDER.map((layer, index) => [layer, index]))
+  const fallbackLayerRank = MEMORY_LAYER_ORDER.length
+
+  const sorted = [...entries].sort((a, b) => {
+    const layerA = layerRank.get(a.layer) ?? fallbackLayerRank
+    const layerB = layerRank.get(b.layer) ?? fallbackLayerRank
+    if (layerA !== layerB) return layerA - layerB
+
+    const importanceA = PLANNER_MEMORY_IMPORTANCE_RANK[a.importance] ?? 3
+    const importanceB = PLANNER_MEMORY_IMPORTANCE_RANK[b.importance] ?? 3
+    if (importanceA !== importanceB) return importanceA - importanceB
+
+    return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+  })
+
+  const perLayerCount = new Map<MemoryLayer, number>()
+  const selected: MemoryEntrySummary[] = []
+
+  for (const entry of sorted) {
+    if (selected.length >= PLANNER_MEMORY_TOTAL_CAP) break
+
+    const cap = PLANNER_MEMORY_LAYER_CAPS[entry.layer] ?? 5
+    const count = perLayerCount.get(entry.layer) ?? 0
+    if (count >= cap) continue
+
+    perLayerCount.set(entry.layer, count + 1)
+    selected.push(entry)
+  }
+
+  return selected
+}
 
 function buildAvailabilitySummary(
   preferences: UserPreferences,
@@ -253,7 +315,7 @@ export async function loadAssistantRuntimeContext(
       .eq("user_id", userId)
       .eq("status", "active")
       .order("created_at", { ascending: false })
-      .limit(20),
+      .limit(200),
     supabase
       .from("source_snapshots")
       .select(SOURCE_SNAPSHOT_SELECT)
@@ -304,8 +366,8 @@ export async function loadAssistantRuntimeContext(
   const events = (eventsResult.data || [])
     .filter((row) => !isExcludedScheduleEventTitle((row as ScheduleEventRow).title))
     .map((row) => mapScheduleEventRowToScheduleEvent(row as ScheduleEventRow))
-  const memoryEntries = (memoryResult.data || []).map((row) =>
-    mapMemoryItemRowToSummary(row as MemoryItemRow),
+  const memoryEntries = selectPlannerMemories(
+    (memoryResult.data || []).map((row) => mapMemoryItemRowToSummary(row as MemoryItemRow)),
   )
   const sourceSnapshots = (sourceResult.data || []).map((row) =>
     mapSourceSnapshotRowToSummary(row as SourceSnapshotRow),

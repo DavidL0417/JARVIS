@@ -1,10 +1,53 @@
 import { describe, expect, it } from "vitest"
 
-import { MEMORY_LAYER_ORDER } from "../lib/assistant/context"
+import { MEMORY_LAYER_ORDER, selectPlannerMemories } from "../lib/assistant/context"
 import {
   DEFAULT_SECRETARY_MEMORY,
   DEFAULT_TEMPLATE_SOURCE,
 } from "../lib/assistant/default-memory"
+import type { MemoryEntrySummary, MemoryImportance, MemoryLayer } from "../types"
+
+function memory(
+  overrides: Partial<MemoryEntrySummary> & { layer: MemoryLayer; importance: MemoryImportance },
+): MemoryEntrySummary {
+  return {
+    id: overrides.insight ?? `m-${overrides.layer}-${overrides.importance}`,
+    kind: "rule",
+    category: "general",
+    insight: "note",
+    importanceNote: null,
+    source: "test",
+    confidence: null,
+    payload: {},
+    createdAt: "2026-06-01T00:00:00.000Z",
+    ...overrides,
+  }
+}
+
+describe("selectPlannerMemories", () => {
+  it("prioritizes higher layers and importance, and caps per layer + total", () => {
+    const entries: MemoryEntrySummary[] = [
+      ...Array.from({ length: 30 }, (_unused, index) =>
+        memory({ layer: "candidate_memories", importance: "low", insight: `cand-${index}` }),
+      ),
+      memory({ layer: "operating_rules", importance: "critical", insight: "rule-critical" }),
+      memory({ layer: "operating_rules", importance: "low", insight: "rule-low" }),
+      memory({ layer: "deadline_context", importance: "high", insight: "deadline" }),
+    ]
+
+    const selected = selectPlannerMemories(entries)
+
+    expect(selected.length).toBeLessThanOrEqual(60)
+    expect(selected.filter((entry) => entry.layer === "candidate_memories").length).toBeLessThanOrEqual(5)
+
+    const ruleCriticalIndex = selected.findIndex((entry) => entry.insight === "rule-critical")
+    const ruleLowIndex = selected.findIndex((entry) => entry.insight === "rule-low")
+    const deadlineIndex = selected.findIndex((entry) => entry.insight === "deadline")
+    expect(ruleCriticalIndex).toBeGreaterThanOrEqual(0)
+    expect(ruleCriticalIndex).toBeLessThan(ruleLowIndex)
+    expect(ruleLowIndex).toBeLessThan(deadlineIndex)
+  })
+})
 
 describe("layered secretary context defaults", () => {
   it("loads secretary memory in Codex Scheduler order", () => {
