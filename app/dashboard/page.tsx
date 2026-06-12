@@ -11,7 +11,9 @@ import {
   Loader2,
   MessageSquare,
   PanelLeft,
+  Pause,
   RefreshCw,
+  Settings2,
   Sparkles,
   ListTodo,
   type LucideIcon,
@@ -29,6 +31,7 @@ import { ContextRailPanel } from "@/components/dashboard/context-rail-panel"
 import { DailyCommandStrip } from "@/components/dashboard/daily-command-strip"
 import { RailSheet } from "@/components/dashboard/rail-sheet"
 import { MemoryPanel } from "@/components/dashboard/memory-panel"
+import { SettingsPanel } from "@/components/dashboard/settings-panel"
 import { SecretaryOverlay } from "@/components/dashboard/secretary-overlay"
 import { SourceSetupPanel } from "@/components/dashboard/source-setup-panel"
 import { TaskManager } from "@/components/dashboard/task-manager"
@@ -251,6 +254,8 @@ export default function DashboardPage() {
   const [calendarsSidebarOpen, setCalendarsSidebarOpen] = useState(false)
   const [sourcesSheetOpen, setSourcesSheetOpen] = useState(false)
   const [memorySheetOpen, setMemorySheetOpen] = useState(false)
+  const [settingsSheetOpen, setSettingsSheetOpen] = useState(false)
+  const [automationPaused, setAutomationPaused] = useState(false)
   const [secretaryOpen, setSecretaryOpen] = useState(false)
   const [plannerStatus, setPlannerStatus] = useState<PlannerUiStatus>("Idle")
   const [plannerSummary, setPlannerSummary] = useState("")
@@ -327,6 +332,23 @@ export default function DashboardPage() {
 
     setIsPlannerModelHydrated(true)
   }, [])
+
+  const refreshPauseStatus = useCallback(async () => {
+    try {
+      const response = await fetch("/api/automation-status")
+      if (!response.ok) return
+      const payload = await response.json().catch(() => null)
+      if (payload && typeof payload.paused === "boolean") {
+        setAutomationPaused(payload.paused)
+      }
+    } catch {
+      // Pause glyph is advisory; ignore transient fetch failures.
+    }
+  }, [])
+
+  useEffect(() => {
+    void refreshPauseStatus()
+  }, [refreshPauseStatus])
 
   useEffect(() => {
     if (!isPlannerModelHydrated) {
@@ -586,6 +608,13 @@ export default function DashboardPage() {
               onClick={() => setMemorySheetOpen(true)}
               active={memorySheetOpen}
             />
+            <RailButton
+              label={automationPaused ? "Settings · automations paused" : "Settings"}
+              icon={Settings2}
+              onClick={() => setSettingsSheetOpen(true)}
+              active={settingsSheetOpen}
+              badge={automationPaused}
+            />
             <div className="my-1 h-px w-6 bg-rule" aria-hidden="true" />
             <RailButton
               label="Refresh"
@@ -651,6 +680,24 @@ export default function DashboardPage() {
                   <MessageSquare className="h-[18px] w-[18px]" aria-hidden="true" />
                 </button>
                 <span className="hidden h-5 w-px bg-rule md:block" />
+                {automationPaused ? (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        type="button"
+                        onClick={() => setSettingsSheetOpen(true)}
+                        aria-label="Automations paused"
+                        className="flex h-7 items-center gap-1.5 rounded-sm border border-copper/50 bg-copper-soft px-2 text-[11px] uppercase text-copper"
+                      >
+                        <Pause className="h-3 w-3" aria-hidden="true" strokeWidth={2} />
+                        <span className="num hidden font-medium sm:inline">Paused</span>
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent sideOffset={6} className="text-[11px]">
+                      Background automations are paused
+                    </TooltipContent>
+                  </Tooltip>
+                ) : null}
                 <LiveClock />
                 <button
                   type="button"
@@ -704,6 +751,15 @@ export default function DashboardPage() {
               onMemoriesChanged={() => loadDashboard(true)}
             />
           ) : null}
+        </RailSheet>
+
+        <RailSheet
+          isOpen={settingsSheetOpen}
+          onClose={() => setSettingsSheetOpen(false)}
+          title="Settings"
+          width="narrow"
+        >
+          <SettingsPanel onChanged={() => void refreshPauseStatus()} />
         </RailSheet>
 
         <SecretaryOverlay

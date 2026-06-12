@@ -70,6 +70,10 @@ const dismissPermanentMigration = readFileSync(
   "supabase/migrations/20260611120000_source_candidates_dismiss_permanent.sql",
   "utf8",
 )
+const automationControlPlaneMigration = readFileSync(
+  "supabase/migrations/20260611123000_automation_control_plane.sql",
+  "utf8",
+)
 
 describe("production Supabase migration", () => {
   it("keeps OAuth tokens outside public tables", () => {
@@ -206,6 +210,21 @@ describe("production Supabase migration", () => {
     // The new index must NOT be partial on status — dismissed rows count too.
     expect(dismissPermanentMigration).not.toContain("where status <> 'dismissed'")
     expect(dismissPermanentMigration).not.toContain("disable row level security")
+  })
+
+  it("creates the automation control plane with RLS and no credentials", () => {
+    expect(automationControlPlaneMigration).toContain("create table public.automation_settings")
+    expect(automationControlPlaneMigration).toContain("create table public.automation_runs")
+    expect(automationControlPlaneMigration).toContain("alter table public.automation_settings enable row level security")
+    expect(automationControlPlaneMigration).toContain("alter table public.automation_runs enable row level security")
+    expect(automationControlPlaneMigration).toContain("automation_settings_select_own")
+    expect(automationControlPlaneMigration).toContain("automation_runs_select_own")
+    expect(automationControlPlaneMigration).toContain("revoke all on public.automation_settings from anon, authenticated")
+    expect(automationControlPlaneMigration).toContain("revoke all on public.automation_runs from anon, authenticated")
+    expect(automationControlPlaneMigration).toContain("check (kind in ('source_refresh_cron', 'pre_plan_refresh', 'plan_build', 'reconciliation'))")
+    expect(automationControlPlaneMigration).toContain("check (status in ('completed', 'skipped_paused', 'skipped_idle', 'failed'))")
+    expect(automationControlPlaneMigration).not.toContain("disable row level security")
+    expect(automationControlPlaneMigration).not.toContain("access_token")
   })
 
   it("repairs stale provider checks for CalDAV without reopening token access", () => {
