@@ -1315,8 +1315,12 @@ export function ScheduleView({
                           ? Math.min(tileHeightPx, (layout.visibleMinutes / 60) * HOUR_PX)
                           : tileHeightPx
                       const lineBudget = Math.max(Math.floor((visibleHeightPx - 8) / 14), 1)
-                      const showLocation = Boolean(event.location) && lineBudget >= 2
-                      const showTime = lineBudget - (showLocation ? 1 : 0) >= 2
+                      // The title's wrap takes priority over metadata (Apple
+                      // progression): short tiles show only the title — wrapped to
+                      // two lines if room — and location/time appear only once the
+                      // tile has spare lines beyond that.
+                      const showLocation = Boolean(event.location) && lineBudget >= 3
+                      const showTime = lineBudget >= (showLocation ? 4 : 3)
                       const titleLines = Math.min(
                         Math.max(lineBudget - (showLocation ? 1 : 0) - (showTime ? 1 : 0), 1),
                         3,
