@@ -19,6 +19,10 @@ export interface TimedEventLayout {
   leftPct: number
   widthPct: number
   zIndex: number
+  // Minutes from this event's start until a cascading tile covers it. Content lines
+  // (location, time) must fit in this strip — anything below it is hidden behind
+  // the covering tile. Undefined when nothing covers the event.
+  visibleMinutes?: number
 }
 
 // A cascaded tile must leave at least this much of the tile above it visible —
@@ -36,6 +40,7 @@ export function getTimedEventBounds(event: { startHour: number; duration: number
 }
 
 interface Placement {
+  id: string
   start: number
   end: number
   depth: number
@@ -44,6 +49,9 @@ interface Placement {
 function layoutCluster(cluster: TimedLayoutEvent[], layouts: Map<string, TimedEventLayout>) {
   const columns: Placement[][] = []
   const byId = new Map<string, { column: number; depth: number }>()
+  // When a tile cascades onto another, the tile below is covered from the new
+  // tile's start downward — record where, so the renderer can stop its content.
+  const coveredAtMinute = new Map<string, number>()
 
   for (const event of cluster) {
     const { start, end } = getTimedEventBounds(event)
@@ -54,7 +62,7 @@ function layoutCluster(cluster: TimedLayoutEvent[], layouts: Map<string, TimedEv
     for (let column = 0; column < columns.length && !placed; column += 1) {
       const last = columns[column][columns[column].length - 1]
       if (start >= last.end) {
-        columns[column].push({ start, end, depth: 0 })
+        columns[column].push({ id: event.id, start, end, depth: 0 })
         byId.set(event.id, { column, depth: 0 })
         placed = true
       }
@@ -66,7 +74,8 @@ function layoutCluster(cluster: TimedLayoutEvent[], layouts: Map<string, TimedEv
       const last = columns[column][columns[column].length - 1]
       if (start - last.start >= MIN_CASCADE_GAP_MINUTES) {
         const depth = last.depth + 1
-        columns[column].push({ start, end, depth })
+        coveredAtMinute.set(last.id, start)
+        columns[column].push({ id: event.id, start, end, depth })
         byId.set(event.id, { column, depth })
         placed = true
       }
@@ -75,7 +84,7 @@ function layoutCluster(cluster: TimedLayoutEvent[], layouts: Map<string, TimedEv
     // Otherwise the starts are too close together — titles would collide — so the
     // event opens a new side-by-side column.
     if (!placed) {
-      columns.push([{ start, end, depth: 0 }])
+      columns.push([{ id: event.id, start, end, depth: 0 }])
       byId.set(event.id, { column: columns.length - 1, depth: 0 })
     }
   }
@@ -88,11 +97,14 @@ function layoutCluster(cluster: TimedLayoutEvent[], layouts: Map<string, TimedEv
     if (!placement) continue
     const indent =
       Math.min(placement.depth * CASCADE_INDENT_PCT, MAX_CASCADE_INDENT_PCT) * (columnWidth / 100)
+    const coveredAt = coveredAtMinute.get(event.id)
+    const { start } = getTimedEventBounds(event)
 
     layouts.set(event.id, {
       leftPct: placement.column * columnWidth + indent,
       widthPct: columnWidth - indent,
       zIndex: 10 + placement.depth,
+      ...(coveredAt !== undefined ? { visibleMinutes: coveredAt - start } : {}),
     })
   }
 }

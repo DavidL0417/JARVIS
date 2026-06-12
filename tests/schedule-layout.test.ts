@@ -22,12 +22,32 @@ describe("buildTimedEventLayoutMap (Apple-style overlaps)", () => {
     // Reference screenshot 4: Event 2 starts 30min into Event 1 — Event 1's title
     // row stays visible, so Event 2 may overlap instead of halving the width.
     const layouts = buildTimedEventLayoutMap([event("e1", 12, 2), event("e2", 12.5, 1)])
-    expect(layouts.get("e1")).toEqual({ leftPct: 0, widthPct: 100, zIndex: 10 })
+    expect(layouts.get("e1")).toEqual({ leftPct: 0, widthPct: 100, zIndex: 10, visibleMinutes: 30 })
     const nested = layouts.get("e2")!
     expect(nested.leftPct).toBeGreaterThan(0)
     expect(nested.widthPct).toBeLessThan(100)
     expect(nested.widthPct).toBeGreaterThan(80)
     expect(nested.zIndex).toBeGreaterThan(10)
+    expect(nested.visibleMinutes).toBeUndefined()
+  })
+
+  it("reports where each tile in a cascade chain gets covered", () => {
+    // A covered tile must not render location/time below the covering tile's
+    // start — only the uncovered strip is its to use.
+    const layouts = buildTimedEventLayoutMap([
+      event("a", 12, 4),
+      event("b", 12.5, 3),
+      event("c", 13.25, 1),
+    ])
+    expect(layouts.get("a")?.visibleMinutes).toBe(30)
+    expect(layouts.get("b")?.visibleMinutes).toBe(45)
+    expect(layouts.get("c")?.visibleMinutes).toBeUndefined()
+  })
+
+  it("leaves side-by-side events uncovered", () => {
+    const layouts = buildTimedEventLayoutMap([event("a", 12, 1), event("b", 12, 1)])
+    expect(layouts.get("a")?.visibleMinutes).toBeUndefined()
+    expect(layouts.get("b")?.visibleMinutes).toBeUndefined()
   })
 
   it("puts same-start events side by side (titles would collide)", () => {

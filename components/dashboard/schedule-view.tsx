@@ -42,7 +42,7 @@ import {
   TASKS_CALENDAR_ID,
 } from "@/lib/task-calendar-constants"
 import { normalizeHexColor } from "@/lib/color"
-import { buildTimedEventLayoutMap } from "@/lib/schedule-layout"
+import { buildTimedEventLayoutMap, type TimedEventLayout } from "@/lib/schedule-layout"
 import type { Priority, ScheduleEvent, ScheduleEventUpdateRequest, ScheduleEventUpdateResponse, Task } from "@/types"
 import type { Calendar } from "./calendars-sidebar"
 import { TaskQueuePopover } from "./task-queue-popover"
@@ -1299,16 +1299,22 @@ export function ScheduleView({
                   {timedEvents
                     .filter((event) => event.day === dayIndex)
                     .map((event) => {
-                      const layout = timedEventLayouts.get(event.id) ?? {
+                      const layout: TimedEventLayout = timedEventLayouts.get(event.id) ?? {
                         leftPct: 0,
                         widthPct: 100,
                         zIndex: 10,
                       }
                       // Content priority is title > location > time: the title may
                       // wrap but is never dropped; location and time appear only
-                      // when the tile has lines to spare.
+                      // when the tile has lines to spare. A tile covered by a
+                      // cascading neighbor only counts its UNCOVERED strip —
+                      // otherwise its location/time lines poke out from beneath.
                       const tileHeightPx = Math.max(event.duration * HOUR_PX, 20)
-                      const lineBudget = Math.max(Math.floor((tileHeightPx - 8) / 14), 1)
+                      const visibleHeightPx =
+                        layout.visibleMinutes !== undefined
+                          ? Math.min(tileHeightPx, (layout.visibleMinutes / 60) * HOUR_PX)
+                          : tileHeightPx
+                      const lineBudget = Math.max(Math.floor((visibleHeightPx - 8) / 14), 1)
                       const showLocation = Boolean(event.location) && lineBudget >= 2
                       const showTime = lineBudget - (showLocation ? 1 : 0) >= 2
                       const titleLines = Math.min(
