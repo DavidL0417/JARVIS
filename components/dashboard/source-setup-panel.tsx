@@ -66,6 +66,7 @@ import {
   ConnectorGroup,
   ConnectorRow,
 } from "@/components/dashboard/sources/connector-list"
+import { AppleRemindersShortcutGuide } from "@/components/dashboard/sources/apple-reminders-guide"
 import type {
   SourceCandidate,
   SourceConnector,
@@ -984,6 +985,7 @@ export function SourceSetupPanel({
               copied token. Run it once to confirm, then add a Personal Automation (when Reminders closes,
               plus a few times a day) so it syncs hands-free.
             </p>
+            <AppleRemindersShortcutGuide />
           </div>
 
           <div className="flex flex-col">
