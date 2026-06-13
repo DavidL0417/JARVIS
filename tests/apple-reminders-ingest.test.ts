@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest"
 
-import { mapReminderPriority, reminderExternalTaskId, reminderToTaskInsert } from "@/lib/apple-reminders/ingest"
+import {
+  coerceRemindersPayload,
+  mapReminderPriority,
+  reminderExternalTaskId,
+  reminderToTaskInsert,
+} from "@/lib/apple-reminders/ingest"
 import { TASKS_CALENDAR_ID } from "@/lib/task-calendar-constants"
 
 describe("Apple Reminders ingest mapping", () => {
@@ -62,5 +67,41 @@ describe("Apple Reminders ingest mapping", () => {
   it("treats an invalid due date as undated rather than throwing", () => {
     const insert = reminderToTaskInsert("user-1", { title: "Someday", dueDate: "not a date" })
     expect(insert.deadline).toBeNull()
+  })
+
+  it("parses Apple Shortcuts' 'Month D, YYYY at H:MM AM/PM' date format", () => {
+    const insert = reminderToTaskInsert("user-1", { title: "x", dueDate: "June 16, 2026 at 12:00 PM" })
+    expect(insert.deadline).not.toBeNull()
+    expect(new Date(insert.deadline as string).getUTCFullYear()).toBe(2026)
+  })
+})
+
+describe("coerceRemindersPayload — Shortcuts body shape tolerance", () => {
+  const items = [{ title: "a" }, { title: "b" }]
+
+  it("passes through the canonical { reminders: [...] }", () => {
+    expect(coerceRemindersPayload({ reminders: items })).toEqual({ reminders: items })
+  })
+
+  it("wraps a bare top-level array", () => {
+    expect(coerceRemindersPayload(items)).toEqual({ reminders: items })
+  })
+
+  it("parses a stringified reminders array", () => {
+    expect(coerceRemindersPayload({ reminders: JSON.stringify(items) })).toEqual({ reminders: items })
+  })
+
+  it("parses an array of stringified item objects", () => {
+    expect(coerceRemindersPayload({ reminders: items.map((i) => JSON.stringify(i)) })).toEqual({ reminders: items })
+  })
+
+  it("parses a fully stringified body", () => {
+    expect(coerceRemindersPayload(JSON.stringify({ reminders: items }))).toEqual({ reminders: items })
+  })
+
+  it("returns an empty list for garbage rather than throwing", () => {
+    expect(coerceRemindersPayload("not json")).toEqual({ reminders: [] })
+    expect(coerceRemindersPayload(null)).toEqual({ reminders: [] })
+    expect(coerceRemindersPayload({ reminders: 42 })).toEqual({ reminders: [] })
   })
 })

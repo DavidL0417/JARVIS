@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 
-import { ingestAppleReminders } from "@/lib/apple-reminders/ingest"
+import { coerceRemindersPayload, ingestAppleReminders } from "@/lib/apple-reminders/ingest"
 import { requireAppleRemindersToken } from "@/lib/supabase/apple-reminders-auth"
 import { markAppleRemindersTokenUsed } from "@/lib/supabase/apple-reminders-tokens"
 import { getConnectorSettingsForUser, isConnectorEnabled } from "@/lib/supabase/connector-settings"
@@ -23,7 +23,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 })
   }
 
-  const parsed = appleRemindersIngestRequestSchema.safeParse(body)
+  const parsed = appleRemindersIngestRequestSchema.safeParse(coerceRemindersPayload(body))
   if (!parsed.success) {
     return NextResponse.json({ error: "Invalid request.", issues: parsed.error.flatten() }, { status: 400 })
   }
