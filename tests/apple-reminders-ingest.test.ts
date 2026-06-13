@@ -99,6 +99,26 @@ describe("coerceRemindersPayload — Shortcuts body shape tolerance", () => {
     expect(coerceRemindersPayload(JSON.stringify({ reminders: items }))).toEqual({ reminders: items })
   })
 
+  it("parses Apple Shortcuts' real shape: reminders as newline-delimited JSON objects", () => {
+    // Exact shape captured from a live Shortcut run: a Text body field holding a
+    // list of dictionaries becomes a string of NDJSON under "reminders".
+    const body = {
+      reminders:
+        '{"title":"Buy batteries","notes":"","priority":"None","list":"Reminders","dueDate":"May 21, 2026 at 5:00 PM"}\n' +
+        '{"title":"Do laundry","notes":"","priority":"None","list":"Reminders","dueDate":""}',
+    }
+    expect(coerceRemindersPayload(body)).toEqual({
+      reminders: [
+        { title: "Buy batteries", notes: "", priority: "None", list: "Reminders", dueDate: "May 21, 2026 at 5:00 PM" },
+        { title: "Do laundry", notes: "", priority: "None", list: "Reminders", dueDate: "" },
+      ],
+    })
+  })
+
+  it("parses a single reminder sent as one JSON object string", () => {
+    expect(coerceRemindersPayload({ reminders: '{"title":"Solo"}' })).toEqual({ reminders: [{ title: "Solo" }] })
+  })
+
   it("returns an empty list for garbage rather than throwing", () => {
     expect(coerceRemindersPayload("not json")).toEqual({ reminders: [] })
     expect(coerceRemindersPayload(null)).toEqual({ reminders: [] })
