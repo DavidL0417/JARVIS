@@ -5,7 +5,7 @@ import {
   getClaudePlannerModelOption,
 } from "@/lib/ai/claude-models"
 import type { AssistantRuntimeContext } from "@/lib/assistant/context"
-import type { AssistantConversationEntry } from "@/types"
+import type { AssistantConversationEntry, Task } from "@/types"
 
 const DEFAULT_DIALOGUE_MODEL = getClaudePlannerModelOption(DEFAULT_CLAUDE_PLANNER_MODEL_KEY).model
 
@@ -36,19 +36,64 @@ interface SecretaryDialogueReply {
   model?: string
 }
 
+const ASSISTANT_TASK_SNAPSHOT_LIMIT = 30
+const ASSISTANT_UPCOMING_WINDOW_MS = 7 * 24 * 60 * 60 * 1000
+
+function taskActionableTime(task: Task): number | null {
+  const due = task.deadline ?? task.scheduledFor
+  return due ? new Date(due).getTime() : null
+}
+
+function taskSourceLabel(task: Task): string {
+  if (task.lastSyncedFrom === "apple_reminders") return "Apple Reminders"
+  if (task.lastSyncedFrom === "caldav") return "Apple Calendar"
+  return "JARVIS"
+}
+
+// The assistant used to see only the 8 OLDEST active tasks (slice over a
+// created-at-ascending list), so anything captured recently — Apple Reminders,
+// fresh quick tasks — was invisible. Now surface (1) tasks due in the next week
+// and (2) the most recently captured tasks, which guarantees freshly-added items
+// of any source. Each task is tagged with its source so the assistant can answer
+// "which Apple Reminders…" precisely.
+export function selectAssistantTasks(tasks: Task[], now: number) {
+  const active = tasks.filter(
+    (task) => task.status !== "completed" && task.status !== "missed",
+  )
+  // runtime.tasks arrives oldest-first, so a higher index means more recently added.
+  const indexed = active.map((task, index) => ({ task, index }))
+
+  const upcoming = indexed
+    .filter((entry) => {
+      const due = taskActionableTime(entry.task)
+      return due !== null && due >= now && due <= now + ASSISTANT_UPCOMING_WINDOW_MS
+    })
+    .sort((a, b) => (taskActionableTime(a.task) as number) - (taskActionableTime(b.task) as number))
+  const recent = [...indexed].sort((a, b) => b.index - a.index)
+
+  const selected: Task[] = []
+  const seen = new Set<number>()
+  for (const entry of [...upcoming, ...recent]) {
+    if (seen.has(entry.index)) continue
+    seen.add(entry.index)
+    selected.push(entry.task)
+    if (selected.length >= ASSISTANT_TASK_SNAPSHOT_LIMIT) break
+  }
+
+  return selected.map((task) => ({
+    title: task.title,
+    status: task.status,
+    priority: task.priority,
+    deadline: task.deadline,
+    scheduledFor: task.scheduledFor,
+    durationMinutes: task.durationMinutes,
+    immutable: task.isImmutable,
+    source: taskSourceLabel(task),
+  }))
+}
+
 function buildTaskSnapshot(runtime: AssistantRuntimeContext) {
-  return runtime.tasks
-    .filter((task) => task.status !== "completed" && task.status !== "missed")
-    .slice(0, 8)
-    .map((task) => ({
-      title: task.title,
-      status: task.status,
-      priority: task.priority,
-      deadline: task.deadline,
-      scheduledFor: task.scheduledFor,
-      durationMinutes: task.durationMinutes,
-      immutable: task.isImmutable,
-    }))
+  return selectAssistantTasks(runtime.tasks, Date.now())
 }
 
 function buildEventSnapshot(runtime: AssistantRuntimeContext) {
