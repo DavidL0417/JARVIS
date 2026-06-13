@@ -79,6 +79,8 @@ export const taskSchema = z.object({
   sourceSnapshotId: z.string().uuid().nullable(),
   sourceCandidateId: z.string().uuid().nullable(),
   planId: z.string().uuid().nullable(),
+  externalTaskId: z.string().min(1).nullable(),
+  lastSyncedFrom: z.enum(["local", "caldav"]),
 })
 
 export const userCalendarSchema = z.object({

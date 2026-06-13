@@ -182,7 +182,9 @@ export async function refreshSourcesForUser(input: {
           source: "caldav",
           status: result.success ? "fresh" : failed ? "failed" : "skipped",
           summary: result.success
-            ? `CalDAV refreshed with ${result.events.length} mirrored events.`
+            ? `CalDAV refreshed with ${result.events.length} mirrored events${
+                result.reminderCount ? ` and ${result.reminderCount} reminders` : ""
+              }.`
             : result.error || "CalDAV refresh failed.",
           runnable: failed,
           error: failed ? result.error || "CalDAV refresh failed." : undefined,

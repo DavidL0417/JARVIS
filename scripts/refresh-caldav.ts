@@ -57,6 +57,7 @@ async function main() {
         needsAuthorization: result.needsAuthorization,
         error: result.error ?? null,
         eventCount: result.events.length,
+        reminderCount: result.reminderCount ?? 0,
         calendarCount: result.calendars.length,
         calendars: result.calendars.map((calendar) => ({
           name: calendar.name,

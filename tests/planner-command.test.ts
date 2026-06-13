@@ -39,6 +39,8 @@ function makeContext(command: string): SchedulePreparationContext {
         sourceSnapshotId: null,
         sourceCandidateId: null,
         planId: null,
+        externalTaskId: null,
+        lastSyncedFrom: "local",
       },
     ],
     preferences: {
@@ -101,6 +103,8 @@ describe("planner prompt payload", () => {
       sourceSnapshotId: null,
       sourceCandidateId: null,
       planId: null,
+      externalTaskId: null,
+      lastSyncedFrom: "local",
     })
 
     vi.useFakeTimers()
@@ -139,6 +143,8 @@ describe("planner prompt payload", () => {
         sourceSnapshotId: null,
         sourceCandidateId: null,
         planId: null,
+        externalTaskId: null,
+        lastSyncedFrom: "local",
       },
       {
         id: mlmTaskId,
@@ -157,6 +163,8 @@ describe("planner prompt payload", () => {
         sourceSnapshotId: null,
         sourceCandidateId: null,
         planId: null,
+        externalTaskId: null,
+        lastSyncedFrom: "local",
       },
     ]
 
