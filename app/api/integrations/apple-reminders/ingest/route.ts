@@ -16,16 +16,16 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: auth.error }, { status: auth.status })
   }
 
-  let body: unknown
-  try {
-    body = await request.json()
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 })
-  }
+  // TEMP DEBUG: read raw text so we can echo the exact bytes the Shortcut sends.
+  const rawBody = await request.text()
+  const debugRaw = rawBody.slice(0, 1500)
 
-  const parsed = appleRemindersIngestRequestSchema.safeParse(coerceRemindersPayload(body))
+  const parsed = appleRemindersIngestRequestSchema.safeParse(coerceRemindersPayload(rawBody))
   if (!parsed.success) {
-    return NextResponse.json({ error: "Invalid request.", issues: parsed.error.flatten() }, { status: 400 })
+    return NextResponse.json(
+      { error: "Invalid request.", issues: parsed.error.flatten(), debugRaw },
+      { status: 400 },
+    )
   }
 
   try {
@@ -38,7 +38,7 @@ export async function POST(request: Request) {
     const result = await ingestAppleReminders(auth.adminClient, userId, parsed.data.reminders)
     await markAppleRemindersTokenUsed(auth.tokenRecord.id)
 
-    return NextResponse.json({ success: true, ...result })
+    return NextResponse.json({ success: true, ...result, debugRaw })
   } catch (error) {
     const message = error instanceof Error ? error.message : "Apple Reminders ingest failed."
     return NextResponse.json({ error: message }, { status: 500 })
