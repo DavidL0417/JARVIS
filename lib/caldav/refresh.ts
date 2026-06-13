@@ -54,14 +54,17 @@ function supportsCalendarEvents(calendar: CalDavCalendar): boolean {
   return components.some((component) => component.toUpperCase() === "VEVENT")
 }
 
-// Apple Reminders live in VTODO collections on the same iCloud account. Only treat
-// a collection as a reminder list when it explicitly advertises VTODO — unlike the
-// event filter, a missing component set is *not* assumed to be a reminder list, so
-// ordinary calendars are never double-fetched for todos.
-function supportsTodos(calendar: CalDavCalendar): boolean {
-  const components = calendar.components
-  if (!components || components.length === 0) return false
-  return components.some((component) => component.toUpperCase() === "VTODO")
+// DISABLED — Apple froze CalDAV access to "upgraded" iCloud Reminders (iOS 13+ /
+// macOS Catalina+ moved Reminders to a CloudKit store). The CalDAV VTODO endpoint
+// only ever returns a stale legacy snapshot, never the user's current reminders
+// (verified 2026-06-13: the live Reminders app and CalDAV share almost no items).
+// Returning false makes the reminder mirror a no-op so we stop ingesting dead data.
+// The schema (tasks.external_task_id/last_synced_from) and the VTODO parser
+// (lib/caldav/todos.ts) are kept for the device-side reader that will replace this.
+// To re-enable for a NON-upgraded account, restore the component check below.
+// See memory: project-jarvis-calendar-sync.
+function supportsTodos(_calendar: CalDavCalendar): boolean {
+  return false
 }
 
 interface CalDavCalendarObject {
