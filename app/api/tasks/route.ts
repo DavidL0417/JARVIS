@@ -27,6 +27,8 @@ function buildTaskInsert(input: CreateTaskRequest, userId: string) {
     sourceSnapshotId: input.sourceSnapshotId ?? null,
     sourceCandidateId: input.sourceCandidateId ?? null,
     planId: input.planId ?? null,
+    externalTaskId: null,
+    lastSyncedFrom: "local",
   }
 
   return mapTaskToInsert(task)

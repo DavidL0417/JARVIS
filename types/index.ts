@@ -11,6 +11,7 @@ export type UserIntegrationStatus = "connected" | "needs_reauth" | "disconnected
 export type SourceConnectorId = "google_calendar" | "notion" | "gmail" | "canvas" | "caldav"
 export type SourceConnectorStatus = "ready" | "connected" | "auth_needed" | "missing_config" | "failed"
 export type SyncOrigin = "local" | "gcal" | "caldav"
+export type TaskSyncOrigin = "local" | "caldav"
 export type CalendarSource = "local" | "google" | "caldav" | "imported" | "task"
 export type CalendarSyncPreference = "active" | "pending" | "ignored"
 export type MemoryKind = "preference" | "task_context" | "source_observation" | "candidate" | "observation" | "rule"
@@ -98,6 +99,8 @@ export interface TaskRow {
   source_snapshot_id: string | null
   source_candidate_id: string | null
   plan_id: string | null
+  external_task_id: string | null
+  last_synced_from: TaskSyncOrigin
 }
 
 export interface ScheduleEventRow {
@@ -297,11 +300,20 @@ export interface AssistantToolRunRow {
 export type UserPreferencesUpsertRow = Omit<UserPreferencesRow, "id" | "created_at" | "updated_at">
 export type TaskInsertRow = Omit<
   TaskRow,
-  "id" | "created_at" | "updated_at" | "source_snapshot_id" | "source_candidate_id" | "plan_id"
+  | "id"
+  | "created_at"
+  | "updated_at"
+  | "source_snapshot_id"
+  | "source_candidate_id"
+  | "plan_id"
+  | "external_task_id"
+  | "last_synced_from"
 > & {
   source_snapshot_id?: string | null
   source_candidate_id?: string | null
   plan_id?: string | null
+  external_task_id?: string | null
+  last_synced_from?: TaskSyncOrigin
 }
 export type TaskUpdateRow = Partial<Omit<TaskInsertRow, "user_id">>
 export type ScheduleEventInsertRow = Omit<ScheduleEventRow, "id" | "created_at" | "updated_at" | "plan_id"> & {
@@ -370,6 +382,8 @@ export interface Task {
   sourceSnapshotId: string | null
   sourceCandidateId: string | null
   planId: string | null
+  externalTaskId: string | null
+  lastSyncedFrom: TaskSyncOrigin
 }
 
 export interface ScheduleEvent {

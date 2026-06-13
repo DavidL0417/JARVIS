@@ -16,10 +16,19 @@ import {
 } from "@/lib/supabase/caldav-integration"
 import { createSupabaseAdminClient } from "@/lib/supabase/server"
 import { parseCalDavEventsFromIcs, toCalDavScheduleEvent } from "@/lib/caldav/events"
+import { parseCalDavTodosFromIcs, toCalDavTaskInsert } from "@/lib/caldav/todos"
 import { normalizeHexColor } from "@/lib/color"
 import { pruneExpiredMirroredEvents } from "@/lib/supabase/schedule-events"
 import { loadUserTimezone } from "@/lib/data/user-timezone"
-import type { ScheduleEvent, ScheduleEventRow, UserCalendar, UserCalendarRow } from "@/types"
+import type {
+  Priority,
+  ScheduleEvent,
+  ScheduleEventRow,
+  TaskInsertRow,
+  TaskStatus,
+  UserCalendar,
+  UserCalendarRow,
+} from "@/types"
 
 const DAY_IN_MS = 24 * 60 * 60 * 1000
 const CALDAV_EVENT_LOOKBACK_DAYS = 90
@@ -45,6 +54,16 @@ function supportsCalendarEvents(calendar: CalDavCalendar): boolean {
   return components.some((component) => component.toUpperCase() === "VEVENT")
 }
 
+// Apple Reminders live in VTODO collections on the same iCloud account. Only treat
+// a collection as a reminder list when it explicitly advertises VTODO — unlike the
+// event filter, a missing component set is *not* assumed to be a reminder list, so
+// ordinary calendars are never double-fetched for todos.
+function supportsTodos(calendar: CalDavCalendar): boolean {
+  const components = calendar.components
+  if (!components || components.length === 0) return false
+  return components.some((component) => component.toUpperCase() === "VTODO")
+}
+
 interface CalDavCalendarObject {
   data?: unknown
   url: string
@@ -56,6 +75,7 @@ export interface CalDavSyncResponse {
   needsAuthorization: boolean
   events: ScheduleEvent[]
   calendars: UserCalendar[]
+  reminderCount?: number
   error?: string
 }
 
@@ -80,6 +100,36 @@ function toExternalEventId(input: {
     hashValue(input.uid),
     input.recurrenceKey ? hashValue(input.recurrenceKey) : "single",
   ].join(":")
+}
+
+// Mirror toExternalEventId's shape so the reminder-list hash sits at a known index
+// (split(":")[1]) — reconciliation reads it back to scope deletes per list.
+const CALDAV_TODO_ID_PREFIX = "caldav-todo"
+
+// tsdav's fetchCalendarObjects defaults its calendar-query filter to VEVENT, so a
+// VTODO collection returns zero objects unless we ask for VTODO explicitly. (We
+// also drop the timeRange: reminders are frequently undated.)
+const VTODO_QUERY_FILTERS = [
+  {
+    "comp-filter": {
+      _attributes: { name: "VCALENDAR" },
+      "comp-filter": { _attributes: { name: "VTODO" } },
+    },
+  },
+]
+
+function toExternalTaskId(input: { calendarUrl: string; objectUrl: string; uid: string }) {
+  return [
+    CALDAV_TODO_ID_PREFIX,
+    hashValue(input.calendarUrl),
+    hashValue(input.objectUrl),
+    hashValue(input.uid),
+  ].join(":")
+}
+
+function listHashFromExternalTaskId(externalTaskId: string): string | null {
+  const parts = externalTaskId.split(":")
+  return parts[0] === CALDAV_TODO_ID_PREFIX && parts[1] ? parts[1] : null
 }
 
 function normalizeCalendarName(value: CalDavCalendar["displayName"]) {
@@ -350,23 +400,146 @@ async function persistCalDavEvents(userId: string, events: ScheduleEvent[]) {
   }
 }
 
+interface ExistingMirroredTask {
+  external_task_id: string
+  status: TaskStatus
+  scheduled_for: string | null
+  plan_id: string | null
+  priority: Priority
+  duration_minutes: number | null
+}
+
+async function persistCalDavTasks(userId: string, incoming: TaskInsertRow[]) {
+  if (incoming.length === 0) {
+    return
+  }
+
+  const adminClient = createSupabaseAdminClient()
+  const externalIds = incoming
+    .map((task) => task.external_task_id)
+    .filter((id): id is string => typeof id === "string" && id.length > 0)
+
+  const { data: existingTasks, error: existingTasksError } = await adminClient
+    .from("tasks")
+    .select("external_task_id, status, scheduled_for, plan_id, priority, duration_minutes")
+    .eq("user_id", userId)
+    .eq("last_synced_from", "caldav")
+    .in("external_task_id", externalIds)
+
+  if (existingTasksError) {
+    throw new Error(existingTasksError.message)
+  }
+
+  const existingByExternalId = new Map(
+    (existingTasks ?? [])
+      .filter((task): task is ExistingMirroredTask => typeof task.external_task_id === "string")
+      .map((task) => [task.external_task_id, task]),
+  )
+
+  const rows = incoming.map((row) => {
+    const existing = row.external_task_id ? existingByExternalId.get(row.external_task_id) : null
+    if (!existing) {
+      return row
+    }
+
+    // Preserve planner-owned fields so a re-sync never clobbers scheduling the
+    // user (or the planner) applied locally. Only the reminder-derived fields
+    // (title, deadline, description, all_day) are refreshed from the phone.
+    return {
+      ...row,
+      status: existing.status,
+      scheduled_for: existing.scheduled_for,
+      plan_id: existing.plan_id,
+      priority: existing.priority,
+      duration_minutes: existing.duration_minutes,
+    }
+  })
+
+  const { error } = await adminClient
+    .from("tasks")
+    .upsert(rows, { onConflict: "user_id,external_task_id" })
+
+  if (error) {
+    throw new Error(error.message)
+  }
+}
+
+async function reconcileRemovedCalDavTasks(
+  userId: string,
+  succeededListHashes: Set<string>,
+  liveExternalTaskIds: Set<string>,
+) {
+  // Only reconcile lists we actually fetched this run — a list that errored is
+  // left untouched so a transient failure can't wipe its mirrored tasks.
+  if (succeededListHashes.size === 0) {
+    return
+  }
+
+  const adminClient = createSupabaseAdminClient()
+  const { data, error } = await adminClient
+    .from("tasks")
+    .select("id, external_task_id")
+    .eq("user_id", userId)
+    .eq("last_synced_from", "caldav")
+
+  if (error) {
+    throw new Error(error.message)
+  }
+
+  const staleIds = (data ?? [])
+    .filter((row) => {
+      const externalTaskId = (row as { external_task_id: string | null }).external_task_id
+      if (typeof externalTaskId !== "string") {
+        return false
+      }
+      const listHash = listHashFromExternalTaskId(externalTaskId)
+      return Boolean(listHash && succeededListHashes.has(listHash) && !liveExternalTaskIds.has(externalTaskId))
+    })
+    .map((row) => (row as { id: string }).id)
+
+  if (staleIds.length === 0) {
+    return
+  }
+
+  // Drop any planner-created schedule blocks first: the task FK is on-delete-set-null,
+  // so an orphaned block would otherwise linger on the grid as an untitled ghost.
+  const { error: scheduleError } = await adminClient
+    .from("schedule_events")
+    .delete()
+    .eq("user_id", userId)
+    .in("task_id", staleIds)
+
+  if (scheduleError) {
+    throw new Error(scheduleError.message)
+  }
+
+  const { error: deleteError } = await adminClient.from("tasks").delete().eq("user_id", userId).in("id", staleIds)
+
+  if (deleteError) {
+    throw new Error(deleteError.message)
+  }
+}
+
 async function recordCalDavSourceSnapshot(
   userId: string,
   eventCount: number,
   calendarCount: number,
   failedCount = 0,
+  reminderCount = 0,
 ) {
   const adminClient = createSupabaseAdminClient()
   const failureNote = failedCount > 0 ? ` ${failedCount} calendar(s) failed to import.` : ""
+  const reminderNote = reminderCount > 0 ? ` Mirrored ${reminderCount} reminder(s).` : ""
   const { error } = await adminClient.from("source_snapshots").insert({
     user_id: userId,
     source: "caldav",
     freshness: "fresh",
-    summary: `Imported ${eventCount} CalDAV events from ${calendarCount} calendars.${failureNote}`,
+    summary: `Imported ${eventCount} CalDAV events from ${calendarCount} calendars.${reminderNote}${failureNote}`,
     payload: {
       eventCount,
       calendarCount,
       failedCount,
+      reminderCount,
     },
   })
 
@@ -489,7 +662,65 @@ export async function refreshCalDavForUser(userId: string): Promise<CalDavSyncRe
 
     await persistCalDavEvents(userId, events)
     await pruneExpiredMirroredEvents(createSupabaseAdminClient(), userId)
-    await recordCalDavSourceSnapshot(userId, events.length, activeCalendars.length, failedResults.length)
+
+    // Apple Reminders ride the same iCloud account as VTODO collections. Mirror
+    // open reminders one-way into tasks, then reconcile any that were completed or
+    // deleted on the phone. Fetched without a time range — todos may be undated.
+    const reminderCollections = fetchedCalendars.filter(supportsTodos)
+    const reminderResults = await Promise.allSettled(
+      reminderCollections.map(async (calendar) => {
+        const objects = (await client.fetchCalendarObjects({
+          calendar,
+          filters: VTODO_QUERY_FILTERS,
+        })) as CalDavCalendarObject[]
+        const taskInserts = objects.flatMap((object) => {
+          const calendarData = typeof object.data === "string" ? object.data : ""
+          const parsedTodos = parseCalDavTodosFromIcs({ calendarData, timeZone })
+
+          return parsedTodos.map((parsedTodo) =>
+            toCalDavTaskInsert({
+              parsedTodo,
+              userId,
+              externalTaskId: toExternalTaskId({
+                calendarUrl: calendar.url,
+                objectUrl: object.url,
+                uid: parsedTodo.uid,
+              }),
+            }),
+          )
+        })
+
+        return { listHash: hashValue(calendar.url), taskInserts }
+      }),
+    )
+
+    const succeededReminderLists = new Set<string>()
+    const liveTaskIds = new Set<string>()
+    const reminderTaskInserts: TaskInsertRow[] = []
+    for (const result of reminderResults) {
+      if (result.status !== "fulfilled") {
+        continue
+      }
+      succeededReminderLists.add(result.value.listHash)
+      for (const insert of result.value.taskInserts) {
+        reminderTaskInserts.push(insert)
+        if (insert.external_task_id) {
+          liveTaskIds.add(insert.external_task_id)
+        }
+      }
+    }
+
+    await persistCalDavTasks(userId, reminderTaskInserts)
+    await reconcileRemovedCalDavTasks(userId, succeededReminderLists, liveTaskIds)
+    const reminderCount = reminderTaskInserts.length
+
+    await recordCalDavSourceSnapshot(
+      userId,
+      events.length,
+      activeCalendars.length,
+      failedResults.length,
+      reminderCount,
+    )
     await updateCalDavLastSyncedAt(userId)
 
     const [mirroredEvents, mirroredCalendars] = await Promise.all([
@@ -503,6 +734,7 @@ export async function refreshCalDavForUser(userId: string): Promise<CalDavSyncRe
       needsAuthorization: false,
       events: mirroredEvents,
       calendars: mirroredCalendars,
+      reminderCount,
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : "CalDAV sync failed."
