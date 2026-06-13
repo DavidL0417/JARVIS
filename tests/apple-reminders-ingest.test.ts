@@ -74,6 +74,12 @@ describe("Apple Reminders ingest mapping", () => {
     expect(insert.deadline).not.toBeNull()
     expect(new Date(insert.deadline as string).getUTCFullYear()).toBe(2026)
   })
+
+  it("anchors a naive Shortcut due time to the user's timezone", () => {
+    // "5:00 PM" in America/Chicago (CDT = UTC-5 in May) is 22:00 UTC — not 17:00.
+    const insert = reminderToTaskInsert("user-1", { title: "x", dueDate: "May 21, 2026 at 5:00 PM" }, "America/Chicago")
+    expect(insert.deadline).toBe("2026-05-21T22:00:00.000Z")
+  })
 })
 
 describe("coerceRemindersPayload — Shortcuts body shape tolerance", () => {
