@@ -13,7 +13,7 @@ export const calendarSourceSchema = z.enum(["local", "google", "caldav", "import
 export const calendarSyncPreferenceSchema = z.enum(["active", "pending", "ignored"])
 export const integrationProviderSchema = z.enum(["google", "notion", "canvas", "caldav"])
 export const userIntegrationStatusSchema = z.enum(["connected", "needs_reauth", "disconnected", "error"])
-export const sourceConnectorIdSchema = z.enum(["google_calendar", "notion", "gmail", "canvas", "caldav"])
+export const sourceConnectorIdSchema = z.enum(["google_calendar", "notion", "gmail", "canvas", "caldav", "apple_reminders"])
 export const sourceConnectorStatusSchema = z.enum(["ready", "connected", "auth_needed", "missing_config", "failed"])
 export const memoryLayerSchema = z.enum([
   "operating_rules",

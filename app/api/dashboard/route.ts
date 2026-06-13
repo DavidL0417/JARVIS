@@ -33,6 +33,7 @@ import {
   getStoredCalDavIntegration,
   type StoredCalDavIntegration,
 } from "@/lib/supabase/caldav-integration"
+import { userHasAppleRemindersToken } from "@/lib/supabase/apple-reminders-tokens"
 import { getConnectorSettingsForUser, isConnectorEnabled } from "@/lib/supabase/connector-settings"
 import {
   getStoredGoogleIntegration,
@@ -222,6 +223,7 @@ function deriveSourceConnectors(input: {
   notionToken: IntegrationTokenRow | null
   canvasIntegration: StoredCanvasIntegration | null
   calDavIntegration: StoredCalDavIntegration | null
+  appleRemindersConnected: boolean
   connectorSettings: Map<SourceConnectorId, boolean>
 }): SourceConnector[] {
   const googleIntegration = getIntegration(input.integrations, "google")
@@ -238,6 +240,7 @@ function deriveSourceConnectors(input: {
   const notionSource = getLatestSource(input.sources, "notion")
   const canvasSource = getLatestSource(input.sources, "canvas")
   const calDavSource = getLatestSource(input.sources, "caldav")
+  const appleRemindersSource = getLatestSource(input.sources, "apple_reminders")
   const googleAccount = getIntegrationAccount(googleIntegration)
   const notionAccount = getIntegrationAccount(notionIntegration)
   const canvasAccount =
@@ -540,6 +543,42 @@ function deriveSourceConnectors(input: {
     })
   }
 
+  // Apple Reminders has no server-side refresh — an iPhone Shortcut POSTs the
+  // snapshot — so canRun is always false. "Connected" means an active token exists.
+  if (!input.appleRemindersConnected) {
+    sourceConnectors.push({
+      id: "apple_reminders",
+      status: "auth_needed",
+      account: null,
+      canRun: false,
+      detail: "Generate a token, install the iPhone Shortcut, and run it to sync your Apple Reminders into tasks.",
+      selectedSourceId: null,
+      selectedSourceName: null,
+    })
+  } else if (appleRemindersSource?.freshness === "failed") {
+    sourceConnectors.push({
+      id: "apple_reminders",
+      status: "failed",
+      account: null,
+      canRun: false,
+      detail: appleRemindersSource.summary || "The last reminders sync failed. Re-run the Shortcut.",
+      selectedSourceId: null,
+      selectedSourceName: null,
+    })
+  } else {
+    sourceConnectors.push({
+      id: "apple_reminders",
+      status: appleRemindersSource ? "connected" : "ready",
+      account: null,
+      canRun: false,
+      detail: appleRemindersSource
+        ? "Reminders sync in from your iPhone Shortcut. Completing or deleting one there removes its task on the next run."
+        : "Token ready. Install the Shortcut and run it once to push your reminders.",
+      selectedSourceId: null,
+      selectedSourceName: null,
+    })
+  }
+
   return sourceConnectors.map((connector) => {
     const enabled = isConnectorEnabled(input.connectorSettings, connector.id)
 
@@ -587,6 +626,7 @@ export async function GET() {
       storedCanvasIntegration,
       storedCalDavIntegration,
       connectorSettings,
+      appleRemindersConnected,
       dailyPlanResult,
     ] = await Promise.all([
       adminClient
@@ -633,6 +673,7 @@ export async function GET() {
       getStoredCanvasIntegration(user.id),
       getStoredCalDavIntegration(user.id),
       getConnectorSettingsForUser(user.id, adminClient),
+      userHasAppleRemindersToken(user.id),
       adminClient
         .from("daily_plans")
         .select(DAILY_PLAN_SELECT)
@@ -692,6 +733,7 @@ export async function GET() {
       notionToken: storedNotionToken,
       canvasIntegration: storedCanvasIntegration,
       calDavIntegration: storedCalDavIntegration,
+      appleRemindersConnected,
       connectorSettings,
     })
     const dailyPlan = dailyPlanResult.data ? mapDailyPlanRowToDailyPlan(dailyPlanResult.data) : null

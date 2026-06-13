@@ -22,6 +22,7 @@ export type SourcePanelId =
   | "gmail"
   | "notion"
   | "canvas"
+  | "apple_reminders"
   | "manual"
   | "todoist"
   | "google_tasks"
@@ -73,6 +74,8 @@ export function getConnector(connectors: SourceConnector[], id: SourceConnectorI
             ? "Connect Apple Calendar with your Apple ID email and app-specific password."
           : id === "google_calendar"
             ? "Authorize Google Calendar read access before planning from current commitments."
+          : id === "apple_reminders"
+            ? "Generate a token and install the iPhone Shortcut to sync Apple Reminders into tasks."
             : "Authorize Google with Gmail read-only access before scanning mail context.",
   }
 }

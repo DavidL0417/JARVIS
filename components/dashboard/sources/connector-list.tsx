@@ -59,6 +59,13 @@ export const CONNECTOR_DEFINITIONS: ConnectorDefinition[] = [
     summary: "Import planner items from Canvas and sync completed planner items back.",
   },
   {
+    id: "apple_reminders",
+    title: "Apple Reminders",
+    group: "tasks_courses",
+    icon: CheckCircle2,
+    summary: "Sync your iPhone reminders into tasks via a Shortcut you jot into on the go.",
+  },
+  {
     id: "manual",
     title: "Manual context",
     group: "files",

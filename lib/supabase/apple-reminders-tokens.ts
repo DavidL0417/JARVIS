@@ -57,6 +57,21 @@ export async function getAppleRemindersTokenRecord(rawToken: string) {
   return data[0] as AppleRemindersTokenRecord
 }
 
+// Whether the user has an active (non-revoked) token — drives the connector's
+// "connected vs not connected" status in the Sources pane.
+export async function userHasAppleRemindersToken(userId: string): Promise<boolean> {
+  const adminClient = createSupabaseAdminClient()
+  const { data, error } = await adminClient.rpc("user_has_apple_reminders_token", {
+    token_user_id: userId,
+  })
+
+  if (error) {
+    throw new Error(error.message)
+  }
+
+  return data === true
+}
+
 export async function markAppleRemindersTokenUsed(tokenId: string) {
   const adminClient = createSupabaseAdminClient()
   const { error } = await adminClient.rpc("mark_apple_reminders_token_used", {

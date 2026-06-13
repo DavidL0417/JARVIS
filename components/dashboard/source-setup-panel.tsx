@@ -7,6 +7,7 @@ import {
   Cable,
   CalendarDays,
   ChevronDown,
+  Copy,
   FileUp,
   GraduationCap,
   KeyRound,
@@ -73,6 +74,8 @@ import type {
   SourceSnapshotSummary,
 } from "@/types"
 
+const APPLE_REMINDERS_SHORTCUT_URL = "https://www.icloud.com/shortcuts/39681b0ac0624c1fbb6b809d2afe0fcb"
+
 async function readJson<T>(response: Response, fallback: string): Promise<T> {
   const payload = await response.json().catch(() => null)
 
@@ -108,6 +111,7 @@ export function SourceSetupPanel({
   const calDavConnector = getConnector(sourceConnectors, "caldav")
   const gmailConnector = getConnector(sourceConnectors, "gmail")
   const canvasConnector = getConnector(sourceConnectors, "canvas")
+  const appleRemindersConnector = getConnector(sourceConnectors, "apple_reminders")
   const googleCalendarConfigMissing = googleCalendarConnector.status === "missing_config"
   const gmailConfigMissing = gmailConnector.status === "missing_config"
   const [calDavMode, setCalDavMode] = useState<CalDavSetupMode>(
@@ -124,6 +128,8 @@ export function SourceSetupPanel({
   const [showCanvasToken, setShowCanvasToken] = useState(
     canvasConnector.status === "connected" || canvasConnector.status === "ready",
   )
+  const [appleRemindersToken, setAppleRemindersToken] = useState<string | null>(null)
+  const [appleRemindersTokenCopied, setAppleRemindersTokenCopied] = useState(false)
   const [status, setStatus] = useState<ActionStatus>("idle")
   const [errorMessage, setErrorMessage] = useState("")
   const fileInputRef = useRef<HTMLInputElement | null>(null)
@@ -222,6 +228,18 @@ export function SourceSetupPanel({
       }
 
       return canvasConnector.status
+    }
+
+    if (connector.id === "apple_reminders") {
+      if (!appleRemindersConnector.enabled) {
+        return "disabled"
+      }
+
+      if (appleRemindersConnector.status === "failed") {
+        return "refresh_issue"
+      }
+
+      return appleRemindersConnector.status
     }
 
     if (!notionConnector.enabled) {
@@ -464,6 +482,32 @@ export function SourceSetupPanel({
         throw new Error(getPayloadMessage(payload, "Canvas import failed."))
       }
     })
+  }
+
+  async function handleGenerateAppleRemindersToken() {
+    setAppleRemindersTokenCopied(false)
+    await runAction(async () => {
+      const response = await fetch("/api/integrations/apple-reminders/connect", {
+        method: "POST",
+      })
+      const payload = await readJson<{ token?: string }>(response, "Failed to generate token.")
+
+      if (payload.token) {
+        setAppleRemindersToken(payload.token)
+      }
+    })
+  }
+
+  async function handleCopyAppleRemindersToken() {
+    if (!appleRemindersToken) {
+      return
+    }
+    try {
+      await navigator.clipboard.writeText(`Bearer ${appleRemindersToken}`)
+      setAppleRemindersTokenCopied(true)
+    } catch {
+      setAppleRemindersTokenCopied(false)
+    }
   }
 
   function renderDetail() {
@@ -858,6 +902,93 @@ export function SourceSetupPanel({
                 </div>
               </div>
             ) : null}
+          </div>
+        </div>
+      )
+    }
+
+    if (selectedConnector.id === "apple_reminders") {
+      const isConnected =
+        appleRemindersConnector.status === "connected" || appleRemindersConnector.status === "ready"
+
+      return (
+        <div className="flex min-w-0 flex-col gap-5">
+          <DetailHeader
+            connector={selectedConnector}
+            state={state}
+            sourceConnector={appleRemindersConnector}
+            onEnabledChange={(enabled) => void handleConnectorEnabled("apple_reminders", enabled)}
+            disabled={busy}
+          />
+          <FailedSourceAlert sources={failedSourcesByKind.apple_reminders ?? []} />
+          <DetailNote message={appleRemindersConnector.detail} />
+          <p className="max-w-[60ch] text-[12px] leading-5 text-muted-foreground">
+            Apple does not let apps read iCloud Reminders directly, so a small iPhone Shortcut pushes
+            your incomplete reminders to JARVIS. Set it up once:
+          </p>
+
+          <div className="flex flex-col gap-2">
+            <FieldLabel className="text-[12px]">1 &middot; Generate your token</FieldLabel>
+            <div className="flex flex-wrap gap-2">
+              <ActionButton
+                icon={KeyRound}
+                label={appleRemindersToken || isConnected ? "Regenerate token" : "Generate token"}
+                onClick={handleGenerateAppleRemindersToken}
+                disabled={busy || !appleRemindersConnector.enabled}
+              />
+            </div>
+            {appleRemindersToken ? (
+              <Field className="gap-2">
+                <InputGroup className="min-w-0 rounded-sm border-rule bg-secondary/20">
+                  <InputGroupInput value={`Bearer ${appleRemindersToken}`} readOnly className="min-w-0 text-[12px]" />
+                  <InputGroupAddon align="inline-end">
+                    <InputGroupButton onClick={handleCopyAppleRemindersToken}>
+                      <Copy aria-hidden="true" />
+                      {appleRemindersTokenCopied ? "Copied" : "Copy"}
+                    </InputGroupButton>
+                  </InputGroupAddon>
+                </InputGroup>
+                <FieldDescription className="text-[11px]">
+                  Shown once. Paste this whole value (including &quot;Bearer &quot;) into the Shortcut&apos;s
+                  Authorization header. Regenerating invalidates the old token.
+                </FieldDescription>
+              </Field>
+            ) : (
+              <FieldDescription className="text-[11px]">
+                Your secret token appears here once, right after you generate it.
+              </FieldDescription>
+            )}
+          </div>
+
+          <div className="flex flex-col gap-2">
+            <FieldLabel className="text-[12px]">2 &middot; Add the Shortcut</FieldLabel>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+              <Button
+                size="sm"
+                onClick={() => window.open(APPLE_REMINDERS_SHORTCUT_URL, "_blank", "noopener,noreferrer")}
+                className="h-8 gap-1.5 rounded-sm px-3 text-[11px] font-medium"
+              >
+                Add Shortcut
+                <ArrowUpRight aria-hidden="true" />
+              </Button>
+              <span className="text-[11px] text-muted-foreground">
+                Opens in Apple Shortcuts. Tap Add, then run it once and allow Reminders access.
+              </span>
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-1">
+            <FieldLabel className="text-[12px]">3 &middot; Paste the token &amp; automate</FieldLabel>
+            <p className="max-w-[60ch] text-[12px] leading-5 text-muted-foreground">
+              In the Shortcut&apos;s &quot;Get Contents of URL&quot; step, set the Authorization header to your
+              copied token. Run it once to confirm, then add a Personal Automation (when Reminders closes,
+              plus a few times a day) so it syncs hands-free.
+            </p>
+          </div>
+
+          <div className="flex flex-col">
+            <InfoLine label="Direction" value="iPhone to JARVIS (one-way)" />
+            <InfoLine label="Status" value={connectorStatusLabel(state)} />
           </div>
         </div>
       )
