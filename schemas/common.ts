@@ -36,7 +36,7 @@ export const memoryKindSchema = z.enum([
 ])
 export const memoryImportanceSchema = z.enum(["low", "medium", "high", "critical"])
 export const memoryStatusSchema = z.enum(["active", "candidate", "stale", "superseded", "archived"])
-export const sourceKindSchema = z.enum(["notion", "gmail", "caldav", "google_calendar", "manual", "system", "canvas"])
+export const sourceKindSchema = z.enum(["notion", "gmail", "caldav", "google_calendar", "manual", "system", "canvas", "apple_reminders"])
 export const sourceFreshnessSchema = z.enum(["fresh", "partial", "stale", "failed"])
 export const sourceFileStatusSchema = z.enum(["uploading", "ready", "processing", "processed", "failed"])
 export const sourceCandidateKindSchema = z.enum(["task", "deadline", "event", "routine", "preference", "note"])
@@ -80,7 +80,7 @@ export const taskSchema = z.object({
   sourceCandidateId: z.string().uuid().nullable(),
   planId: z.string().uuid().nullable(),
   externalTaskId: z.string().min(1).nullable(),
-  lastSyncedFrom: z.enum(["local", "caldav"]),
+  lastSyncedFrom: z.enum(["local", "caldav", "apple_reminders"]),
 })
 
 export const userCalendarSchema = z.object({

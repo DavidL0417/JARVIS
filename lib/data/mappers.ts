@@ -134,7 +134,10 @@ function normalizeSyncOrigin(value: SyncOrigin | string | null | undefined): Syn
 }
 
 function normalizeTaskSyncOrigin(value: TaskSyncOrigin | string | null | undefined): TaskSyncOrigin {
-  return value === "caldav" ? "caldav" : "local"
+  if (value === "caldav" || value === "apple_reminders") {
+    return value
+  }
+  return "local"
 }
 
 function normalizeCalendarSource(value: CalendarSource | string | null | undefined): CalendarSource {

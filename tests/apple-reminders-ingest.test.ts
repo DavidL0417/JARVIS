@@ -1,0 +1,66 @@
+import { describe, expect, it } from "vitest"
+
+import { mapReminderPriority, reminderExternalTaskId, reminderToTaskInsert } from "@/lib/apple-reminders/ingest"
+import { TASKS_CALENDAR_ID } from "@/lib/task-calendar-constants"
+
+describe("Apple Reminders ingest mapping", () => {
+  it("maps a reminder to an immutable task-calendar insert", () => {
+    const insert = reminderToTaskInsert("user-1", {
+      title: "Buy batteries",
+      notes: "AA, for the remote",
+      dueDate: "2026-05-21T17:00:00Z",
+      priority: "High",
+      list: "Reminders",
+    })
+
+    expect(insert).toMatchObject({
+      user_id: "user-1",
+      title: "Buy batteries",
+      description: "AA, for the remote",
+      deadline: "2026-05-21T17:00:00.000Z",
+      status: "todo",
+      priority: "high",
+      is_immutable: true,
+      all_day: false,
+      calendar_id: TASKS_CALENDAR_ID,
+      tags: ["apple-reminders"],
+      last_synced_from: "apple_reminders",
+    })
+    expect(insert.external_task_id).toMatch(/^apple-reminders:[0-9a-f]{32}$/)
+  })
+
+  it("handles undated reminders and empty notes", () => {
+    const insert = reminderToTaskInsert("user-1", { title: "Do laundry", list: "Reminders" })
+    expect(insert.deadline).toBeNull()
+    expect(insert.description).toBeNull()
+    expect(insert.priority).toBe("medium")
+  })
+
+  it("maps priority from both word and iCal-integer forms", () => {
+    expect(mapReminderPriority("High")).toBe("high")
+    expect(mapReminderPriority("low")).toBe("low")
+    expect(mapReminderPriority("None")).toBe("medium")
+    expect(mapReminderPriority(null)).toBe("medium")
+    expect(mapReminderPriority(1)).toBe("high") // iCal 1 = highest
+    expect(mapReminderPriority(5)).toBe("medium")
+    expect(mapReminderPriority(9)).toBe("low")
+    expect(mapReminderPriority(0)).toBe("medium") // 0 = undefined
+  })
+
+  it("derives a stable external id from list + title + due", () => {
+    const base = { title: "Clean my room", dueDate: "2026-05-25T21:00:00Z", list: "Reminders" }
+    // Same content (even with different notes/priority) → same id.
+    expect(reminderExternalTaskId({ ...base, notes: "x", priority: "high" })).toBe(
+      reminderExternalTaskId({ ...base, notes: "y", priority: "low" }),
+    )
+    // Different list, title, or due → different id.
+    expect(reminderExternalTaskId(base)).not.toBe(reminderExternalTaskId({ ...base, list: "To do" }))
+    expect(reminderExternalTaskId(base)).not.toBe(reminderExternalTaskId({ ...base, title: "Clean kitchen" }))
+    expect(reminderExternalTaskId(base)).not.toBe(reminderExternalTaskId({ ...base, dueDate: "2026-05-26T21:00:00Z" }))
+  })
+
+  it("treats an invalid due date as undated rather than throwing", () => {
+    const insert = reminderToTaskInsert("user-1", { title: "Someday", dueDate: "not a date" })
+    expect(insert.deadline).toBeNull()
+  })
+})
