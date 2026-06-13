@@ -66,7 +66,6 @@ import {
   ConnectorGroup,
   ConnectorRow,
 } from "@/components/dashboard/sources/connector-list"
-import { AppleRemindersShortcutGuide } from "@/components/dashboard/sources/apple-reminders-guide"
 import type {
   SourceCandidate,
   SourceConnector,
@@ -75,7 +74,7 @@ import type {
   SourceSnapshotSummary,
 } from "@/types"
 
-const APPLE_REMINDERS_SHORTCUT_URL = "https://www.icloud.com/shortcuts/39681b0ac0624c1fbb6b809d2afe0fcb"
+const APPLE_REMINDERS_SHORTCUT_URL = "https://www.icloud.com/shortcuts/6328d37c97c042468fabe802fded7bc3"
 
 async function readJson<T>(response: Response, fallback: string): Promise<T> {
   const payload = await response.json().catch(() => null)
@@ -922,10 +921,8 @@ export function SourceSetupPanel({
             disabled={busy}
           />
           <FailedSourceAlert sources={failedSourcesByKind.apple_reminders ?? []} />
-          <DetailNote message={appleRemindersConnector.detail} />
           <p className="max-w-[60ch] text-[12px] leading-5 text-muted-foreground">
-            Apple does not let apps read iCloud Reminders directly, so a small iPhone Shortcut pushes
-            your incomplete reminders to JARVIS. Set it up once:
+            Apple won&apos;t let apps read iCloud Reminders directly — a quick Shortcut pushes them in. One-time setup:
           </p>
 
           <div className="flex flex-col gap-2">
@@ -949,16 +946,9 @@ export function SourceSetupPanel({
                     </InputGroupButton>
                   </InputGroupAddon>
                 </InputGroup>
-                <FieldDescription className="text-[11px]">
-                  Shown once. Paste this whole value (including &quot;Bearer &quot;) into the Shortcut&apos;s
-                  Authorization header. Regenerating invalidates the old token.
-                </FieldDescription>
+                <FieldDescription className="text-[11px]">Shown once. Copy it for step 3.</FieldDescription>
               </Field>
-            ) : (
-              <FieldDescription className="text-[11px]">
-                Your secret token appears here once, right after you generate it.
-              </FieldDescription>
-            )}
+            ) : null}
           </div>
 
           <div className="flex flex-col gap-2">
@@ -972,20 +962,21 @@ export function SourceSetupPanel({
                 Add Shortcut
                 <ArrowUpRight aria-hidden="true" />
               </Button>
-              <span className="text-[11px] text-muted-foreground">
-                Opens in Apple Shortcuts. Tap Add, then run it once and allow Reminders access.
-              </span>
+              <span className="text-[11px] text-muted-foreground">Tap Add, allow Reminders on first run.</span>
             </div>
           </div>
 
-          <div className="flex flex-col gap-1">
-            <FieldLabel className="text-[12px]">3 &middot; Paste the token &amp; automate</FieldLabel>
-            <p className="max-w-[60ch] text-[12px] leading-5 text-muted-foreground">
-              In the Shortcut&apos;s &quot;Get Contents of URL&quot; step, set the Authorization header to your
-              copied token. Run it once to confirm, then add a Personal Automation (when Reminders closes,
-              plus a few times a day) so it syncs hands-free.
-            </p>
-            <AppleRemindersShortcutGuide />
+          <div className="flex flex-col gap-2">
+            <FieldLabel className="text-[12px]">3 &middot; Paste your token here</FieldLabel>
+            <img
+              src="/guides/apple-reminders-token.png"
+              alt="The Shortcut's Get Contents of URL action — replace the Authorization header placeholder with your copied token."
+              className="w-full rounded-sm border border-rule"
+            />
+            <FieldDescription className="text-[11px]">
+              Replace the placeholder with what you copied, then run it once and add an automation to sync on a
+              schedule.
+            </FieldDescription>
           </div>
 
           <div className="flex flex-col">
