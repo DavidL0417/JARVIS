@@ -16,6 +16,16 @@ This repo is now a production scheduler/secretary product, not a hackathon coord
 - Backend contracts live in `types` and `schemas`; routes and mappers must match those contracts exactly.
 - Do not hide backend, auth, source-refresh, or calendar-sync failures behind placeholder/demo data.
 
+## Operator-only surfaces (hidden, single-user)
+
+- Some backends are intentionally invisible: no UI, no connector card, no
+  onboarding — gated by env vars only the operator sets. Do not "complete" them
+  into public features.
+- **iMessage intake** (`/api/integrations/imessage/ingest`, `lib/imessage/`,
+  `scripts/imessage/read-chat-db.mjs`) — reads the operator's own
+  `~/Library/Messages/chat.db` on their Mac into the scheduler-candidate pipeline.
+  See [`docs/decisions/operator-only-imessage.md`](./docs/decisions/operator-only-imessage.md).
+
 ## Product Direction
 
 - JARVIS is a secretary-second-brain scheduler: it should combine tasks, calendar context, preferences, source snapshots, memory, and explicit tradeoffs before planning.

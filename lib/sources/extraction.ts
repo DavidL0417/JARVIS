@@ -163,6 +163,10 @@ function sourceLabel(source: SourceKind) {
     return "Google Calendar"
   }
 
+  if (source === "imessage") {
+    return "iMessage"
+  }
+
   return source[0]?.toUpperCase() + source.slice(1)
 }
 
