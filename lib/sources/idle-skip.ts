@@ -8,7 +8,7 @@ type AdminClient = ReturnType<typeof createSupabaseAdminClient>
 /**
  * Idle short-circuit for LLM-backed source refreshes.
  *
- * Fetching upstream content is cheap; extraction (the Claude/OpenAI call) is
+ * Fetching upstream content is cheap; extraction (the Claude call) is
  * not. Before extracting, we hash the normalized raw payload and compare it to
  * the hash stored on the most recent non-failed snapshot for that source. If
  * nothing changed upstream, we skip extraction entirely and record a fresh

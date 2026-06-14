@@ -1,10 +1,6 @@
 import { z } from "zod"
 
-import {
-  createOpenAIResponse,
-  getOpenAIConfig,
-  getOpenAIResponseText,
-} from "@/lib/ai/openai"
+import { runClaudeStructuredExtraction } from "@/lib/ai/claude-extraction"
 import { resolveNaturalDateTime } from "@/lib/assistant/date-utils"
 import { DEFAULT_TIMEZONE } from "@/lib/time/zoned"
 import type { AssistantConversationEntry, Priority } from "@/types"
@@ -195,74 +191,65 @@ function shouldUseClassifier(message: string) {
     /\b(today|tomorrow|schedule|calendar|task|remember|source|gmail|notion|google|feedback|memory)\b/i.test(message)
 }
 
-async function classifyWithOpenAI(input: {
+// Reuses the shared Claude structured-tool helper (also used by source
+// extraction) to classify an ambiguous secretary command into exactly one
+// action. Callers wrap this in try/catch and degrade to a plain answer.
+async function classifyWithClaude(input: {
   message: string
   now: string | null
   timezone: string | null
   history: AssistantConversationEntry[]
 }): Promise<ClassifierOutput> {
-  const { model } = getOpenAIConfig()
-  const payload = await createOpenAIResponse({
-    model: process.env.OPENAI_CLASSIFIER_MODEL || model,
-    instructions: [
+  const { data } = await runClaudeStructuredExtraction({
+    system: [
       "Classify a user's secretary/scheduler command into exactly one action.",
       "Use plan_day or replan for day-planning and schedule-shaping requests.",
       "Use request_external_write only when the user wants an external system changed, such as Google Calendar.",
       "Use answer when no write, refresh, memory, task, or planning action is requested.",
-      "Return only the structured JSON object.",
+      "Return the classification via the return_secretary_intent tool.",
     ].join("\n"),
-    input: JSON.stringify({
-      message: input.message,
-      now: input.now,
-      timezone: input.timezone,
-      recentHistory: input.history.slice(-4),
-    }),
-    max_output_tokens: 400,
-    temperature: 0,
-    text: {
-      format: {
-        type: "json_schema",
-        name: "secretary_intent",
-        strict: true,
-        schema: {
-          type: "object",
-          additionalProperties: false,
-          properties: {
-            action: {
-              type: "string",
-              enum: [
-                "answer",
-                "plan_day",
-                "replan",
-                "create_task",
-                "remember",
-                "refresh_sources",
-                "request_external_write",
-                "review_feedback",
-              ],
-            },
-            extractedText: {
-              type: ["string", "null"],
-              description: "The task title, memory text, or planning command to pass forward.",
-            },
-            confidence: {
-              type: "number",
-              minimum: 0,
-              maximum: 1,
-            },
-          },
-          required: ["action", "extractedText", "confidence"],
-        },
+    content: [
+      {
+        type: "text",
+        text: JSON.stringify({
+          message: input.message,
+          now: input.now,
+          timezone: input.timezone,
+          recentHistory: input.history.slice(-4),
+        }),
       },
+    ],
+    toolName: "return_secretary_intent",
+    toolDescription: "Classify the secretary command into exactly one action.",
+    inputSchema: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        action: {
+          type: "string",
+          enum: [
+            "answer",
+            "plan_day",
+            "replan",
+            "create_task",
+            "remember",
+            "refresh_sources",
+            "request_external_write",
+            "review_feedback",
+          ],
+        },
+        extractedText: {
+          type: ["string", "null"],
+          description: "The task title, memory text, or planning command to pass forward.",
+        },
+        confidence: { type: "number", minimum: 0, maximum: 1 },
+      },
+      required: ["action", "extractedText", "confidence"],
     },
+    maxTokens: 400,
   })
-  const text = getOpenAIResponseText(payload)
 
-  if (!text) {
-    throw new Error("OpenAI returned no intent classification payload.")
-  }
-
-  return classifierSchema.parse(JSON.parse(text))
+  return classifierSchema.parse(data)
 }
 
 function intentFromClassifier(output: ClassifierOutput, command: string): SecretaryIntent {
@@ -400,7 +387,7 @@ export async function classifySecretaryIntent(input: {
 
   try {
     return intentFromClassifier(
-      await classifyWithOpenAI({
+      await classifyWithClaude({
         message: command,
         now: input.now,
         timezone: input.timezone,

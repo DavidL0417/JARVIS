@@ -130,7 +130,7 @@ function buildDialoguePayload(input: GenerateSecretaryDialogueReplyInput) {
       notes: [
         "The visible Sonnet/Opus selector controls schedule planning.",
         "This secretary dialogue turn is Claude-backed.",
-        "Some source extraction and intent helper paths may still use OpenAI until those are migrated.",
+        "Source extraction and intent classification are Claude-backed as well; JARVIS uses no OpenAI.",
       ],
     },
   }
