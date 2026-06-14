@@ -1,11 +1,14 @@
 import { z } from "zod"
 
-import { createOpenAIResponse, getOpenAIConfig, getOpenAIResponseText } from "@/lib/ai/openai"
+import Anthropic from "@anthropic-ai/sdk"
+
+import { runClaudeStructuredExtraction } from "@/lib/ai/claude-extraction"
 import type { CommitmentRef } from "@/lib/dedupe"
 import type { Priority, SourceCandidateKind, SourceKind } from "@/types"
 
 const MAX_TEXT_SOURCE_CHARS = 60_000
 const SOURCE_EXTRACTION_OUTPUT_TOKENS = 8000
+const SOURCE_EXTRACTION_TOOL_NAME = "return_source_extraction"
 const SUPPORTED_TEXT_MIME_TYPES = new Set([
   "text/plain",
   "text/markdown",
@@ -48,11 +51,6 @@ export type SourceExtractionResult = {
   candidates: ExtractedSourceCandidate[]
   model: string
 }
-
-type InputContentPart =
-  | { type: "input_text"; text: string }
-  | { type: "input_file"; filename: string; file_data: string }
-  | { type: "input_image"; image_url: string }
 
 const SOURCE_EXTRACTION_PROMPT = [
   "You extract scheduling context for JARVIS, a student secretary scheduler.",
@@ -190,47 +188,17 @@ function buildExtractionTextPrompt(input: {
     .join("\n")
 }
 
-async function requestExtraction(content: InputContentPart[]) {
-  const { model } = getOpenAIConfig()
-  const payload = await createOpenAIResponse({
-    model,
-    instructions: SOURCE_EXTRACTION_PROMPT,
-    input: [
-      {
-        role: "user",
-        content,
-      },
-    ],
-    max_output_tokens: SOURCE_EXTRACTION_OUTPUT_TOKENS,
-    temperature: 0,
-    text: {
-      format: {
-        type: "json_schema",
-        name: "source_extraction",
-        strict: true,
-        schema: candidateJsonSchema(),
-      },
-    },
+async function requestExtraction(content: Anthropic.MessageParam["content"]) {
+  const { data, model } = await runClaudeStructuredExtraction({
+    system: SOURCE_EXTRACTION_PROMPT,
+    content,
+    toolName: SOURCE_EXTRACTION_TOOL_NAME,
+    toolDescription: "Return the source extraction summary and scheduler candidates.",
+    inputSchema: candidateJsonSchema(),
+    maxTokens: SOURCE_EXTRACTION_OUTPUT_TOKENS,
   })
-  const text = getOpenAIResponseText(payload)
 
-  if (!text) {
-    throw new Error("OpenAI returned no source extraction payload.")
-  }
-
-  let parsedJson: unknown
-
-  try {
-    parsedJson = JSON.parse(text)
-  } catch (error) {
-    const detail = error instanceof Error ? error.message : "Invalid JSON."
-    throw new Error(
-      `SOURCE_EXTRACTION_FAILED: OpenAI returned incomplete source extraction JSON (${detail}). This is not a Gmail authorization failure; retry the scan or reduce the source payload.`,
-      { cause: error },
-    )
-  }
-
-  const parsed = extractionResultSchema.parse(parsedJson)
+  const parsed = extractionResultSchema.parse(data)
 
   return {
     summary: parsed.summary,
@@ -247,7 +215,7 @@ export async function extractCandidatesFromText(input: {
   existingCommitments?: CommitmentRef[]
 }): Promise<SourceExtractionResult> {
   const prompt = buildExtractionTextPrompt(input)
-  return requestExtraction([{ type: "input_text", text: prompt }])
+  return requestExtraction([{ type: "text", text: prompt }])
 }
 
 export async function extractCandidatesFromFile(input: {
@@ -269,28 +237,31 @@ export async function extractCandidatesFromFile(input: {
   })
 
   if (SUPPORTED_TEXT_MIME_TYPES.has(input.mimeType)) {
-    return requestExtraction([{ type: "input_text", text: prompt }])
+    return requestExtraction([{ type: "text", text: prompt }])
   }
 
   const base64 = input.buffer.toString("base64")
 
   if (input.mimeType === "application/pdf") {
     return requestExtraction([
-      { type: "input_text", text: prompt },
+      { type: "text", text: prompt },
       {
-        type: "input_file",
-        filename: input.fileName,
-        file_data: `data:application/pdf;base64,${base64}`,
+        type: "document",
+        source: { type: "base64", media_type: "application/pdf", data: base64 },
       },
     ])
   }
 
   if (input.mimeType.startsWith("image/")) {
     return requestExtraction([
-      { type: "input_text", text: prompt },
+      { type: "text", text: prompt },
       {
-        type: "input_image",
-        image_url: `data:${input.mimeType};base64,${base64}`,
+        type: "image",
+        source: {
+          type: "base64",
+          media_type: input.mimeType as "image/jpeg" | "image/png" | "image/gif" | "image/webp",
+          data: base64,
+        },
       },
     ])
   }

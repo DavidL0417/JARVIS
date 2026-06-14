@@ -1,10 +1,8 @@
 import { z } from "zod"
 
-import { createOpenAIResponse, getOpenAIConfig, getOpenAIResponseText } from "@/lib/ai/openai"
+import { runClaudeStructuredExtraction } from "@/lib/ai/claude-extraction"
 import type { ExtractedSourceCandidate } from "@/lib/sources/extraction"
 import type { CanvasExtensionExtractionResult, CanvasExtensionPageSnapshot } from "@/schemas/canvas-extension"
-
-const CANVAS_EXTENSION_MODEL = process.env.OPENAI_CANVAS_EXTENSION_MODEL || process.env.OPENAI_CLASSIFIER_MODEL
 
 const rawCandidateSchema = z.object({
   kind: z.enum(["task", "deadline", "event", "routine", "preference", "note"]),
@@ -128,35 +126,16 @@ export async function extractCanvasExtensionPage(input: CanvasExtensionPageSnaps
   model: string
   extractedCandidates: ExtractedSourceCandidate[]
 }> {
-  const baseConfig = getOpenAIConfig()
-  const model = CANVAS_EXTENSION_MODEL || baseConfig.model
-  const payload = await createOpenAIResponse({
-    model,
-    instructions: CANVAS_PAGE_READER_PROMPT,
-    input: [
-      {
-        role: "user",
-        content: [{ type: "input_text", text: buildPrompt(input) }],
-      },
-    ],
-    max_output_tokens: 2200,
-    temperature: 0,
-    text: {
-      format: {
-        type: "json_schema",
-        name: "canvas_extension_page_extraction",
-        strict: true,
-        schema: extractionJsonSchema(),
-      },
-    },
+  const { data, model } = await runClaudeStructuredExtraction({
+    system: CANVAS_PAGE_READER_PROMPT,
+    content: [{ type: "text", text: buildPrompt(input) }],
+    toolName: "return_canvas_extraction",
+    toolDescription: "Return the Canvas page extraction summary and scheduler candidates.",
+    inputSchema: extractionJsonSchema(),
+    maxTokens: 2200,
   })
-  const text = getOpenAIResponseText(payload)
 
-  if (!text) {
-    throw new Error("OpenAI returned no Canvas extension extraction payload.")
-  }
-
-  const parsed = rawExtractionSchema.parse(JSON.parse(text))
+  const parsed = rawExtractionSchema.parse(data)
   const extractedCandidates = parsed.skippedReason
     ? []
     : parsed.candidates.map((candidate) => normalizeCandidate(candidate, input.url))
