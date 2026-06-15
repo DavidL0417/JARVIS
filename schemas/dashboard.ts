@@ -50,6 +50,8 @@ export const dashboardResponseSchema = z.object({
   sourceCandidates: z.array(sourceCandidateSchema),
   dailyPlan: dailyPlanSchema.nullable(),
   reentry: dashboardReentrySchema.nullable().optional(),
+  // Only true for the operator account — gates the hidden iMessage console pane.
+  isImessageOperator: z.boolean().optional(),
 })
 
 export type DashboardResponseInput = z.infer<typeof dashboardResponseSchema>

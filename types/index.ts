@@ -692,6 +692,7 @@ export interface DashboardResponse {
   sourceCandidates: SourceCandidate[]
   dailyPlan: DailyPlan | null
   reentry: DashboardReentry | null
+  isImessageOperator?: boolean
 }
 
 export interface CreateTaskRequest {
