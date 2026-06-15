@@ -73,6 +73,10 @@ export default tseslint.config(
     languageOptions: {
       globals: {
         console: "readonly",
+        process: "readonly",
+        Buffer: "readonly",
+        fetch: "readonly",
+        URL: "readonly",
       },
     },
   },

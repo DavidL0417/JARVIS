@@ -10,6 +10,7 @@ import {
   GraduationCap,
   ListChecks,
   Mail,
+  MessageSquare,
 } from "lucide-react"
 
 import { cn } from "@/lib/utils"
@@ -121,6 +122,15 @@ export const CONNECTOR_DEFINITIONS: ConnectorDefinition[] = [
     group: "work_context",
     icon: Github,
     summary: "Repository and issue context sync is being developed.",
+  },
+  {
+    id: "imessage",
+    title: "iMessage",
+    group: "operator",
+    icon: MessageSquare,
+    summary:
+      "Operator-only: forward allowlisted iMessage/SMS conversations into JARVIS as full-text context and scheduler candidates. Everything else is dropped on your Mac.",
+    beta: true,
   },
 ]
 

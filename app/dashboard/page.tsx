@@ -737,6 +737,7 @@ export default function DashboardPage() {
               sourceFiles={dashboard.sourceFiles}
               sourceCandidates={dashboard.sourceCandidates}
               onSourcesChanged={() => loadDashboard(true)}
+              isImessageOperator={dashboard.isImessageOperator ?? false}
             />
           ) : null}
         </RailSheet>

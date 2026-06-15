@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 
-import { classifySecretaryIntent } from "../lib/assistant/orchestrator"
+import { classifySecretaryIntent, parseReadMessages } from "../lib/assistant/orchestrator"
 
 const baseInput = {
   now: "2026-05-14T12:00:00.000Z",
@@ -75,5 +75,30 @@ describe("secretary orchestrator", () => {
     ).resolves.toMatchObject({
       kind: "refresh_sources",
     })
+  })
+
+  it("routes iMessage read requests to the read_messages intent", async () => {
+    await expect(
+      classifySecretaryIntent({ ...baseInput, message: "What did Alan say about the deck?" }),
+    ).resolves.toMatchObject({ kind: "read_messages", contactQuery: "Alan" })
+
+    await expect(
+      classifySecretaryIntent({ ...baseInput, message: "Can you read my messages with Dani?" }),
+    ).resolves.toMatchObject({ kind: "read_messages", contactQuery: "Dani" })
+  })
+})
+
+describe("parseReadMessages", () => {
+  it("extracts the contact from common phrasings and strips trailing topics", () => {
+    expect(parseReadMessages("what did Alan say about the trip")).toBe("Alan")
+    expect(parseReadMessages("read my messages with Dani Liu")).toBe("Dani Liu")
+    expect(parseReadMessages("texts from Mom")).toBe("Mom")
+    expect(parseReadMessages("pull up my conversation with Ana")).toBe("Ana")
+  })
+
+  it("ignores requests that are not about reading a person's messages", () => {
+    expect(parseReadMessages("what did I accomplish today")).toBeNull()
+    expect(parseReadMessages("add task to text Alan")).toBeNull()
+    expect(parseReadMessages("read me the news")).toBeNull()
   })
 })

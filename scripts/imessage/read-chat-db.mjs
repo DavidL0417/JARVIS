@@ -291,7 +291,6 @@ function toMessage(row, chatInfo) {
     service: row.service ?? null,
     chatName: chatInfo.displayName,
     isGroup: chatInfo.isGroup,
-    _appleDate: Number(row.date),
   }
 }
 
@@ -405,7 +404,7 @@ async function main() {
     return
   }
 
-  const payloadMessages = messages.map(({ _appleDate, ...rest }) => rest)
+  const payloadMessages = messages
 
   if (args.dryRun) {
     console.log(`✓ Dry run: ${payloadMessages.length} of ${rows.length} message(s) would be sent (${droppedCount} filtered). Sample:`)

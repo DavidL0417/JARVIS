@@ -31,6 +31,7 @@ export type SourcePanelId =
   | "things_3"
   | "linear"
   | "github"
+  | "imessage"
 export type ActionPayload = {
   error?: string
   details?: string
@@ -41,7 +42,7 @@ export type ConnectorState = SourceConnectorStatus | "manual" | "developing" | "
 export type ConnectorDefinition = {
   id: SourcePanelId
   title: string
-  group: "calendar" | "tasks_courses" | "work_context" | "files" | "developing"
+  group: "calendar" | "tasks_courses" | "work_context" | "files" | "developing" | "operator"
   icon: LucideIcon
   summary: string
   beta?: boolean
