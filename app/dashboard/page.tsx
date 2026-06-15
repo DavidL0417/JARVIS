@@ -738,6 +738,7 @@ export default function DashboardPage() {
               sourceCandidates={dashboard.sourceCandidates}
               onSourcesChanged={() => loadDashboard(true)}
               isImessageOperator={dashboard.isImessageOperator ?? false}
+              isRaycastOperator={dashboard.isRaycastOperator ?? false}
             />
           ) : null}
         </RailSheet>

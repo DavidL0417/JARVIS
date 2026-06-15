@@ -52,6 +52,8 @@ export const dashboardResponseSchema = z.object({
   reentry: dashboardReentrySchema.nullable().optional(),
   // Only true for the operator account — gates the hidden iMessage console pane.
   isImessageOperator: z.boolean().optional(),
+  // Only true for the operator account — gates the hidden Raycast status pane.
+  isRaycastOperator: z.boolean().optional(),
 })
 
 export type DashboardResponseInput = z.infer<typeof dashboardResponseSchema>

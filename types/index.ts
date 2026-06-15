@@ -693,6 +693,7 @@ export interface DashboardResponse {
   dailyPlan: DailyPlan | null
   reentry: DashboardReentry | null
   isImessageOperator?: boolean
+  isRaycastOperator?: boolean
 }
 
 export interface CreateTaskRequest {

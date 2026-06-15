@@ -11,6 +11,7 @@ import {
   ListChecks,
   Mail,
   MessageSquare,
+  StickyNote,
 } from "lucide-react"
 
 import { cn } from "@/lib/utils"
@@ -131,6 +132,15 @@ export const CONNECTOR_DEFINITIONS: ConnectorDefinition[] = [
     icon: MessageSquare,
     summary:
       "Operator-only: forward allowlisted iMessage/SMS conversations into JARVIS as full-text context and scheduler candidates. Everything else is dropped on your Mac.",
+    beta: true,
+  },
+  {
+    id: "raycast",
+    title: "Raycast",
+    group: "operator",
+    icon: StickyNote,
+    summary:
+      "Operator-only: mirror your Raycast Notes scratchpad into JARVIS as read-only ambient context. One-way, never turned into tasks.",
     beta: true,
   },
 ]

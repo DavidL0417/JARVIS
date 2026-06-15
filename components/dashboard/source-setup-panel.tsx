@@ -67,6 +67,7 @@ import {
   ConnectorRow,
 } from "@/components/dashboard/sources/connector-list"
 import { ImessageConsolePane } from "@/components/dashboard/sources/imessage-console"
+import { RaycastConsolePane } from "@/components/dashboard/sources/raycast-console"
 import type {
   SourceCandidate,
   SourceConnector,
@@ -101,6 +102,7 @@ export function SourceSetupPanel({
   sourceCandidates,
   onSourcesChanged,
   isImessageOperator = false,
+  isRaycastOperator = false,
 }: {
   sourceConnectors: SourceConnector[]
   sources: SourceSnapshotSummary[]
@@ -108,6 +110,7 @@ export function SourceSetupPanel({
   sourceCandidates: SourceCandidate[]
   onSourcesChanged: () => Promise<void>
   isImessageOperator?: boolean
+  isRaycastOperator?: boolean
 }) {
   const notionConnector = getConnector(sourceConnectors, "notion")
   const googleCalendarConnector = getConnector(sourceConnectors, "google_calendar")
@@ -178,7 +181,7 @@ export function SourceSetupPanel({
       return "manual"
     }
 
-    if (connector.id === "imessage") {
+    if (connector.id === "imessage" || connector.id === "raycast") {
       // Always-on operator intake — no per-user connect/auth status to surface.
       return "ready"
     }
@@ -919,6 +922,10 @@ export function SourceSetupPanel({
       return <ImessageConsolePane connector={selectedConnector} state={state} />
     }
 
+    if (selectedConnector.id === "raycast") {
+      return <RaycastConsolePane connector={selectedConnector} state={state} />
+    }
+
     if (selectedConnector.id === "apple_reminders") {
       const isConnected =
         appleRemindersConnector.status === "connected" || appleRemindersConnector.status === "ready"
@@ -1122,17 +1129,28 @@ export function SourceSetupPanel({
           ))}
         </ConnectorGroup>
 
-        {isImessageOperator ? (
+        {isImessageOperator || isRaycastOperator ? (
           <ConnectorGroup title="Operator">
-            {CONNECTOR_DEFINITIONS.filter((connector) => connector.group === "operator").map((connector) => (
-              <ConnectorRow
-                key={connector.id}
-                connector={connector}
-                state={stateForConnector(connector)}
-                active={selectedId === connector.id}
-                onSelect={() => setSelectedId(connector.id)}
-              />
-            ))}
+            {CONNECTOR_DEFINITIONS.filter((connector) => connector.group === "operator")
+              // Each operator intake renders only for its own operator. In practice both
+              // env vars point at the same account, but gate independently so the surface
+              // exactly matches who is actually configured.
+              .filter((connector) =>
+                connector.id === "imessage"
+                  ? isImessageOperator
+                  : connector.id === "raycast"
+                    ? isRaycastOperator
+                    : false,
+              )
+              .map((connector) => (
+                <ConnectorRow
+                  key={connector.id}
+                  connector={connector}
+                  state={stateForConnector(connector)}
+                  active={selectedId === connector.id}
+                  onSelect={() => setSelectedId(connector.id)}
+                />
+              ))}
           </ConnectorGroup>
         ) : null}
 
