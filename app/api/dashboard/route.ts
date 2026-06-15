@@ -42,6 +42,7 @@ import {
 import { getStoredIntegrationToken } from "@/lib/supabase/integration-tokens"
 import { reconcileStaleSchedule } from "@/lib/reconciliation"
 import { isImessageOperator } from "@/lib/imessage/operator-session"
+import { isRaycastOperator } from "@/lib/raycast/operator-session"
 import { dashboardResponseSchema } from "@/schemas/dashboard"
 import type {
   DashboardResponse,
@@ -785,6 +786,7 @@ export async function GET() {
       dailyPlan,
       reentry,
       isImessageOperator: isImessageOperator(user.id),
+      isRaycastOperator: isRaycastOperator(user.id),
     }
 
     const parsedPayload = dashboardResponseSchema.safeParse(dashboardPayload)

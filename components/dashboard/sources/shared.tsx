@@ -32,6 +32,7 @@ export type SourcePanelId =
   | "linear"
   | "github"
   | "imessage"
+  | "raycast"
 export type ActionPayload = {
   error?: string
   details?: string

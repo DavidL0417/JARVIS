@@ -1,11 +1,20 @@
 # Operator-only Raycast Notes intake — a deliberately hidden backend
 
-**For future agents: this feature is intentional, single-user, and invisible by
-design. Do not "finish" it into a public connector, do not add UI for it, and do
-not be confused that it has no onboarding flow.** It exists so the operator
-(David) can feed his own Raycast Notes scratchpad into JARVIS as ambient context.
-No other user is meant to discover or use it. It mirrors the
+**For future agents: this feature is intentional, single-user, and operator-only.
+Do not "finish" it into a public connector, do not add a self-serve onboarding /
+token flow, and do not surface it to anyone but the operator.** It exists so the
+operator (David) can feed his own Raycast Notes scratchpad into JARVIS as ambient
+context. No other user is meant to discover or use it. It mirrors the
 [operator-only iMessage intake](./operator-only-imessage.md).
+
+There **is** one operator-only UI surface: a **read-only status card** under the
+`Operator` group of the Sources panel, rendered *only* when the signed-in user is the
+operator (`isRaycastOperator`, i.e. their id === `RAYCAST_OPERATOR_USER_ID`). It has no
+connect button, no toggle, and no token flow — it just shows that the intake is alive
+(last-fed time + digest counts) so the operator can confirm it without reading the DB.
+Every non-operator sees nothing, exactly as before. This is a deliberate, scoped
+exception to "no UI" — adding the *status* card was the point of that change; do not
+mistake it for a self-serve connector and do not remove the operator gate.
 
 ## What it does
 
@@ -41,11 +50,19 @@ connector:
 
 | | Apple Reminders | iMessage | Raycast (this) |
 |---|---|---|---|
-| Connector card in UI | yes | **no** | **no** |
+| Self-serve connector card | yes | **no** | **no** |
+| Operator-only card (gated render) | n/a | **yes (console)** | **yes (read-only status)** |
 | `connector_settings` row | yes | **no** | **no** |
 | Token table + mint flow | yes | **no** | **no** |
+| In `SourceConnectorId` (auth-bearing) | yes | **no** | **no** |
 | Auth | per-user bearer token | shared env secret, pinned to one user id | **shared env secret, pinned to one user id** |
 | Server-side extraction → tasks | yes (mirror) | yes (candidates) | **no — snapshot context only** |
+
+The operator card uses a UI-only panel id (`SourcePanelId` in
+[`shared.tsx`](../../components/dashboard/sources/shared.tsx)), **not** a
+`SourceConnectorId` — so it renders a card without becoming an auth-bearing connector.
+`raycast` is still a snapshot label + a panel id only; it has no `connector_settings`,
+no token table, and no extraction.
 
 Rationale:
 
@@ -104,4 +121,7 @@ operator's own use. It must **not** be generalized to other users.
 - Ingest (snapshot only, no extraction): [`lib/raycast/ingest.ts`](../../lib/raycast/ingest.ts)
 - Request schema: [`schemas/raycast.ts`](../../schemas/raycast.ts)
 - Local reader: [`scripts/raycast/push-notes.py`](../../scripts/raycast/push-notes.py)
-- Provenance type: `SourceKind` in [`types/index.ts`](../../types/index.ts) (`raycast` is a snapshot label only — deliberately NOT in `SourceConnectorId`, so no connector card renders).
+- Provenance type: `SourceKind` in [`types/index.ts`](../../types/index.ts) (`raycast` is a snapshot label; deliberately NOT in `SourceConnectorId`, so it never becomes an auth-bearing connector).
+- Operator session gate (UI): [`lib/raycast/operator-session.ts`](../../lib/raycast/operator-session.ts) — `isRaycastOperator` (dashboard payload flag) + `requireRaycastOperatorSession` (404 gate for the status route).
+- Status route (read-only): [`app/api/integrations/raycast/status/route.ts`](../../app/api/integrations/raycast/status/route.ts) — latest snapshot's captured-at + digest counts; 404 for non-operators.
+- Status card (read-only): [`components/dashboard/sources/raycast-console.tsx`](../../components/dashboard/sources/raycast-console.tsx) — rendered under the `Operator` group only when `isRaycastOperator`.
