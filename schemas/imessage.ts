@@ -36,3 +36,20 @@ export const imessageIngestRequestSchema = z.object({
 
 export type ImessageItem = z.infer<typeof imessageItemSchema>
 export type ImessageIngestRequest = z.infer<typeof imessageIngestRequestSchema>
+
+// One suggested contact the reader computed from chat.db (a recent 1:1 not yet
+// allowlisted). The server recomputes handle_norm, so the reader needn't send it.
+export const imessageSuggestionSchema = z.object({
+  handle: z.string().trim().min(1).max(300),
+  displayName: z.string().max(300).nullish(),
+  lastSeen: z.string().max(60).nullish(),
+  messageCount: z.number().int().nonnegative().default(0),
+  sentCount: z.number().int().nonnegative().default(0),
+  recvCount: z.number().int().nonnegative().default(0),
+})
+
+export const imessageSuggestionsRequestSchema = z.object({
+  suggestions: z.array(imessageSuggestionSchema).max(100),
+})
+
+export type ImessageSuggestionItem = z.infer<typeof imessageSuggestionSchema>

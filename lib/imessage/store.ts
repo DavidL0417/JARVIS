@@ -111,6 +111,65 @@ export async function upsertImessageMessages(
   return typeof data === "number" ? data : 0
 }
 
+// A suggested contact (recent 1:1 not yet allowlisted) the reader uploads for the UI.
+export interface ImessageSuggestionInput {
+  handle: string
+  displayName?: string | null
+  lastSeen?: string | null
+  messageCount: number
+  sentCount: number
+  recvCount: number
+}
+
+export interface ImessageSuggestion extends ImessageSuggestionInput {
+  handleNorm: string
+}
+
+// Replace-all: the reader recomputes the suggestion set each run. Returns the count stored.
+export async function replaceImessageSuggestions(
+  userId: string,
+  suggestions: ImessageSuggestionInput[],
+  adminClient: AdminClient = createSupabaseAdminClient(),
+): Promise<number> {
+  const rows = suggestions.map((suggestion) => ({
+    handle: suggestion.handle,
+    handle_norm: normalizeHandle(suggestion.handle),
+    display_name: suggestion.displayName ?? null,
+    last_seen: suggestion.lastSeen ?? null,
+    message_count: suggestion.messageCount,
+    sent_count: suggestion.sentCount,
+    recv_count: suggestion.recvCount,
+  }))
+  const { data, error } = await adminClient.rpc("replace_imessage_suggestions", {
+    suggestion_user_id: userId,
+    suggestion_rows: rows,
+  })
+  if (error) {
+    throw new Error(error.message)
+  }
+  return typeof data === "number" ? data : 0
+}
+
+// Suggestions not yet allowlisted (the RPC filters them out), newest first.
+export async function getImessageSuggestions(
+  userId: string,
+  adminClient: AdminClient = createSupabaseAdminClient(),
+): Promise<ImessageSuggestion[]> {
+  const { data, error } = await adminClient.rpc("get_imessage_suggestions", { query_user_id: userId })
+  if (error) {
+    throw new Error(error.message)
+  }
+  return ((data ?? []) as Array<Record<string, unknown>>).map((row) => ({
+    handle: String(row.handle ?? ""),
+    handleNorm: String(row.handle_norm ?? ""),
+    displayName: row.display_name === null || row.display_name === undefined ? null : String(row.display_name),
+    lastSeen: row.last_seen === null || row.last_seen === undefined ? null : String(row.last_seen),
+    messageCount: Number(row.message_count) || 0,
+    sentCount: Number(row.sent_count) || 0,
+    recvCount: Number(row.recv_count) || 0,
+  }))
+}
+
 export interface ArchivedMessage {
   handle: string | null
   handleNorm: string | null
