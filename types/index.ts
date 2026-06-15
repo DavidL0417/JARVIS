@@ -27,9 +27,11 @@ export type MemoryLayer =
   | "candidate_memories"
 export type MemoryImportance = "low" | "medium" | "high" | "critical"
 export type MemoryStatus = "active" | "candidate" | "stale" | "superseded" | "archived"
-// "imessage" is snapshot provenance only — deliberately NOT a SourceConnectorId,
-// so no connector card renders. See docs/decisions/operator-only-imessage.md.
-export type SourceKind = "notion" | "gmail" | "caldav" | "google_calendar" | "manual" | "system" | "canvas" | "apple_reminders" | "imessage"
+// "imessage" and "raycast" are snapshot provenance only — deliberately NOT
+// SourceConnectorIds, so no connector card renders. Both are operator-only intakes
+// fed by a local reader on the operator's Mac. See docs/decisions/operator-only-imessage.md
+// and docs/decisions/operator-only-raycast.md.
+export type SourceKind = "notion" | "gmail" | "caldav" | "google_calendar" | "manual" | "system" | "canvas" | "apple_reminders" | "imessage" | "raycast"
 export type SourceFreshness = "fresh" | "partial" | "stale" | "failed"
 export type SourceFileStatus = "uploading" | "ready" | "processing" | "processed" | "failed"
 export type SourceCandidateKind = "task" | "deadline" | "event" | "routine" | "preference" | "note"
