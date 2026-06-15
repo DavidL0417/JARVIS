@@ -22,6 +22,9 @@ export const imessageItemSchema = z.object({
   service: z.string().max(40).nullish(),
   // Group-chat display name, or null for 1:1 threads.
   chatName: z.string().max(300).nullish(),
+  // true when the message belongs to a group thread (>1 other participant). The
+  // reader computes this from chat membership; the server can't infer it per-message.
+  isGroup: z.boolean().default(false),
 })
 
 export const imessageIngestRequestSchema = z.object({

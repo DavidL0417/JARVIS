@@ -31,6 +31,7 @@ export type SourcePanelId =
   | "things_3"
   | "linear"
   | "github"
+  | "imessage"
 export type ActionPayload = {
   error?: string
   details?: string
@@ -41,9 +42,10 @@ export type ConnectorState = SourceConnectorStatus | "manual" | "developing" | "
 export type ConnectorDefinition = {
   id: SourcePanelId
   title: string
-  group: "calendar" | "tasks_courses" | "work_context" | "files" | "developing"
+  group: "calendar" | "tasks_courses" | "work_context" | "files" | "developing" | "operator"
   icon: LucideIcon
   summary: string
+  beta?: boolean
 }
 
 export function getPayloadMessage(payload: ActionPayload | null, fallback: string) {
@@ -112,6 +114,19 @@ export function connectorStatusDotTone(state: ConnectorState) {
   }
 
   return "bg-copper/85"
+}
+
+export function BetaBadge({ className }: { className?: string }) {
+  return (
+    <span
+      className={cn(
+        "inline-flex shrink-0 items-center rounded-sm border border-copper/40 bg-copper/10 px-1.5 py-px text-[9px] font-semibold uppercase leading-none tracking-[0.14em] text-copper",
+        className,
+      )}
+    >
+      beta
+    </span>
+  )
 }
 
 export function ConnectorStatusMark({ state, className }: { state: ConnectorState; className?: string }) {
@@ -227,6 +242,7 @@ export function DetailHeader({
       <div className="flex items-center gap-2.5">
         <Icon className="h-4 w-4 shrink-0 text-copper" aria-hidden="true" strokeWidth={1.75} />
         <h2 className="truncate text-[15px] font-semibold leading-none text-foreground">{connector.title}</h2>
+        {connector.beta ? <BetaBadge /> : null}
         <div className="ml-auto flex shrink-0 items-center gap-3">
           {showSwitch ? (
             <Switch

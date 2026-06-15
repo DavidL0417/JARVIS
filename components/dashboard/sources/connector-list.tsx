@@ -10,10 +10,11 @@ import {
   GraduationCap,
   ListChecks,
   Mail,
+  MessageSquare,
 } from "lucide-react"
 
 import { cn } from "@/lib/utils"
-import { ConnectorStatusMark, type ConnectorDefinition, type ConnectorState } from "@/components/dashboard/sources/shared"
+import { BetaBadge, ConnectorStatusMark, type ConnectorDefinition, type ConnectorState } from "@/components/dashboard/sources/shared"
 
 export const CONNECTOR_DEFINITIONS: ConnectorDefinition[] = [
   {
@@ -64,6 +65,7 @@ export const CONNECTOR_DEFINITIONS: ConnectorDefinition[] = [
     group: "tasks_courses",
     icon: CheckCircle2,
     summary: "Sync your iPhone reminders into tasks via a Shortcut you jot into on the go.",
+    beta: true,
   },
   {
     id: "manual",
@@ -121,6 +123,15 @@ export const CONNECTOR_DEFINITIONS: ConnectorDefinition[] = [
     icon: Github,
     summary: "Repository and issue context sync is being developed.",
   },
+  {
+    id: "imessage",
+    title: "iMessage",
+    group: "operator",
+    icon: MessageSquare,
+    summary:
+      "Operator-only: forward allowlisted iMessage/SMS conversations into JARVIS as full-text context and scheduler candidates. Everything else is dropped on your Mac.",
+    beta: true,
+  },
 ]
 
 export function ConnectorRow({
@@ -162,6 +173,7 @@ export function ConnectorRow({
       >
         {connector.title}
       </span>
+      {connector.beta ? <BetaBadge /> : null}
       <ConnectorStatusMark state={state} />
     </button>
   )

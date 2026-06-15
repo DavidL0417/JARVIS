@@ -34,6 +34,7 @@ export type SecretaryIntent =
   | { kind: "pause_automations"; until: string | null; command: string }
   | { kind: "resume_automations"; command: string }
   | { kind: "log_activity"; activity: string; start: string | null; end: string | null; command: string }
+  | { kind: "read_messages"; contactQuery: string; command: string }
 
 export function normalizeAssistantCommand(value: string) {
   return value.trim().replace(/\s+/g, " ")
@@ -89,6 +90,40 @@ export function parseMemoryContent(message: string) {
     }
   }
 
+  return null
+}
+
+// Strip a trailing topic/punctuation from a captured contact name so
+// "Alan about the deck?" -> "Alan".
+function cleanContactName(raw: string): string {
+  return raw
+    .replace(/\?+$/g, "")
+    .replace(/\b(?:about|regarding|concerning|re)\b.*$/i, "")
+    .replace(/[.,;:!]+$/g, "")
+    .replace(/^@/, "")
+    .trim()
+}
+
+// Detect a request to read the archived iMessage/SMS thread with a contact, e.g.
+// "what did Alan say about the trip", "read my messages with Dani", "texts from Mom".
+// Returns the contact name to resolve against the allowlist, or null.
+export function parseReadMessages(message: string): string | null {
+  const normalized = normalizeAssistantCommand(message)
+  const patterns = [
+    /\b(?:read|show|pull up|see|check|look at|find|search)\b[^.?!]*\b(?:messages?|texts?|imessages?|conversations?|threads?|chats?|dms?)\b\s+(?:with|from|to)\s+(?<name>.+)$/i,
+    /^(?:what did|what'd|what has|what's)\s+(?<name>.+?)\s+(?:say|said|text|texted|message|messaged|tell|told|send|sent)\b/i,
+    /^(?:messages?|texts?|imessages?|conversations?|threads?|chats?)\s+(?:with|from)\s+(?<name>.+)$/i,
+    /\bdid\s+(?<name>(?!you\b|i\b|we\b|they\b)[a-z].+?)\s+(?:say|text|message|mention|send)\b/i,
+  ]
+  for (const pattern of patterns) {
+    const name = normalized.match(pattern)?.groups?.name
+    if (name) {
+      const cleaned = cleanContactName(name)
+      if (cleaned) {
+        return cleaned
+      }
+    }
+  }
   return null
 }
 
@@ -338,6 +373,12 @@ export async function classifySecretaryIntent(input: {
       end: activityLog.end,
       command,
     }
+  }
+
+  const messageContact = parseReadMessages(command)
+
+  if (messageContact) {
+    return { kind: "read_messages", contactQuery: messageContact, command }
   }
 
   const pauseCommand = parsePauseCommand(command)

@@ -41,6 +41,7 @@ import {
 } from "@/lib/supabase/google-calendar-integration"
 import { getStoredIntegrationToken } from "@/lib/supabase/integration-tokens"
 import { reconcileStaleSchedule } from "@/lib/reconciliation"
+import { isImessageOperator } from "@/lib/imessage/operator-session"
 import { dashboardResponseSchema } from "@/schemas/dashboard"
 import type {
   DashboardResponse,
@@ -783,6 +784,7 @@ export async function GET() {
       sourceCandidates,
       dailyPlan,
       reentry,
+      isImessageOperator: isImessageOperator(user.id),
     }
 
     const parsedPayload = dashboardResponseSchema.safeParse(dashboardPayload)

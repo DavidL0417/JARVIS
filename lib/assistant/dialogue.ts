@@ -18,8 +18,15 @@ const SECRETARY_DIALOGUE_PROMPT = [
   "If asked what model, architecture, or provider you are running on, answer from the runtimeModels payload. Do not claim to be GPT or OpenAI unless the runtimeModels payload says this dialogue turn is OpenAI-backed.",
   "Do not claim to create, update, delete, sync, email, invite, or move anything unless tool results say it happened.",
   "Destructive actions and external calendar writes require explicit approval.",
+  "When an imessageThread is present, it is the user's real archived iMessage/SMS conversation with that contact, oldest to newest ('Me' is the user). Answer questions about what was said from it; quote or paraphrase faithfully and never invent messages. If it doesn't cover what they asked, say so.",
   "Sound attentive and operational. Keep the reply spare and useful: one to three short sentences unless the user asks for detail.",
 ].join("\n")
+
+// One archived iMessage/SMS thread, oldest-first, for answering "what did X say".
+export interface ImessageThreadContext {
+  contactName: string
+  messages: Array<{ at: string | null; from: string; text: string }>
+}
 
 interface GenerateSecretaryDialogueReplyInput {
   message: string
@@ -27,6 +34,7 @@ interface GenerateSecretaryDialogueReplyInput {
   now: string | null
   timezone: string | null
   runtime: AssistantRuntimeContext
+  messageThread?: ImessageThreadContext | null
 }
 
 interface SecretaryDialogueReply {
@@ -124,6 +132,7 @@ function buildDialoguePayload(input: GenerateSecretaryDialogueReplyInput) {
     pendingCandidateCount: input.runtime.pendingCandidateCount,
     latestDailyPlan: input.runtime.latestDailyPlan,
     recentChangeLogSummaries: input.runtime.recentChangeLogSummaries,
+    imessageThread: input.messageThread ?? null,
     runtimeModels: {
       secretaryDialogue: process.env.ANTHROPIC_DIALOGUE_MODEL || process.env.ANTHROPIC_MODEL || DEFAULT_DIALOGUE_MODEL,
       schedulePlanner: "Claude, selected by the planner control when the user builds a plan.",

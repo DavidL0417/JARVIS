@@ -66,6 +66,7 @@ import {
   ConnectorGroup,
   ConnectorRow,
 } from "@/components/dashboard/sources/connector-list"
+import { ImessageConsolePane } from "@/components/dashboard/sources/imessage-console"
 import type {
   SourceCandidate,
   SourceConnector,
@@ -99,12 +100,14 @@ export function SourceSetupPanel({
   sourceFiles,
   sourceCandidates,
   onSourcesChanged,
+  isImessageOperator = false,
 }: {
   sourceConnectors: SourceConnector[]
   sources: SourceSnapshotSummary[]
   sourceFiles: SourceFileSummary[]
   sourceCandidates: SourceCandidate[]
   onSourcesChanged: () => Promise<void>
+  isImessageOperator?: boolean
 }) {
   const notionConnector = getConnector(sourceConnectors, "notion")
   const googleCalendarConnector = getConnector(sourceConnectors, "google_calendar")
@@ -173,6 +176,11 @@ export function SourceSetupPanel({
   function stateForConnector(connector: ConnectorDefinition): ConnectorState {
     if (connector.id === "manual") {
       return "manual"
+    }
+
+    if (connector.id === "imessage") {
+      // Always-on operator intake — no per-user connect/auth status to surface.
+      return "ready"
     }
 
     if (connector.group === "developing" || connector.id === "outlook_calendar" || connector.id === "linear" || connector.id === "github") {
@@ -907,6 +915,10 @@ export function SourceSetupPanel({
       )
     }
 
+    if (selectedConnector.id === "imessage") {
+      return <ImessageConsolePane connector={selectedConnector} state={state} />
+    }
+
     if (selectedConnector.id === "apple_reminders") {
       const isConnected =
         appleRemindersConnector.status === "connected" || appleRemindersConnector.status === "ready"
@@ -1109,6 +1121,20 @@ export function SourceSetupPanel({
             />
           ))}
         </ConnectorGroup>
+
+        {isImessageOperator ? (
+          <ConnectorGroup title="Operator">
+            {CONNECTOR_DEFINITIONS.filter((connector) => connector.group === "operator").map((connector) => (
+              <ConnectorRow
+                key={connector.id}
+                connector={connector}
+                state={stateForConnector(connector)}
+                active={selectedId === connector.id}
+                onSelect={() => setSelectedId(connector.id)}
+              />
+            ))}
+          </ConnectorGroup>
+        ) : null}
 
         <ConnectorGroup title="In Development">
           {CONNECTOR_DEFINITIONS.filter((connector) => connector.group === "developing").map((connector) => (

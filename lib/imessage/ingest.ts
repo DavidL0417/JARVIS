@@ -1,3 +1,5 @@
+import { normalizeHandle } from "@/lib/imessage/handles"
+import { upsertImessageMessages, type ArchivedMessageInput } from "@/lib/imessage/store"
 import { extractCandidatesFromText } from "@/lib/sources/extraction"
 import { getLatestContentHash, hashSourceContent } from "@/lib/sources/idle-skip"
 import {
@@ -25,11 +27,13 @@ export interface IncomingImessage {
   isFromMe: boolean
   service?: string | null
   chatName?: string | null
+  isGroup?: boolean
 }
 
 export interface ImessageIngestResult {
   received: number
   used: number
+  archived: number
   candidateCount: number
   extractionSkipped: boolean
 }
@@ -77,9 +81,30 @@ export function buildImessageSourceText(messages: IncomingImessage[]): string {
   return messages.slice(-MAX_MESSAGES_FOR_EXTRACTION).map(formatMessageLine).join("\n")
 }
 
-// Mirrors the Gmail context scan: dedupe -> idle-skip on content hash -> extract
-// scheduler candidates -> snapshot + auto-approve (high-confidence only; the rest
-// stay pending for review). One-way and read-only: texts are never written back.
+// Map a decoded message to its durable archive row. handleNorm ties a 1:1 thread
+// together — the reader sends the counterpart handle for both directions — so the
+// assistant can retrieve a whole conversation by a contact's normalized handle.
+function toArchiveInput(message: IncomingImessage): ArchivedMessageInput {
+  const handle = normalizeText(message.handle)
+  return {
+    guid: message.guid,
+    handle,
+    handleNorm: normalizeHandle(handle) || null,
+    senderName: normalizeText(message.senderName),
+    body: normalizeText(message.text) ?? "",
+    sentAt: normalizeText(message.sentAt),
+    isFromMe: message.isFromMe,
+    service: normalizeText(message.service),
+    chatName: normalizeText(message.chatName),
+    isGroup: message.isGroup ?? false,
+  }
+}
+
+// Mirrors the Gmail context scan: dedupe -> archive full text -> idle-skip on content
+// hash -> extract scheduler candidates -> snapshot + auto-approve (high-confidence
+// only; the rest stay pending for review). The archive step persists every filtered
+// message in full so the assistant can read conversations later — extraction alone is
+// lossy. One-way and read-only: texts are never written back to Messages.
 export async function ingestImessageMessages(
   adminClient: AdminClient,
   userId: string,
@@ -94,10 +119,15 @@ export async function ingestImessageMessages(
       source: "imessage",
       freshness: "fresh",
       summary: "iMessage intake received no messages with usable text.",
-      payload: { received: messages.length, used: 0, candidateCount: 0, extractionSkipped: true },
+      payload: { received: messages.length, used: 0, archived: 0, candidateCount: 0, extractionSkipped: true },
     })
-    return { received: messages.length, used: 0, candidateCount: 0, extractionSkipped: true }
+    return { received: messages.length, used: 0, archived: 0, candidateCount: 0, extractionSkipped: true }
   }
+
+  // Archive every filtered message in full (idempotent on guid), independent of the
+  // idle-skip below — so re-sent/backfilled windows always land even when extraction
+  // is skipped. Returns how many rows were newly stored.
+  const archived = await upsertImessageMessages(userId, deduped.map(toArchiveInput), adminClient)
 
   const sourceText = buildImessageSourceText(deduped)
   const contentHash = hashSourceContent(sourceText)
@@ -113,12 +143,13 @@ export async function ingestImessageMessages(
       payload: {
         received: messages.length,
         used: deduped.length,
+        archived,
         contentHash,
         candidateCount: 0,
         extractionSkipped: true,
       },
     })
-    return { received: messages.length, used: deduped.length, candidateCount: 0, extractionSkipped: true }
+    return { received: messages.length, used: deduped.length, archived, candidateCount: 0, extractionSkipped: true }
   }
 
   const extraction = await extractCandidatesFromText({
@@ -137,6 +168,7 @@ export async function ingestImessageMessages(
     payload: {
       received: messages.length,
       used: deduped.length,
+      archived,
       messageCharLimit: MESSAGE_TEXT_CHAR_LIMIT,
       contentHash,
       model: extraction.model,
@@ -154,6 +186,7 @@ export async function ingestImessageMessages(
   return {
     received: messages.length,
     used: deduped.length,
+    archived,
     candidateCount: candidates.length,
     extractionSkipped: false,
   }

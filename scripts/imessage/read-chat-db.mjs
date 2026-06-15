@@ -2,22 +2,32 @@
 // Operator-only iMessage reader — runs on the operator's Mac, NOT on the server.
 //
 // macOS stores every iMessage/SMS in ~/Library/Messages/chat.db (SQLite). This
-// script snapshots that DB, decodes recent messages, and POSTs them to the hidden
-// /api/integrations/imessage/ingest webhook. The server never sees chat.db; all
-// macOS-specific work (attributedBody decode, Apple-epoch -> ISO) happens here.
+// script snapshots that DB, decodes recent messages, FILTERS them locally, and POSTs
+// the survivors to the hidden /api/integrations/imessage/ingest webhook. The server
+// never sees chat.db; all macOS-specific work (attributedBody decode, Apple-epoch ->
+// ISO) and all filtering happen here, so spam / 2FA / non-allowlisted group bodies
+// never leave the machine.
+//
+// FILTERING (mirrors the Scheduler's messages_snapshot.py):
+//   - Fetches the operator's curated contact allowlist from /filter-config.
+//   - Includes a chat if it contains an allowlisted contact (1:1 OR group), OR it is
+//     a 1:1 with a non-shortcode handle and real two-way traffic in the last 30 days.
+//   - Drops shortcodes (<7 digit senders: banks, 2FA, delivery, payment) and any
+//     group with no allowlisted member.
 //
 // REQUIREMENTS
-//   - The process running this (your terminal / node) needs Full Disk Access:
-//     System Settings -> Privacy & Security -> Full Disk Access -> add Terminal.
+//   - The process running this needs Full Disk Access (Terminal, or the node binary
+//     launchd runs): System Settings -> Privacy & Security -> Full Disk Access.
 //   - macOS `sqlite3` CLI (ships with macOS) and Node 18+ (global fetch).
 //
 // USAGE
 //   IMESSAGE_INGEST_SECRET=... JARVIS_APP_URL=https://mydearestjarvis.vercel.app \
-//     node scripts/imessage/read-chat-db.mjs [--since-days 7] [--limit 1000] [--dry-run]
+//     node scripts/imessage/read-chat-db.mjs [--since-days 7] [--limit 5000] [--backfill] [--dry-run]
 //
 // A cursor at ~/.jarvis/imessage-cursor.json tracks the last message processed so
-// re-runs only send new messages. First run backfills --since-days (default 7).
-// See docs/decisions/operator-only-imessage.md.
+// re-runs only send new messages. --backfill ignores the cursor and re-scans the full
+// --since-days window (use a big --since-days once to capture history for allowlisted
+// contacts). See docs/decisions/operator-only-imessage.md.
 
 import { execFileSync } from "node:child_process"
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
@@ -29,14 +39,19 @@ const CHAT_DB = join(HOME, "Library", "Messages", "chat.db")
 const CURSOR_PATH = join(HOME, ".jarvis", "imessage-cursor.json")
 const APPLE_EPOCH_OFFSET_SECONDS = 978_307_200 // 2001-01-01 -> 1970-01-01
 const POST_BATCH_SIZE = 200
+// How far back to look when deciding if a non-allowlisted 1:1 is a real two-way
+// relationship. Wider than the incremental fetch window so a back-and-forth that
+// spans several runs still counts. Mirrors the Scheduler's rolling window.
+const BIDIRECTIONAL_WINDOW_DAYS = 30
 
 function parseArgs(argv) {
-  const args = { sinceDays: 7, limit: 5000, dryRun: false }
+  const args = { sinceDays: 7, limit: 5000, dryRun: false, backfill: false }
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i]
     if (arg === "--since-days") args.sinceDays = Number(argv[++i])
     else if (arg === "--limit") args.limit = Number(argv[++i])
     else if (arg === "--dry-run") args.dryRun = true
+    else if (arg === "--backfill") args.backfill = true
   }
   return args
 }
@@ -44,6 +59,24 @@ function parseArgs(argv) {
 function fail(message) {
   console.error(`✗ ${message}`)
   process.exit(1)
+}
+
+// --- handle normalization (mirror of lib/imessage/handles.ts) ----------------
+function normalizeHandle(handle) {
+  if (!handle) return ""
+  const trimmed = String(handle).trim()
+  if (!trimmed) return ""
+  if (trimmed.includes("@")) return trimmed.toLowerCase()
+  const digits = trimmed.replace(/\D/g, "")
+  return digits.length >= 10 ? digits.slice(-10) : digits
+}
+
+function isShortcode(handle) {
+  if (!handle) return false
+  const trimmed = String(handle).trim()
+  if (trimmed.includes("@")) return false
+  const digits = trimmed.replace(/\D/g, "")
+  return digits.length < 7
 }
 
 // --- Apple-epoch dates -------------------------------------------------------
@@ -98,7 +131,7 @@ function decodeAttributedBody(hex) {
   return buf.slice(i, i + len).toString("utf8")
 }
 
-// --- chat.db snapshot + query ------------------------------------------------
+// --- chat.db snapshot + queries ----------------------------------------------
 // Copy chat.db plus its -wal/-shm sidecars to a temp dir so we read a consistent
 // snapshot (SQLite replays the WAL on open) without contending with Messages.app.
 function snapshotChatDb() {
@@ -123,25 +156,7 @@ function snapshotChatDb() {
   return { dir, dest }
 }
 
-function queryMessages(dbPath, sinceAppleNanos, limit) {
-  const sql = `
-    SELECT
-      m.guid AS guid,
-      m.text AS text,
-      hex(m.attributedBody) AS attributedBodyHex,
-      m.date AS date,
-      m.is_from_me AS isFromMe,
-      m.service AS service,
-      h.id AS handle,
-      c.display_name AS chatName
-    FROM message m
-    LEFT JOIN handle h ON m.handle_id = h.ROWID
-    LEFT JOIN chat_message_join cmj ON cmj.message_id = m.ROWID
-    LEFT JOIN chat c ON c.ROWID = cmj.chat_id
-    WHERE m.date > ${sinceAppleNanos}
-    ORDER BY m.date ASC
-    LIMIT ${limit};
-  `
+function runQuery(dbPath, sql) {
   let stdout
   try {
     stdout = execFileSync("sqlite3", ["-json", dbPath, sql], { maxBuffer: 256 * 1024 * 1024 }).toString("utf8")
@@ -157,19 +172,142 @@ function queryMessages(dbPath, sinceAppleNanos, limit) {
   }
 }
 
-function toMessage(row) {
+// chat_id -> [participant handles]. chat_handle_join lists only the OTHER parties,
+// so a 1:1 chat has exactly one participant and a group has >1.
+function queryParticipants(dbPath) {
+  const rows = runQuery(
+    dbPath,
+    `SELECT chj.chat_id AS chatId, h.id AS handle
+     FROM chat_handle_join chj
+     JOIN handle h ON h.ROWID = chj.handle_id;`,
+  )
+  const byChat = new Map()
+  for (const row of rows) {
+    if (!row.handle) continue
+    const list = byChat.get(row.chatId) ?? []
+    list.push(String(row.handle))
+    byChat.set(row.chatId, list)
+  }
+  return byChat
+}
+
+// chat_id -> display name (null for 1:1 threads).
+function queryChatNames(dbPath) {
+  const rows = runQuery(dbPath, `SELECT c.ROWID AS chatId, c.display_name AS displayName FROM chat c;`)
+  const byChat = new Map()
+  for (const row of rows) {
+    byChat.set(row.chatId, row.displayName ?? null)
+  }
+  return byChat
+}
+
+// chat_id -> { sent, recv } over the bidirectional window, to tell a real two-way
+// 1:1 relationship from one-way automated/notification traffic.
+function queryDirectionTally(dbPath, sinceAppleNanos) {
+  const rows = runQuery(
+    dbPath,
+    `SELECT cmj.chat_id AS chatId, m.is_from_me AS isFromMe, COUNT(*) AS n
+     FROM message m
+     JOIN chat_message_join cmj ON cmj.message_id = m.ROWID
+     WHERE m.date > ${sinceAppleNanos}
+     GROUP BY cmj.chat_id, m.is_from_me;`,
+  )
+  const byChat = new Map()
+  for (const row of rows) {
+    const entry = byChat.get(row.chatId) ?? { sent: 0, recv: 0 }
+    if (Number(row.isFromMe) === 1) entry.sent += Number(row.n)
+    else entry.recv += Number(row.n)
+    byChat.set(row.chatId, entry)
+  }
+  return byChat
+}
+
+// New messages since the fetch floor, tagged with their chat + sender handle.
+function queryMessages(dbPath, sinceAppleNanos, limit) {
+  return runQuery(
+    dbPath,
+    `SELECT
+       m.guid AS guid,
+       m.text AS text,
+       hex(m.attributedBody) AS attributedBodyHex,
+       m.date AS date,
+       m.is_from_me AS isFromMe,
+       m.service AS service,
+       sh.id AS senderHandle,
+       cmj.chat_id AS chatId
+     FROM message m
+     JOIN chat_message_join cmj ON cmj.message_id = m.ROWID
+     LEFT JOIN handle sh ON sh.ROWID = m.handle_id
+     WHERE m.date > ${sinceAppleNanos}
+     ORDER BY m.date ASC
+     LIMIT ${limit};`,
+  )
+}
+
+// Decide which chats are worth forwarding, and how to tag their messages.
+// Returns Map<chatId, { isGroup, counterpartHandle, displayName }>.
+function decideIncludedChats(participants, directionTally, chatNames, allowlistSet) {
+  const included = new Map()
+  for (const [chatId, handles] of participants) {
+    const count = handles.length
+    const isGroup = count > 1
+    const hasAllowlisted = handles.some((h) => allowlistSet.has(normalizeHandle(h)))
+
+    let include = false
+    if (hasAllowlisted) {
+      // Allowlisted contact present — keep, whether 1:1 or group.
+      include = true
+    } else if (count === 1 && !isShortcode(handles[0])) {
+      // Unknown 1:1: keep only if it's a real two-way exchange (not a one-way blast).
+      const tally = directionTally.get(chatId) ?? { sent: 0, recv: 0 }
+      include = tally.sent > 0 && tally.recv > 0
+    }
+    // Group with no allowlisted member, or a shortcode 1:1 -> dropped.
+
+    if (include) {
+      included.set(chatId, {
+        isGroup,
+        counterpartHandle: count === 1 ? handles[0] : null,
+        displayName: chatNames.get(chatId) ?? null,
+      })
+    }
+  }
+  return included
+}
+
+// Build the message the server archives + extracts. For a 1:1, every message
+// (both directions) is tagged with the counterpart handle so the thread stays
+// joined; for a group, the actual sender's handle is kept.
+function toMessage(row, chatInfo) {
   const text = (row.text && String(row.text).trim()) || decodeAttributedBody(row.attributedBodyHex) || ""
+  const handle = chatInfo.isGroup ? (row.senderHandle ?? null) : chatInfo.counterpartHandle
   return {
     guid: row.guid,
     text,
-    handle: row.handle ?? null,
+    handle,
     senderName: null, // contact-name resolution from AddressBook is a future enhancement
     sentAt: appleDateToIso(row.date),
     isFromMe: row.isFromMe === 1 || row.isFromMe === "1",
     service: row.service ?? null,
-    chatName: row.chatName ?? null,
-    _appleDate: Number(row.date),
+    chatName: chatInfo.displayName,
+    isGroup: chatInfo.isGroup,
   }
+}
+
+// --- allowlist fetch ---------------------------------------------------------
+async function fetchAllowlist(appUrl, secret) {
+  const response = await fetch(`${appUrl.replace(/\/$/, "")}/api/integrations/imessage/filter-config`, {
+    headers: { authorization: `Bearer ${secret}` },
+  })
+  if (response.status === 404) {
+    fail("filter-config returned 404 — the feature is off, or this secret/operator id is wrong.")
+  }
+  if (!response.ok) {
+    fail(`Could not fetch allowlist: HTTP ${response.status}`)
+  }
+  const payload = await response.json().catch(() => null)
+  const entries = Array.isArray(payload?.allowlist) ? payload.allowlist : []
+  return new Set(entries.map((entry) => entry?.handleNorm).filter(Boolean))
 }
 
 // --- cursor ------------------------------------------------------------------
@@ -212,44 +350,80 @@ async function main() {
     fail("IMESSAGE_INGEST_SECRET is required (or pass --dry-run to preview without sending).")
   }
 
+  // Filtering needs the allowlist. Without a secret (dry-run only) we can't fetch it,
+  // so we fall back to an empty allowlist and only two-way unknowns would survive.
+  let allowlistSet = new Set()
+  if (secret) {
+    allowlistSet = await fetchAllowlist(appUrl, secret)
+  } else {
+    console.log("! No secret — previewing with an EMPTY allowlist (only two-way unknown 1:1s would pass).")
+  }
+
   const cursor = readCursor()
-  const sinceAppleNanos = cursor?.maxAppleDate
+  const useCursor = !args.backfill && cursor?.maxAppleDate
+  const sinceAppleNanos = useCursor
     ? cursor.maxAppleDate
     : isoToAppleNanos(new Date(Date.now() - args.sinceDays * 86_400_000).toISOString())
+  const bidirectionalFloor = isoToAppleNanos(
+    new Date(Date.now() - Math.max(BIDIRECTIONAL_WINDOW_DAYS, args.backfill ? args.sinceDays : 0) * 86_400_000).toISOString(),
+  )
 
   const { dir, dest } = snapshotChatDb()
   let rows
+  let participants
+  let directionTally
+  let chatNames
   try {
+    participants = queryParticipants(dest)
+    chatNames = queryChatNames(dest)
+    directionTally = queryDirectionTally(dest, bidirectionalFloor)
     rows = queryMessages(dest, sinceAppleNanos, args.limit)
   } finally {
     rmSync(dir, { recursive: true, force: true })
   }
 
-  const messages = rows.map(toMessage).filter((m) => m.guid && m.text)
-  if (messages.length === 0) {
+  if (rows.length === 0) {
     console.log("✓ No new messages since last run.")
     return
   }
 
-  const maxAppleDate = messages.reduce((max, m) => Math.max(max, m._appleDate || 0), sinceAppleNanos)
-  const payloadMessages = messages.map(({ _appleDate, ...rest }) => rest)
+  // Advance the cursor past every queried message (incl. filtered-out ones) so we
+  // don't re-evaluate them next run.
+  const maxAppleDate = rows.reduce((max, row) => Math.max(max, Number(row.date) || 0), sinceAppleNanos)
+
+  const included = decideIncludedChats(participants, directionTally, chatNames, allowlistSet)
+  const messages = rows
+    .filter((row) => included.has(row.chatId))
+    .map((row) => toMessage(row, included.get(row.chatId)))
+    .filter((message) => message.guid && message.text)
+
+  const droppedCount = rows.length - messages.length
+  if (messages.length === 0) {
+    console.log(`✓ ${rows.length} message(s) scanned, all filtered out (allowlist/shortcode/group). Cursor advanced.`)
+    if (!args.dryRun) writeCursor(maxAppleDate)
+    return
+  }
+
+  const payloadMessages = messages
 
   if (args.dryRun) {
-    console.log(`✓ Dry run: ${payloadMessages.length} message(s) would be sent. Sample:`)
+    console.log(`✓ Dry run: ${payloadMessages.length} of ${rows.length} message(s) would be sent (${droppedCount} filtered). Sample:`)
     console.log(JSON.stringify(payloadMessages.slice(0, 3), null, 2))
     return
   }
 
   let sent = 0
+  let archived = 0
   for (let i = 0; i < payloadMessages.length; i += POST_BATCH_SIZE) {
     const batch = payloadMessages.slice(i, i + POST_BATCH_SIZE)
     const result = await postBatch(appUrl, secret, batch)
     sent += batch.length
-    console.log(`  …sent ${sent}/${payloadMessages.length} (candidates: ${result?.candidateCount ?? "?"})`)
+    archived += result?.archived ?? 0
+    console.log(`  …sent ${sent}/${payloadMessages.length} (archived: ${result?.archived ?? "?"}, candidates: ${result?.candidateCount ?? "?"})`)
   }
 
   writeCursor(maxAppleDate)
-  console.log(`✓ Done. Sent ${sent} message(s); cursor advanced.`)
+  console.log(`✓ Done. Sent ${sent} message(s) (${droppedCount} filtered, ${archived} newly archived); cursor advanced.`)
 }
 
 main().catch((error) => fail(error?.message ?? String(error)))

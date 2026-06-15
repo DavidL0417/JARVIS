@@ -3,11 +3,13 @@ import type { SupabaseClient } from "@supabase/supabase-js"
 import { normalizeMemoryContent } from "@/lib/ai/memory-normalize"
 import { loadAssistantRuntimeContext } from "@/lib/assistant/context"
 import { overlapsSimilarBlock } from "@/lib/dedupe"
-import { generateSecretaryDialogueReply } from "@/lib/assistant/dialogue"
+import { generateSecretaryDialogueReply, type ImessageThreadContext } from "@/lib/assistant/dialogue"
 import {
   classifySecretaryIntent,
   normalizeAssistantCommand,
 } from "@/lib/assistant/orchestrator"
+import { normalizeHandle } from "@/lib/imessage/handles"
+import { getImessageAllowlist, getImessageMessages } from "@/lib/imessage/store"
 import { buildDailyPlan } from "@/lib/daily-plan"
 import { refreshSourcesForUser } from "@/lib/sources/refresh"
 import { setAutomationPaused } from "@/lib/supabase/automation-settings"
@@ -427,6 +429,52 @@ async function handleCreateTask(
   return receipt
 }
 
+// Resolve a contact query to their archived iMessage thread (oldest-first) for the
+// read_messages intent. Matches the allowlist by name (either-direction substring)
+// or by handle. Returns null when nothing on the allowlist matches; an empty
+// messages array means the contact is allowlisted but nothing is archived yet.
+async function loadImessageThread(
+  adminClient: AdminClient,
+  userId: string,
+  contactQuery: string,
+): Promise<ImessageThreadContext | null> {
+  const query = contactQuery.trim().toLowerCase()
+  if (!query) {
+    return null
+  }
+
+  const contacts = await getImessageAllowlist(userId, adminClient)
+  if (contacts.length === 0) {
+    return null
+  }
+
+  const queryHandleNorm = normalizeHandle(query)
+  const matches = contacts.filter((contact) => {
+    const name = contact.displayName.toLowerCase()
+    const byName = name.includes(query) || query.includes(name)
+    const byHandle = Boolean(queryHandleNorm) && contact.handleNorm === queryHandleNorm
+    return byName || byHandle
+  })
+  if (matches.length === 0) {
+    return null
+  }
+
+  const contactName = matches[0].displayName
+  const handleNorms = Array.from(new Set(matches.map((contact) => contact.handleNorm)))
+  const archived = await getImessageMessages({ userId, handles: handleNorms, maxRows: 120, adminClient })
+
+  const messages = archived
+    .slice()
+    .reverse() // store returns newest-first; the dialogue reads oldest-first
+    .map((message) => ({
+      at: message.sentAt,
+      from: message.isFromMe ? "Me" : message.senderName || contactName,
+      text: message.body,
+    }))
+
+  return { contactName, messages }
+}
+
 export async function runSecretaryTurn(input: RunSecretaryTurnInput): Promise<AssistantMessageResponse> {
   const cleanMessage = normalizeText(input.message)
   const runtimeBefore = await loadAssistantRuntimeContext(input.supabase, input.userId)
@@ -554,6 +602,26 @@ export async function runSecretaryTurn(input: RunSecretaryTurnInput): Promise<As
   } else if (intent.kind === "create_task") {
     reply = `Added "${intent.title}".`
     needsRefresh = true
+  } else if (intent.kind === "read_messages") {
+    const thread = await loadImessageThread(input.supabase, input.userId, intent.contactQuery)
+    if (!thread) {
+      reply = `I don't have anyone matching "${intent.contactQuery}" on your iMessage allowlist, so there's no archived conversation to read. Add them under Sources → iMessage to start capturing it.`
+    } else if (thread.messages.length === 0) {
+      reply = `${thread.contactName} is on your allowlist, but I haven't archived any messages with them yet.`
+    } else {
+      const dialogue = await generateSecretaryDialogueReply({
+        message: cleanMessage,
+        now: input.now,
+        timezone: input.timezone,
+        history: input.history,
+        runtime: runtimeBefore,
+        messageThread: thread,
+      })
+      reply = dialogue.reply
+      ok = dialogue.ok
+      error = dialogue.error
+      model = dialogue.model
+    }
   } else {
     const dialogue = await generateSecretaryDialogueReply({
       message: cleanMessage,
