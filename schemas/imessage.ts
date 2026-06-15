@@ -29,6 +29,9 @@ export const imessageItemSchema = z.object({
 
 export const imessageIngestRequestSchema = z.object({
   messages: z.array(imessageItemSchema).max(2000),
+  // Set by the reader's --backfill: archive the messages in full but skip extraction,
+  // so pulling months of history doesn't flood the candidate queue with stale items.
+  archiveOnly: z.boolean().default(false),
 })
 
 export type ImessageItem = z.infer<typeof imessageItemSchema>
