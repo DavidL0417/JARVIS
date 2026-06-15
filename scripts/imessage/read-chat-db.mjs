@@ -325,11 +325,11 @@ function writeCursor(maxAppleDate) {
 }
 
 // --- POST --------------------------------------------------------------------
-async function postBatch(appUrl, secret, messages) {
+async function postBatch(appUrl, secret, messages, archiveOnly) {
   const response = await fetch(`${appUrl.replace(/\/$/, "")}/api/integrations/imessage/ingest`, {
     method: "POST",
     headers: { "content-type": "application/json", authorization: `Bearer ${secret}` },
-    body: JSON.stringify({ messages }),
+    body: JSON.stringify({ messages, archiveOnly: Boolean(archiveOnly) }),
   })
   const payload = await response.json().catch(() => null)
   if (!response.ok) {
@@ -399,8 +399,12 @@ async function main() {
 
   const droppedCount = rows.length - messages.length
   if (messages.length === 0) {
-    console.log(`✓ ${rows.length} message(s) scanned, all filtered out (allowlist/shortcode/group). Cursor advanced.`)
-    if (!args.dryRun) writeCursor(maxAppleDate)
+    // Backfill never advances the cursor — it's a one-time historical add, and
+    // leaving the cursor lets the normal incremental sync still extract this window.
+    if (!args.dryRun && !args.backfill) {
+      writeCursor(maxAppleDate)
+    }
+    console.log(`✓ ${rows.length} message(s) scanned, all filtered out (allowlist/shortcode/group).${args.backfill ? "" : " Cursor advanced."}`)
     return
   }
 
@@ -416,14 +420,18 @@ async function main() {
   let archived = 0
   for (let i = 0; i < payloadMessages.length; i += POST_BATCH_SIZE) {
     const batch = payloadMessages.slice(i, i + POST_BATCH_SIZE)
-    const result = await postBatch(appUrl, secret, batch)
+    const result = await postBatch(appUrl, secret, batch, args.backfill)
     sent += batch.length
     archived += result?.archived ?? 0
     console.log(`  …sent ${sent}/${payloadMessages.length} (archived: ${result?.archived ?? "?"}, candidates: ${result?.candidateCount ?? "?"})`)
   }
 
-  writeCursor(maxAppleDate)
-  console.log(`✓ Done. Sent ${sent} message(s) (${droppedCount} filtered, ${archived} newly archived); cursor advanced.`)
+  if (!args.backfill) {
+    writeCursor(maxAppleDate)
+  }
+  const mode = args.backfill ? " [archive-only backfill]" : ""
+  const cursorNote = args.backfill ? "" : "; cursor advanced"
+  console.log(`✓ Done${mode}. Sent ${sent} message(s) (${droppedCount} filtered, ${archived} newly archived)${cursorNote}.`)
 }
 
 main().catch((error) => fail(error?.message ?? String(error)))

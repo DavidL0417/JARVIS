@@ -25,7 +25,9 @@ export async function POST(request: Request) {
   }
 
   try {
-    const result = await ingestImessageMessages(auth.adminClient, auth.userId, parsed.data.messages)
+    const result = await ingestImessageMessages(auth.adminClient, auth.userId, parsed.data.messages, {
+      archiveOnly: parsed.data.archiveOnly,
+    })
     return NextResponse.json({ success: true, ...result })
   } catch (error) {
     const message = error instanceof Error ? error.message : "iMessage ingest failed."

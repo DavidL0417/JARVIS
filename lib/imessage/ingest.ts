@@ -109,6 +109,7 @@ export async function ingestImessageMessages(
   adminClient: AdminClient,
   userId: string,
   messages: IncomingImessage[],
+  options: { archiveOnly?: boolean } = {},
 ): Promise<ImessageIngestResult> {
   const deduped = dedupeMessagesByGuid(messages)
 
@@ -128,6 +129,12 @@ export async function ingestImessageMessages(
   // idle-skip below — so re-sent/backfilled windows always land even when extraction
   // is skipped. Returns how many rows were newly stored.
   const archived = await upsertImessageMessages(userId, deduped.map(toArchiveInput), adminClient)
+
+  // Backfill: store history in full but skip extraction (no snapshot, no candidates)
+  // so pulling months of messages doesn't flood the queue with stale commitments.
+  if (options.archiveOnly) {
+    return { received: messages.length, used: deduped.length, archived, candidateCount: 0, extractionSkipped: true }
+  }
 
   const sourceText = buildImessageSourceText(deduped)
   const contentHash = hashSourceContent(sourceText)
