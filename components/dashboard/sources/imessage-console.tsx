@@ -1,8 +1,9 @@
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
-import { Loader2, Plus, Trash2 } from "lucide-react"
+import { ChevronDown, Loader2, Plus, Trash2 } from "lucide-react"
 
+import { cn } from "@/lib/utils"
 import { FieldDescription, FieldLabel } from "@/components/ui/field"
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group"
 import {
@@ -20,6 +21,12 @@ interface ImessageContact {
   handleNorm: string
 }
 
+interface ImessageSuggestionMessage {
+  text: string
+  isFromMe: boolean
+  sentAt: string | null
+}
+
 interface ImessageSuggestion {
   handle: string
   handleNorm: string
@@ -28,6 +35,7 @@ interface ImessageSuggestion {
   messageCount: number
   sentCount: number
   recvCount: number
+  recentMessages?: ImessageSuggestionMessage[]
 }
 
 function relativeTime(iso: string | null): string {
@@ -63,6 +71,19 @@ export function ImessageConsolePane({
   const [error, setError] = useState("")
   const [nameInput, setNameInput] = useState("")
   const [handleInput, setHandleInput] = useState("")
+  const [expanded, setExpanded] = useState<Set<string>>(() => new Set())
+
+  function toggleExpanded(handleNorm: string) {
+    setExpanded((current) => {
+      const next = new Set(current)
+      if (next.has(handleNorm)) {
+        next.delete(handleNorm)
+      } else {
+        next.add(handleNorm)
+      }
+      return next
+    })
+  }
 
   const refreshSuggestions = useCallback(async () => {
     try {
@@ -227,25 +248,63 @@ export function ImessageConsolePane({
               ]
                 .filter(Boolean)
                 .join(" · ")
+              const isOpen = expanded.has(suggestion.handleNorm)
+              const preview = suggestion.recentMessages ?? []
               return (
-                <li
-                  key={suggestion.handleNorm}
-                  className="flex items-center justify-between gap-3 border-b border-rule/60 py-2 last:border-b-0"
-                >
-                  <div className="min-w-0">
-                    <p className="truncate text-[13px] font-medium text-foreground">{label}</p>
-                    {meta ? <p className="truncate text-[11px] text-muted-foreground">{meta}</p> : null}
+                <li key={suggestion.handleNorm} className="flex flex-col border-b border-rule/60 last:border-b-0">
+                  <div className="flex items-center justify-between gap-3 py-2">
+                    <button
+                      type="button"
+                      onClick={() => toggleExpanded(suggestion.handleNorm)}
+                      className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                      aria-expanded={isOpen}
+                      aria-label={`${isOpen ? "Hide" : "Show"} recent texts with ${label}`}
+                    >
+                      <ChevronDown
+                        className={cn(
+                          "h-3.5 w-3.5 shrink-0 text-muted-foreground/60 transition-transform",
+                          isOpen ? "rotate-0" : "-rotate-90",
+                        )}
+                        aria-hidden="true"
+                        strokeWidth={1.75}
+                      />
+                      <span className="min-w-0">
+                        <span className="block truncate text-[13px] font-medium text-foreground">{label}</span>
+                        {meta ? <span className="block truncate text-[11px] text-muted-foreground">{meta}</span> : null}
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void addContact(suggestion.displayName || suggestion.handle, suggestion.handle)}
+                      disabled={busy}
+                      className="inline-flex shrink-0 items-center gap-1 rounded-sm border border-rule px-2 py-1 text-[11px] text-muted-foreground transition-colors hover:border-copper/50 hover:text-copper disabled:opacity-50"
+                      aria-label={`Add ${label}`}
+                    >
+                      <Plus className="h-3 w-3" aria-hidden="true" strokeWidth={2} />
+                      Add
+                    </button>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => void addContact(suggestion.displayName || suggestion.handle, suggestion.handle)}
-                    disabled={busy}
-                    className="inline-flex shrink-0 items-center gap-1 rounded-sm border border-rule px-2 py-1 text-[11px] text-muted-foreground transition-colors hover:border-copper/50 hover:text-copper disabled:opacity-50"
-                    aria-label={`Add ${label}`}
-                  >
-                    <Plus className="h-3 w-3" aria-hidden="true" strokeWidth={2} />
-                    Add
-                  </button>
+                  {isOpen ? (
+                    <div className="flex flex-col gap-1 pb-2.5 pl-[22px]">
+                      {preview.length === 0 ? (
+                        <p className="text-[11px] text-muted-foreground">No recent text preview available.</p>
+                      ) : (
+                        preview.map((message, index) => (
+                          <p key={index} className="text-[11px] leading-4 [overflow-wrap:anywhere]">
+                            <span
+                              className={cn(
+                                "font-medium",
+                                message.isFromMe ? "text-copper/80" : "text-muted-foreground",
+                              )}
+                            >
+                              {message.isFromMe ? "You" : label}:
+                            </span>{" "}
+                            <span className="text-foreground/80">{message.text}</span>
+                          </p>
+                        ))
+                      )}
+                    </div>
+                  ) : null}
                 </li>
               )
             })}
