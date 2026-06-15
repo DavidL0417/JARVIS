@@ -288,6 +288,58 @@ function queryRecentOneToOneContacts(dbPath, sinceAppleNanos) {
   )
 }
 
+// The most recent messages in a handle's 1:1 thread, oldest-first, decoded and
+// trimmed — a short preview so a number-only suggestion is identifiable. Over-fetches
+// then drops empties (attachment-only rows) before keeping `limit`.
+function queryRecentMessagesForHandle(dbPath, handle, limit) {
+  const safe = String(handle).replace(/'/g, "''")
+  const rows = runQuery(
+    dbPath,
+    `WITH one_to_one AS (
+       SELECT chat_id FROM chat_handle_join GROUP BY chat_id HAVING COUNT(*) = 1
+     )
+     SELECT m.text AS text, hex(m.attributedBody) AS attributedBodyHex, m.date AS date, m.is_from_me AS isFromMe
+     FROM one_to_one o
+     JOIN chat_handle_join chj ON chj.chat_id = o.chat_id
+     JOIN handle h ON h.ROWID = chj.handle_id
+     JOIN chat_message_join cmj ON cmj.chat_id = o.chat_id
+     JOIN message m ON m.ROWID = cmj.message_id
+     WHERE h.id = '${safe}'
+     ORDER BY m.date DESC
+     LIMIT ${Math.max(1, limit) * 4};`,
+  )
+  return rows
+    .map((row) => {
+      const text = (row.text && String(row.text).trim()) || decodeAttributedBody(row.attributedBodyHex) || ""
+      return {
+        text: text.slice(0, 280),
+        isFromMe: row.isFromMe === 1 || row.isFromMe === "1",
+        sentAt: appleDateToIso(row.date),
+      }
+    })
+    .filter((message) => message.text)
+    .slice(0, limit)
+    .reverse()
+}
+
+// Filter recent contacts to suggestion candidates (not allowlisted, not shortcode,
+// real two-way), newest first, and attach a short message preview to each. Names are
+// resolved later (AddressBook), so this can run while the chat.db snapshot is alive.
+function buildSuggestionRows(dbPath, recentContacts, allowlistSet) {
+  return recentContacts
+    .filter((row) => row.handle && !isShortcode(row.handle) && !allowlistSet.has(normalizeHandle(row.handle)))
+    .filter((row) => Number(row.sent) > 0 && Number(row.recv) > 0)
+    .slice(0, MAX_SUGGESTIONS)
+    .map((row) => ({
+      handle: String(row.handle),
+      lastSeen: appleDateToIso(row.lastDate),
+      messageCount: Number(row.msgCount) || 0,
+      sentCount: Number(row.sent) || 0,
+      recvCount: Number(row.recv) || 0,
+      recentMessages: queryRecentMessagesForHandle(dbPath, row.handle, 5),
+    }))
+}
+
 // --- macOS Contacts (AddressBook) name resolution ----------------------------
 // Best-effort: maps a normalized handle -> contact name, so suggestions show real
 // names instead of bare numbers. AddressBook lives in one or more SQLite DBs
@@ -454,23 +506,14 @@ async function postBatch(appUrl, secret, messages, archiveOnly) {
   return payload
 }
 
-// Compute + replace-upload suggested contacts: recent two-way 1:1s that aren't
-// allowlisted or shortcodes, newest first, names resolved from Contacts where possible.
+// Resolve names (from Contacts) onto prebuilt suggestion rows and replace-upload them.
 // Best-effort — a failure here never blocks the main intake.
-async function uploadSuggestions(appUrl, secret, recentContacts, allowlistSet) {
+async function uploadSuggestions(appUrl, secret, suggestionRows) {
   const nameMap = buildContactNameMap()
-  const suggestions = recentContacts
-    .filter((row) => row.handle && !isShortcode(row.handle) && !allowlistSet.has(normalizeHandle(row.handle)))
-    .filter((row) => Number(row.sent) > 0 && Number(row.recv) > 0)
-    .slice(0, MAX_SUGGESTIONS)
-    .map((row) => ({
-      handle: String(row.handle),
-      displayName: nameMap.get(normalizeHandle(row.handle)) ?? null,
-      lastSeen: appleDateToIso(row.lastDate),
-      messageCount: Number(row.msgCount) || 0,
-      sentCount: Number(row.sent) || 0,
-      recvCount: Number(row.recv) || 0,
-    }))
+  const suggestions = suggestionRows.map((row) => ({
+    ...row,
+    displayName: nameMap.get(normalizeHandle(row.handle)) ?? null,
+  }))
   try {
     const response = await fetch(`${appUrl.replace(/\/$/, "")}/api/integrations/imessage/suggestions`, {
       method: "POST",
@@ -520,15 +563,17 @@ async function main() {
   let participants
   let directionTally
   let chatNames
-  let recentContacts = null
+  let suggestionRows = null
   try {
     participants = queryParticipants(dest)
     chatNames = queryChatNames(dest)
     directionTally = queryDirectionTally(dest, bidirectionalFloor)
     rows = queryMessages(dest, sinceAppleNanos, args.limit)
-    // Suggestions reflect current recent contacts — skip on dry-run/backfill.
+    // Suggestions reflect current recent contacts — skip on dry-run/backfill. Built
+    // here (with message previews) while the chat.db snapshot is still alive.
     if (!args.dryRun && !args.backfill) {
-      recentContacts = queryRecentOneToOneContacts(dest, suggestionFloor)
+      const recentContacts = queryRecentOneToOneContacts(dest, suggestionFloor)
+      suggestionRows = buildSuggestionRows(dest, recentContacts, allowlistSet)
     }
   } finally {
     rmSync(dir, { recursive: true, force: true })
@@ -536,8 +581,8 @@ async function main() {
 
   // Refresh suggested contacts before any early return, so the list updates even when
   // there are no new messages to forward.
-  if (recentContacts && secret) {
-    await uploadSuggestions(appUrl, secret, recentContacts, allowlistSet)
+  if (suggestionRows && secret) {
+    await uploadSuggestions(appUrl, secret, suggestionRows)
   }
 
   if (rows.length === 0) {

@@ -111,6 +111,13 @@ export async function upsertImessageMessages(
   return typeof data === "number" ? data : 0
 }
 
+// A short preview message attached to a suggestion (for number-only contacts).
+export interface ImessageSuggestionMessage {
+  text: string
+  isFromMe: boolean
+  sentAt?: string | null
+}
+
 // A suggested contact (recent 1:1 not yet allowlisted) the reader uploads for the UI.
 export interface ImessageSuggestionInput {
   handle: string
@@ -119,10 +126,12 @@ export interface ImessageSuggestionInput {
   messageCount: number
   sentCount: number
   recvCount: number
+  recentMessages?: ImessageSuggestionMessage[]
 }
 
 export interface ImessageSuggestion extends ImessageSuggestionInput {
   handleNorm: string
+  recentMessages: ImessageSuggestionMessage[]
 }
 
 // Replace-all: the reader recomputes the suggestion set each run. Returns the count stored.
@@ -139,6 +148,7 @@ export async function replaceImessageSuggestions(
     message_count: suggestion.messageCount,
     sent_count: suggestion.sentCount,
     recv_count: suggestion.recvCount,
+    recent_messages: suggestion.recentMessages ?? [],
   }))
   const { data, error } = await adminClient.rpc("replace_imessage_suggestions", {
     suggestion_user_id: userId,
@@ -167,6 +177,13 @@ export async function getImessageSuggestions(
     messageCount: Number(row.message_count) || 0,
     sentCount: Number(row.sent_count) || 0,
     recvCount: Number(row.recv_count) || 0,
+    recentMessages: Array.isArray(row.recent_messages)
+      ? (row.recent_messages as Array<Record<string, unknown>>).map((message) => ({
+          text: String(message.text ?? ""),
+          isFromMe: Boolean(message.isFromMe),
+          sentAt: message.sentAt === null || message.sentAt === undefined ? null : String(message.sentAt),
+        }))
+      : [],
   }))
 }
 
