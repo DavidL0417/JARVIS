@@ -58,6 +58,7 @@ export const CONNECTOR_DEFINITIONS: ConnectorDefinition[] = [
     group: "tasks_courses",
     icon: GraduationCap,
     summary: "Import planner items from Canvas and sync completed planner items back.",
+    beta: true,
   },
   {
     id: "apple_reminders",
