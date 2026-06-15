@@ -36,8 +36,8 @@ export const memoryKindSchema = z.enum([
 ])
 export const memoryImportanceSchema = z.enum(["low", "medium", "high", "critical"])
 export const memoryStatusSchema = z.enum(["active", "candidate", "stale", "superseded", "archived"])
-// Must stay in sync with SourceKind in types/index.ts ("imessage" = hidden operator intake).
-export const sourceKindSchema = z.enum(["notion", "gmail", "caldav", "google_calendar", "manual", "system", "canvas", "apple_reminders", "imessage"])
+// Must stay in sync with SourceKind in types/index.ts ("imessage"/"raycast" = hidden operator intakes).
+export const sourceKindSchema = z.enum(["notion", "gmail", "caldav", "google_calendar", "manual", "system", "canvas", "apple_reminders", "imessage", "raycast"])
 export const sourceFreshnessSchema = z.enum(["fresh", "partial", "stale", "failed"])
 export const sourceFileStatusSchema = z.enum(["uploading", "ready", "processing", "processed", "failed"])
 export const sourceCandidateKindSchema = z.enum(["task", "deadline", "event", "routine", "preference", "note"])

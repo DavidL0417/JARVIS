@@ -20,3 +20,7 @@ playwright-report/
 
 # TypeScript incremental build cache
 tsconfig.tsbuildinfo
+
+# Python bytecode cache (local scripts)
+__pycache__/
+*.pyc
