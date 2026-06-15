@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { Loader2, Plus, Trash2 } from "lucide-react"
 
 import { FieldDescription, FieldLabel } from "@/components/ui/field"
@@ -20,9 +20,35 @@ interface ImessageContact {
   handleNorm: string
 }
 
-// Operator-only allowlist editor. Self-contained: fetches and mutates the curated
-// contact list via the 404-gated /api/integrations/imessage/allowlist routes, so the
-// host panel doesn't need any iMessage-specific state. Only rendered for the operator.
+interface ImessageSuggestion {
+  handle: string
+  handleNorm: string
+  displayName: string | null
+  lastSeen: string | null
+  messageCount: number
+  sentCount: number
+  recvCount: number
+}
+
+function relativeTime(iso: string | null): string {
+  if (!iso) {
+    return ""
+  }
+  const then = new Date(iso).getTime()
+  if (Number.isNaN(then)) {
+    return ""
+  }
+  const days = Math.floor((Date.now() - then) / 86_400_000)
+  if (days <= 0) return "today"
+  if (days === 1) return "yesterday"
+  if (days < 7) return `${days}d ago`
+  if (days < 30) return `${Math.floor(days / 7)}w ago`
+  return `${Math.floor(days / 30)}mo ago`
+}
+
+// Operator-only allowlist editor + suggested-contacts list. Self-contained: fetches
+// and mutates via the 404-gated /api/integrations/imessage/{allowlist,suggestions}
+// routes, so the host panel needs no iMessage-specific state. Only rendered for the operator.
 export function ImessageConsolePane({
   connector,
   state,
@@ -31,53 +57,63 @@ export function ImessageConsolePane({
   state: ConnectorState
 }) {
   const [contacts, setContacts] = useState<ImessageContact[]>([])
+  const [suggestions, setSuggestions] = useState<ImessageSuggestion[]>([])
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState("")
   const [nameInput, setNameInput] = useState("")
   const [handleInput, setHandleInput] = useState("")
 
-  useEffect(() => {
-    let cancelled = false
-
-    async function load() {
-      setLoading(true)
-      setError("")
-      try {
-        const response = await fetch("/api/integrations/imessage/allowlist")
-        if (!response.ok) {
-          throw new Error(
-            response.status === 404
-              ? "iMessage console is not enabled for this account."
-              : "Failed to load the allowlist.",
-          )
-        }
-        const data = await response.json()
-        if (!cancelled) {
-          setContacts(Array.isArray(data?.contacts) ? data.contacts : [])
-        }
-      } catch (caught) {
-        if (!cancelled) {
-          setError(caught instanceof Error ? caught.message : "Failed to load the allowlist.")
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false)
-        }
+  const refreshSuggestions = useCallback(async () => {
+    try {
+      const response = await fetch("/api/integrations/imessage/suggestions")
+      if (!response.ok) {
+        return
       }
-    }
-
-    void load()
-    return () => {
-      cancelled = true
+      const data = await response.json().catch(() => null)
+      setSuggestions(Array.isArray(data?.suggestions) ? data.suggestions : [])
+    } catch {
+      // non-fatal — suggestions are a convenience
     }
   }, [])
 
-  async function handleAdd() {
-    const displayName = nameInput.trim()
-    const handle = handleInput.trim()
-    if (!displayName || !handle) {
-      return
+  const loadAll = useCallback(async () => {
+    setLoading(true)
+    setError("")
+    try {
+      const [allowRes, sugRes] = await Promise.all([
+        fetch("/api/integrations/imessage/allowlist"),
+        fetch("/api/integrations/imessage/suggestions"),
+      ])
+      if (!allowRes.ok) {
+        throw new Error(
+          allowRes.status === 404
+            ? "iMessage console is not enabled for this account."
+            : "Failed to load the allowlist.",
+        )
+      }
+      const allowData = await allowRes.json()
+      setContacts(Array.isArray(allowData?.contacts) ? allowData.contacts : [])
+      if (sugRes.ok) {
+        const sugData = await sugRes.json().catch(() => null)
+        setSuggestions(Array.isArray(sugData?.suggestions) ? sugData.suggestions : [])
+      }
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Failed to load the allowlist.")
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    void loadAll()
+  }, [loadAll])
+
+  async function addContact(displayName: string, handle: string): Promise<boolean> {
+    const name = displayName.trim()
+    const value = handle.trim()
+    if (!name || !value) {
+      return false
     }
 
     setBusy(true)
@@ -86,19 +122,29 @@ export function ImessageConsolePane({
       const response = await fetch("/api/integrations/imessage/allowlist", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ displayName, handle }),
+        body: JSON.stringify({ displayName: name, handle: value }),
       })
       const data = await response.json().catch(() => null)
       if (!response.ok) {
         throw new Error(data?.error ?? "Failed to add the contact.")
       }
       setContacts(Array.isArray(data?.contacts) ? data.contacts : [])
-      setNameInput("")
-      setHandleInput("")
+      // The added contact drops off the suggestion list (server excludes allowlisted).
+      setSuggestions((current) => current.filter((item) => item.handle !== value))
+      void refreshSuggestions()
+      return true
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Failed to add the contact.")
+      return false
     } finally {
       setBusy(false)
+    }
+  }
+
+  async function handleAddFromForm() {
+    if (await addContact(nameInput, handleInput)) {
+      setNameInput("")
+      setHandleInput("")
     }
   }
 
@@ -114,6 +160,8 @@ export function ImessageConsolePane({
         throw new Error(data?.error ?? "Failed to remove the contact.")
       }
       setContacts(Array.isArray(data?.contacts) ? data.contacts : [])
+      // A removed contact may re-appear as a recent suggestion.
+      void refreshSuggestions()
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Failed to remove the contact.")
     } finally {
@@ -151,7 +199,7 @@ export function ImessageConsolePane({
               className="min-w-0 text-[12px]"
             />
             <InputGroupAddon align="inline-end">
-              <InputGroupButton onClick={handleAdd} disabled={busy || !nameInput.trim() || !handleInput.trim()}>
+              <InputGroupButton onClick={handleAddFromForm} disabled={busy || !nameInput.trim() || !handleInput.trim()}>
                 <Plus aria-hidden="true" />
                 Add
               </InputGroupButton>
@@ -162,6 +210,51 @@ export function ImessageConsolePane({
           Phones match on the last 10 digits; emails are case-insensitive.
         </FieldDescription>
       </div>
+
+      {suggestions.length > 0 ? (
+        <div className="flex flex-col">
+          <div className="flex items-center justify-between border-b border-rule pb-2">
+            <FieldLabel className="text-[12px]">Suggested · recent contacts</FieldLabel>
+            <span className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">{suggestions.length}</span>
+          </div>
+          <ul className="flex min-w-0 flex-col">
+            {suggestions.map((suggestion) => {
+              const label = suggestion.displayName || suggestion.handle
+              const meta = [
+                suggestion.displayName ? suggestion.handle : null,
+                relativeTime(suggestion.lastSeen),
+                suggestion.messageCount ? `${suggestion.messageCount} msgs` : null,
+              ]
+                .filter(Boolean)
+                .join(" · ")
+              return (
+                <li
+                  key={suggestion.handleNorm}
+                  className="flex items-center justify-between gap-3 border-b border-rule/60 py-2 last:border-b-0"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate text-[13px] font-medium text-foreground">{label}</p>
+                    {meta ? <p className="truncate text-[11px] text-muted-foreground">{meta}</p> : null}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => void addContact(suggestion.displayName || suggestion.handle, suggestion.handle)}
+                    disabled={busy}
+                    className="inline-flex shrink-0 items-center gap-1 rounded-sm border border-rule px-2 py-1 text-[11px] text-muted-foreground transition-colors hover:border-copper/50 hover:text-copper disabled:opacity-50"
+                    aria-label={`Add ${label}`}
+                  >
+                    <Plus className="h-3 w-3" aria-hidden="true" strokeWidth={2} />
+                    Add
+                  </button>
+                </li>
+              )
+            })}
+          </ul>
+          <FieldDescription className="mt-2 text-[11px]">
+            Recent two-way conversations you haven&apos;t added yet. Refreshes when the reader runs.
+          </FieldDescription>
+        </div>
+      ) : null}
 
       <div className="flex flex-col">
         <div className="flex items-center justify-between border-b border-rule pb-2">

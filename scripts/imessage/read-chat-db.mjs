@@ -30,7 +30,7 @@
 // contacts). See docs/decisions/operator-only-imessage.md.
 
 import { execFileSync } from "node:child_process"
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { homedir, tmpdir } from "node:os"
 import { join } from "node:path"
 
@@ -43,6 +43,10 @@ const POST_BATCH_SIZE = 200
 // relationship. Wider than the incremental fetch window so a back-and-forth that
 // spans several runs still counts. Mirrors the Scheduler's rolling window.
 const BIDIRECTIONAL_WINDOW_DAYS = 30
+// Window + cap for "suggested contacts" — recent 1:1 people not yet allowlisted that
+// the console offers as one-click adds.
+const SUGGESTION_WINDOW_DAYS = 60
+const MAX_SUGGESTIONS = 12
 
 function parseArgs(argv) {
   const args = { sinceDays: 7, limit: 5000, dryRun: false, backfill: false }
@@ -172,6 +176,19 @@ function runQuery(dbPath, sql) {
   }
 }
 
+// Best-effort query: returns [] on any error instead of exiting. Used for the
+// optional macOS Contacts (AddressBook) name lookup, whose schema and availability
+// vary by machine — a failure there must never break the main intake.
+function runQuerySafe(dbPath, sql) {
+  try {
+    const stdout = execFileSync("sqlite3", ["-json", dbPath, sql], { maxBuffer: 128 * 1024 * 1024 }).toString("utf8")
+    const trimmed = stdout.trim()
+    return trimmed ? JSON.parse(trimmed) : []
+  } catch {
+    return []
+  }
+}
+
 // chat_id -> [participant handles]. chat_handle_join lists only the OTHER parties,
 // so a 1:1 chat has exactly one participant and a group has >1.
 function queryParticipants(dbPath) {
@@ -242,6 +259,101 @@ function queryMessages(dbPath, sinceAppleNanos, limit) {
      ORDER BY m.date ASC
      LIMIT ${limit};`,
   )
+}
+
+// Most-recently-active 1:1 conversations within the window, with direction tallies —
+// the raw material for "suggested contacts". One row per handle (a handle in several
+// 1:1 chats is aggregated). Newest-active first.
+function queryRecentOneToOneContacts(dbPath, sinceAppleNanos) {
+  return runQuery(
+    dbPath,
+    `WITH one_to_one AS (
+       SELECT chat_id FROM chat_handle_join GROUP BY chat_id HAVING COUNT(*) = 1
+     )
+     SELECT
+       h.id AS handle,
+       MAX(m.date) AS lastDate,
+       COUNT(*) AS msgCount,
+       SUM(CASE WHEN m.is_from_me = 1 THEN 1 ELSE 0 END) AS sent,
+       SUM(CASE WHEN m.is_from_me = 0 THEN 1 ELSE 0 END) AS recv
+     FROM one_to_one o
+     JOIN chat_handle_join chj ON chj.chat_id = o.chat_id
+     JOIN handle h ON h.ROWID = chj.handle_id
+     JOIN chat_message_join cmj ON cmj.chat_id = o.chat_id
+     JOIN message m ON m.ROWID = cmj.message_id
+     WHERE m.date > ${sinceAppleNanos}
+     GROUP BY h.id
+     ORDER BY lastDate DESC
+     LIMIT 200;`,
+  )
+}
+
+// --- macOS Contacts (AddressBook) name resolution ----------------------------
+// Best-effort: maps a normalized handle -> contact name, so suggestions show real
+// names instead of bare numbers. AddressBook lives in one or more SQLite DBs
+// (per source); schema is ZABCDRECORD + ZABCDPHONENUMBER/ZABCDEMAILADDRESS. Any
+// failure degrades gracefully to handle-only labels.
+function contactDisplayName(row) {
+  const full = [row.f, row.l].map((part) => (part ? String(part).trim() : "")).filter(Boolean).join(" ")
+  return full || (row.o ? String(row.o).trim() : "") || null
+}
+
+function addContactsFromAddressBookDb(dbPath, map) {
+  const dir = mkdtempSync(join(tmpdir(), "jarvis-ab-"))
+  const dest = join(dir, "ab.abcddb")
+  try {
+    copyFileSync(dbPath, dest)
+    for (const suffix of ["-wal", "-shm"]) {
+      const side = `${dbPath}${suffix}`
+      if (existsSync(side)) copyFileSync(side, `${dest}${suffix}`)
+    }
+    const rows = [
+      ...runQuerySafe(
+        dest,
+        `SELECT r.ZFIRSTNAME AS f, r.ZLASTNAME AS l, r.ZORGANIZATION AS o, p.ZFULLNUMBER AS v
+         FROM ZABCDRECORD r JOIN ZABCDPHONENUMBER p ON p.ZOWNER = r.Z_PK;`,
+      ),
+      ...runQuerySafe(
+        dest,
+        `SELECT r.ZFIRSTNAME AS f, r.ZLASTNAME AS l, r.ZORGANIZATION AS o, e.ZADDRESS AS v
+         FROM ZABCDRECORD r JOIN ZABCDEMAILADDRESS e ON e.ZOWNER = r.Z_PK;`,
+      ),
+    ]
+    for (const row of rows) {
+      const key = normalizeHandle(row.v)
+      const name = contactDisplayName(row)
+      if (key && name && !map.has(key)) {
+        map.set(key, name)
+      }
+    }
+  } catch {
+    // ignore — best effort
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+}
+
+function buildContactNameMap() {
+  const map = new Map()
+  const base = join(HOME, "Library", "Application Support", "AddressBook")
+  const dbs = []
+  const topDb = join(base, "AddressBook-v22.abcddb")
+  if (existsSync(topDb)) dbs.push(topDb)
+  const sourcesDir = join(base, "Sources")
+  if (existsSync(sourcesDir)) {
+    try {
+      for (const entry of readdirSync(sourcesDir)) {
+        const candidate = join(sourcesDir, entry, "AddressBook-v22.abcddb")
+        if (existsSync(candidate)) dbs.push(candidate)
+      }
+    } catch {
+      // ignore — best effort
+    }
+  }
+  for (const db of dbs) {
+    addContactsFromAddressBookDb(db, map)
+  }
+  return map
 }
 
 // Decide which chats are worth forwarding, and how to tag their messages.
@@ -342,6 +454,40 @@ async function postBatch(appUrl, secret, messages, archiveOnly) {
   return payload
 }
 
+// Compute + replace-upload suggested contacts: recent two-way 1:1s that aren't
+// allowlisted or shortcodes, newest first, names resolved from Contacts where possible.
+// Best-effort — a failure here never blocks the main intake.
+async function uploadSuggestions(appUrl, secret, recentContacts, allowlistSet) {
+  const nameMap = buildContactNameMap()
+  const suggestions = recentContacts
+    .filter((row) => row.handle && !isShortcode(row.handle) && !allowlistSet.has(normalizeHandle(row.handle)))
+    .filter((row) => Number(row.sent) > 0 && Number(row.recv) > 0)
+    .slice(0, MAX_SUGGESTIONS)
+    .map((row) => ({
+      handle: String(row.handle),
+      displayName: nameMap.get(normalizeHandle(row.handle)) ?? null,
+      lastSeen: appleDateToIso(row.lastDate),
+      messageCount: Number(row.msgCount) || 0,
+      sentCount: Number(row.sent) || 0,
+      recvCount: Number(row.recv) || 0,
+    }))
+  try {
+    const response = await fetch(`${appUrl.replace(/\/$/, "")}/api/integrations/imessage/suggestions`, {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: `Bearer ${secret}` },
+      body: JSON.stringify({ suggestions }),
+    })
+    if (!response.ok) {
+      console.log(`! Suggested-contacts upload failed: HTTP ${response.status}`)
+      return
+    }
+    const payload = await response.json().catch(() => null)
+    console.log(`  …refreshed ${suggestions.length} suggested contact(s) (stored: ${payload?.count ?? "?"})`)
+  } catch (error) {
+    console.log(`! Suggested-contacts upload error: ${error?.message ?? error}`)
+  }
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2))
   const secret = process.env.IMESSAGE_INGEST_SECRET?.trim()
@@ -367,19 +513,31 @@ async function main() {
   const bidirectionalFloor = isoToAppleNanos(
     new Date(Date.now() - Math.max(BIDIRECTIONAL_WINDOW_DAYS, args.backfill ? args.sinceDays : 0) * 86_400_000).toISOString(),
   )
+  const suggestionFloor = isoToAppleNanos(new Date(Date.now() - SUGGESTION_WINDOW_DAYS * 86_400_000).toISOString())
 
   const { dir, dest } = snapshotChatDb()
   let rows
   let participants
   let directionTally
   let chatNames
+  let recentContacts = null
   try {
     participants = queryParticipants(dest)
     chatNames = queryChatNames(dest)
     directionTally = queryDirectionTally(dest, bidirectionalFloor)
     rows = queryMessages(dest, sinceAppleNanos, args.limit)
+    // Suggestions reflect current recent contacts — skip on dry-run/backfill.
+    if (!args.dryRun && !args.backfill) {
+      recentContacts = queryRecentOneToOneContacts(dest, suggestionFloor)
+    }
   } finally {
     rmSync(dir, { recursive: true, force: true })
+  }
+
+  // Refresh suggested contacts before any early return, so the list updates even when
+  // there are no new messages to forward.
+  if (recentContacts && secret) {
+    await uploadSuggestions(appUrl, secret, recentContacts, allowlistSet)
   }
 
   if (rows.length === 0) {
