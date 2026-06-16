@@ -337,6 +337,11 @@ interface ScheduleViewProps {
 }
 
 const HOUR_PX = 48
+// Apple-style floor: events shorter than ~27 min all render at this single
+// height instead of shrinking with duration. It's sized to fit exactly one
+// line of title (14px) plus the tile's py-1 padding (8px), so a one-line tile
+// is vertically centered rather than clipped.
+const MIN_EVENT_PX = 22
 const VIEW_MODES: { value: ViewMode; label: string }[] = [
   { value: "1day", label: "1D" },
   { value: "3days", label: "3D" },
@@ -740,7 +745,7 @@ export function ScheduleView({
     const height = event.duration * HOUR_PX
     return {
       top: `${top}px`,
-      height: `${Math.max(height, 20)}px`,
+      height: `${Math.max(height, MIN_EVENT_PX)}px`,
     }
   }
 
@@ -1309,7 +1314,7 @@ export function ScheduleView({
                       // when the tile has lines to spare. A tile covered by a
                       // cascading neighbor only counts its UNCOVERED strip —
                       // otherwise its location/time lines poke out from beneath.
-                      const tileHeightPx = Math.max(event.duration * HOUR_PX, 20)
+                      const tileHeightPx = Math.max(event.duration * HOUR_PX, MIN_EVENT_PX)
                       const visibleHeightPx =
                         layout.visibleMinutes !== undefined
                           ? Math.min(tileHeightPx, (layout.visibleMinutes / 60) * HOUR_PX)
