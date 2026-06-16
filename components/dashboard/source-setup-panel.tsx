@@ -63,8 +63,10 @@ import type {
 } from "@/components/dashboard/sources/shared"
 import {
   CONNECTOR_DEFINITIONS,
+  CONNECTOR_GROUPS,
   ConnectorGroup,
   ConnectorRow,
+  type ConnectorGroupKey,
 } from "@/components/dashboard/sources/connector-list"
 import { ImessageConsolePane } from "@/components/dashboard/sources/imessage-console"
 import { RaycastConsolePane } from "@/components/dashboard/sources/raycast-console"
@@ -126,7 +128,11 @@ export function SourceSetupPanel({
   const [calDavServerUrlInput, setCalDavServerUrlInput] = useState(calDavConnector.selectedSourceId ?? APPLE_CALDAV_SERVER_URL)
   const [calDavUsernameInput, setCalDavUsernameInput] = useState(calDavConnector.account ?? "")
   const [calDavPasswordInput, setCalDavPasswordInput] = useState("")
-  const [selectedId, setSelectedId] = useState<SourcePanelId>("google_calendar")
+  // Nothing is selected on open — the panel starts as a pure category index with
+  // an empty detail pane. A source is only shown once the user picks one.
+  const [selectedId, setSelectedId] = useState<SourcePanelId | null>(null)
+  // Source groups render as collapsible drawers, all collapsed by default.
+  const [openGroups, setOpenGroups] = useState<Set<ConnectorGroupKey>>(() => new Set<ConnectorGroupKey>())
   const [pasteText, setPasteText] = useState("")
   const [notionDatabaseInput, setNotionDatabaseInput] = useState(notionConnector.selectedSourceId ?? "")
   const [canvasBaseUrlInput, setCanvasBaseUrlInput] = useState(canvasConnector.selectedSourceId ?? "")
@@ -150,7 +156,8 @@ export function SourceSetupPanel({
     (source) => source.freshness === "failed" && activeFailedSourceIds.has(source.source as SourceConnectorId),
   )
 
-  const selectedConnector = CONNECTOR_DEFINITIONS.find((connector) => connector.id === selectedId) ?? CONNECTOR_DEFINITIONS[0]
+  const selectedConnector = CONNECTOR_DEFINITIONS.find((connector) => connector.id === selectedId) ?? null
+
   const failedSourcesByKind = useMemo(() => {
     return failedSources.reduce<Record<string, SourceSnapshotSummary[]>>((groups, source) => {
       groups[source.source] = [...(groups[source.source] ?? []), source]
@@ -522,6 +529,10 @@ export function SourceSetupPanel({
   }
 
   function renderDetail() {
+    if (!selectedConnector) {
+      return null
+    }
+
     const state = stateForConnector(selectedConnector)
 
     if (state === "developing") {
@@ -1060,6 +1071,43 @@ export function SourceSetupPanel({
     )
   }
 
+  function toggleGroup(key: ConnectorGroupKey) {
+    const willCollapse = openGroups.has(key)
+    setOpenGroups((prev) => {
+      const next = new Set(prev)
+      if (next.has(key)) {
+        next.delete(key)
+      } else {
+        next.add(key)
+      }
+      return next
+    })
+    // Collapsing the group that holds the open source closes its detail too, so
+    // the visible selection never lives inside a collapsed drawer.
+    if (willCollapse && selectedConnector?.group === key) {
+      setSelectedId(null)
+    }
+  }
+
+  function connectorsForGroup(key: ConnectorGroupKey) {
+    const connectors = CONNECTOR_DEFINITIONS.filter((connector) => connector.group === key)
+
+    if (key === "operator") {
+      // Each operator intake renders only for its own operator. In practice both
+      // env vars point at the same account, but gate independently so the surface
+      // exactly matches who is actually configured.
+      return connectors.filter((connector) =>
+        connector.id === "imessage"
+          ? isImessageOperator
+          : connector.id === "raycast"
+            ? isRaycastOperator
+            : false,
+      )
+    }
+
+    return connectors
+  }
+
   return (
     <section className="grid min-h-[calc(100vh-6rem)] min-w-0 grid-cols-1 gap-0 overflow-hidden rounded-sm border border-rule md:grid-cols-[18rem_minmax(0,1fr)]">
       <div className="flex min-w-0 flex-col border-b border-rule bg-background md:border-b-0 md:border-r">
@@ -1081,68 +1129,22 @@ export function SourceSetupPanel({
           </p>
         </header>
 
-        <ConnectorGroup title="Calendar">
-          {CONNECTOR_DEFINITIONS.filter((connector) => connector.group === "calendar").map((connector) => (
-            <ConnectorRow
-              key={connector.id}
-              connector={connector}
-              state={stateForConnector(connector)}
-              active={selectedId === connector.id}
-              onSelect={() => setSelectedId(connector.id)}
-            />
-          ))}
-        </ConnectorGroup>
+        {CONNECTOR_GROUPS.map((group) => {
+          const connectors = connectorsForGroup(group.key)
 
-        <ConnectorGroup title="Tasks & Courses">
-          {CONNECTOR_DEFINITIONS.filter((connector) => connector.group === "tasks_courses").map((connector) => (
-            <ConnectorRow
-              key={connector.id}
-              connector={connector}
-              state={stateForConnector(connector)}
-              active={selectedId === connector.id}
-              onSelect={() => setSelectedId(connector.id)}
-            />
-          ))}
-        </ConnectorGroup>
+          if (connectors.length === 0) {
+            return null
+          }
 
-        <ConnectorGroup title="Work Context">
-          {CONNECTOR_DEFINITIONS.filter((connector) => connector.group === "work_context").map((connector) => (
-            <ConnectorRow
-              key={connector.id}
-              connector={connector}
-              state={stateForConnector(connector)}
-              active={selectedId === connector.id}
-              onSelect={() => setSelectedId(connector.id)}
-            />
-          ))}
-        </ConnectorGroup>
-
-        <ConnectorGroup title="Files">
-          {CONNECTOR_DEFINITIONS.filter((connector) => connector.group === "files").map((connector) => (
-            <ConnectorRow
-              key={connector.id}
-              connector={connector}
-              state={stateForConnector(connector)}
-              active={selectedId === connector.id}
-              onSelect={() => setSelectedId(connector.id)}
-            />
-          ))}
-        </ConnectorGroup>
-
-        {isImessageOperator || isRaycastOperator ? (
-          <ConnectorGroup title="Operator">
-            {CONNECTOR_DEFINITIONS.filter((connector) => connector.group === "operator")
-              // Each operator intake renders only for its own operator. In practice both
-              // env vars point at the same account, but gate independently so the surface
-              // exactly matches who is actually configured.
-              .filter((connector) =>
-                connector.id === "imessage"
-                  ? isImessageOperator
-                  : connector.id === "raycast"
-                    ? isRaycastOperator
-                    : false,
-              )
-              .map((connector) => (
+          return (
+            <ConnectorGroup
+              key={group.key}
+              title={group.label}
+              states={connectors.map((connector) => stateForConnector(connector))}
+              open={openGroups.has(group.key)}
+              onToggle={() => toggleGroup(group.key)}
+            >
+              {connectors.map((connector) => (
                 <ConnectorRow
                   key={connector.id}
                   connector={connector}
@@ -1151,35 +1153,34 @@ export function SourceSetupPanel({
                   onSelect={() => setSelectedId(connector.id)}
                 />
               ))}
-          </ConnectorGroup>
-        ) : null}
-
-        <ConnectorGroup title="In Development">
-          {CONNECTOR_DEFINITIONS.filter((connector) => connector.group === "developing").map((connector) => (
-            <ConnectorRow
-              key={connector.id}
-              connector={connector}
-              state={stateForConnector(connector)}
-              active={selectedId === connector.id}
-              onSelect={() => setSelectedId(connector.id)}
-            />
-          ))}
-        </ConnectorGroup>
+            </ConnectorGroup>
+          )
+        })}
       </div>
 
       <div className="min-w-0 overflow-y-auto bg-secondary/5 px-5 py-5">
-        <div className="mx-auto flex w-full max-w-2xl flex-col gap-5">
-          {renderDetail()}
-          <InlineError message={errorMessage} />
-          <LedgerStrip
-            items={[
-              { label: "Snapshots", value: sources.length },
-              { label: "Files", value: sourceFiles.length },
-              { label: "Review", value: pendingCount },
-              { label: "Failed", value: failedSources.length, tone: "alert" },
-            ]}
-          />
-        </div>
+        {selectedConnector ? (
+          <div className="mx-auto flex w-full max-w-2xl flex-col gap-5">
+            {renderDetail()}
+            <InlineError message={errorMessage} />
+            <LedgerStrip
+              items={[
+                { label: "Snapshots", value: sources.length },
+                { label: "Files", value: sourceFiles.length },
+                { label: "Review", value: pendingCount },
+                { label: "Failed", value: failedSources.length, tone: "alert" },
+              ]}
+            />
+          </div>
+        ) : (
+          <div className="flex h-full min-h-[18rem] flex-col items-center justify-center gap-2 text-center">
+            <Cable className="h-6 w-6 text-muted-foreground/40" strokeWidth={1.5} aria-hidden="true" />
+            <p className="text-[13px] font-medium text-foreground/70">No source selected</p>
+            <p className="max-w-[34ch] text-[12px] leading-5 text-muted-foreground">
+              Open a category on the left and choose a source to view and configure it.
+            </p>
+          </div>
+        )}
       </div>
     </section>
   )
