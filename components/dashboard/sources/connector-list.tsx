@@ -5,6 +5,7 @@ import {
   BookOpen,
   CalendarDays,
   CheckCircle2,
+  ChevronRight,
   FileUp,
   Github,
   GraduationCap,
@@ -15,7 +16,13 @@ import {
 } from "lucide-react"
 
 import { cn } from "@/lib/utils"
-import { BetaBadge, ConnectorStatusMark, type ConnectorDefinition, type ConnectorState } from "@/components/dashboard/sources/shared"
+import {
+  BetaBadge,
+  connectorStatusDotTone,
+  ConnectorStatusMark,
+  type ConnectorDefinition,
+  type ConnectorState,
+} from "@/components/dashboard/sources/shared"
 
 export const CONNECTOR_DEFINITIONS: ConnectorDefinition[] = [
   {
@@ -145,6 +152,19 @@ export const CONNECTOR_DEFINITIONS: ConnectorDefinition[] = [
   },
 ]
 
+export type ConnectorGroupKey = ConnectorDefinition["group"]
+
+// Display order + labels for the collapsible source drawers. Keep this in sync
+// with the `group` values on CONNECTOR_DEFINITIONS above.
+export const CONNECTOR_GROUPS: { key: ConnectorGroupKey; label: string }[] = [
+  { key: "calendar", label: "Calendar" },
+  { key: "tasks_courses", label: "Tasks & Courses" },
+  { key: "work_context", label: "Work Context" },
+  { key: "files", label: "Files" },
+  { key: "operator", label: "Operator" },
+  { key: "developing", label: "In Development" },
+]
+
 export function ConnectorRow({
   connector,
   state,
@@ -190,13 +210,59 @@ export function ConnectorRow({
   )
 }
 
-export function ConnectorGroup({ title, children }: { title: string; children: ReactNode }) {
+// A compact health summary for a collapsed group: one dot per source, tinted by
+// the same status palette the rows use. Lets a glance at a closed drawer tell you
+// what's connected, what needs attention, and what's still in development.
+function ConnectorStatusDots({ states }: { states: ConnectorState[] }) {
+  return (
+    <span className="flex shrink-0 items-center gap-1" aria-hidden="true">
+      {states.map((state, index) => (
+        <span key={index} className={cn("inline-block h-1.5 w-1.5 rounded-full", connectorStatusDotTone(state))} />
+      ))}
+    </span>
+  )
+}
+
+export function ConnectorGroup({
+  title,
+  states,
+  open,
+  onToggle,
+  children,
+}: {
+  title: string
+  states: ConnectorState[]
+  open: boolean
+  onToggle: () => void
+  children: ReactNode
+}) {
   return (
     <div className="flex flex-col">
-      <h3 className="border-b border-rule/70 pb-2 pl-3 pt-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/70">
-        {title}
+      <h3>
+        <button
+          type="button"
+          onClick={onToggle}
+          aria-expanded={open}
+          className="group/group flex w-full items-center gap-2 border-b border-rule/70 py-2.5 pl-3 pr-2 text-left transition-colors hover:bg-secondary/10"
+        >
+          <ChevronRight
+            className={cn(
+              "h-3 w-3 shrink-0 text-muted-foreground/60 transition-transform",
+              open && "rotate-90",
+            )}
+            aria-hidden="true"
+            strokeWidth={2}
+          />
+          <span className="flex-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/70 transition-colors group-hover/group:text-foreground/80">
+            {title}
+          </span>
+          {open ? null : <ConnectorStatusDots states={states} />}
+          <span className="num w-3 text-right text-[10px] font-medium tabular-nums text-muted-foreground/60">
+            {states.length}
+          </span>
+        </button>
       </h3>
-      {children}
+      {open ? <div className="flex flex-col">{children}</div> : null}
     </div>
   )
 }
