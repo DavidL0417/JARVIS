@@ -172,6 +172,15 @@ export const memoryEntrySummarySchema = z.object({
   createdAt: z.string().datetime({ offset: true }),
 })
 
+// Lifecycle-aware superset used only by the memory workbench API. Keep the summary
+// schema above untouched — it is the frozen dashboard/assistant/schedule contract.
+export const memoryItemDetailSchema = memoryEntrySummarySchema.extend({
+  status: memoryStatusSchema,
+  supersedesId: z.string().uuid().nullable(),
+  expiresAt: z.string().datetime({ offset: true }).nullable(),
+  updatedAt: z.string().datetime({ offset: true }),
+})
+
 export const sourceSnapshotSummarySchema = z.object({
   id: z.string().uuid(),
   source: sourceKindSchema,

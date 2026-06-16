@@ -195,7 +195,7 @@ export function MasterInput({ tasks = [] }: MasterInputProps) {
       text: buildIntroFromTaskContext(tasks),
     },
   ])
-  const [openContext, setOpenContext] = useState<"none" | "availability" | "memory">("none")
+  const [openContext, setOpenContext] = useState<"none" | "availability">("none")
   const transcriptRef = useRef<HTMLDivElement | null>(null)
   const transcriptBottomRef = useRef<HTMLDivElement | null>(null)
 
@@ -435,7 +435,7 @@ export function MasterInput({ tasks = [] }: MasterInputProps) {
     }
   }
 
-  const toggleContext = (key: "availability" | "memory") => {
+  const toggleContext = (key: "availability") => {
     setOpenContext((current) => (current === key ? "none" : key))
   }
 
@@ -542,7 +542,7 @@ export function MasterInput({ tasks = [] }: MasterInputProps) {
 
       <div className="mt-3 border-t border-rule-strong/70 pt-3">
         <div className="flex h-8 items-center gap-5">
-          {(["availability", "memory"] as const).map((key) => {
+          {(["availability"] as const).map((key) => {
             const open = openContext === key
             return (
               <button
@@ -598,27 +598,6 @@ export function MasterInput({ tasks = [] }: MasterInputProps) {
           </div>
         ) : null}
 
-        {openContext === "memory" ? (
-          <div className="mt-2 space-y-2.5 bg-muted/20 px-3 py-3">
-            {context ? (
-              <ul className="space-y-2.5">
-                {context.memoryEntries.map((entry) => (
-                  <li key={entry.id}>
-                    <p className="text-[13px] leading-snug text-foreground">{entry.insight}</p>
-                    <p className="num mt-0.5 text-[10.5px] uppercase text-muted-foreground">
-                      {entry.category} · {new Date(entry.createdAt).toLocaleDateString()}
-                    </p>
-                  </li>
-                ))}
-                {context.memoryEntries.length === 0 ? (
-                  <li className="text-[12px] text-muted-foreground">No memory yet.</li>
-                ) : null}
-              </ul>
-            ) : (
-              <p className="text-[12px] text-muted-foreground">Loading…</p>
-            )}
-          </div>
-        ) : null}
       </div>
     </section>
   )
