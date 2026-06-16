@@ -30,7 +30,7 @@ import { AutoImportDigest } from "@/components/dashboard/auto-import-digest"
 import { ContextRailPanel } from "@/components/dashboard/context-rail-panel"
 import { DailyCommandStrip } from "@/components/dashboard/daily-command-strip"
 import { RailSheet } from "@/components/dashboard/rail-sheet"
-import { MemoryPanel } from "@/components/dashboard/memory-panel"
+import { MemoryWorkbench } from "@/components/dashboard/memory-workbench/memory-workbench"
 import { ReentryRecap } from "@/components/dashboard/reentry-recap"
 import { SettingsPanel } from "@/components/dashboard/settings-panel"
 import { SecretaryOverlay } from "@/components/dashboard/secretary-overlay"
@@ -747,14 +747,9 @@ export default function DashboardPage() {
           isOpen={memorySheetOpen}
           onClose={() => setMemorySheetOpen(false)}
           title="Memory"
-          width="narrow"
+          width="wide"
         >
-          {dashboard ? (
-            <MemoryPanel
-              memories={dashboard.memories}
-              onMemoriesChanged={() => loadDashboard(true)}
-            />
-          ) : null}
+          {dashboard ? <MemoryWorkbench onChanged={() => loadDashboard(true)} /> : null}
         </RailSheet>
 
         <RailSheet

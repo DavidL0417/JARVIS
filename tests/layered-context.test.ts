@@ -47,6 +47,24 @@ describe("selectPlannerMemories", () => {
     expect(ruleCriticalIndex).toBeLessThan(ruleLowIndex)
     expect(ruleLowIndex).toBeLessThan(deadlineIndex)
   })
+
+  it("collapses exact-duplicate insights, keeping the highest-priority copy", () => {
+    const entries: MemoryEntrySummary[] = [
+      memory({ layer: "operating_rules", importance: "low", insight: "Protect near-term deadlines." }),
+      memory({ layer: "operating_rules", importance: "critical", insight: "protect near-term deadlines." }),
+      memory({ layer: "operating_rules", importance: "high", insight: "Protect near-term deadlines.   " }),
+      memory({ layer: "deadline_context", importance: "high", insight: "Unique note." }),
+    ]
+
+    const selected = selectPlannerMemories(entries)
+
+    const dupes = selected.filter(
+      (entry) => entry.insight.trim().toLowerCase() === "protect near-term deadlines.",
+    )
+    expect(dupes).toHaveLength(1)
+    expect(dupes[0]?.importance).toBe("critical")
+    expect(selected.some((entry) => entry.insight === "Unique note.")).toBe(true)
+  })
 })
 
 describe("layered secretary context defaults", () => {
