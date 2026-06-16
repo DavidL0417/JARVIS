@@ -6,6 +6,7 @@ import {
 } from "@/lib/ai/claude-models"
 import { loadLayeredSecretaryContext } from "@/lib/assistant/context"
 import { buildPlanRealitySummary } from "@/lib/assistant/feedback"
+import { unexpiredOrFilter } from "@/lib/assistant/memory-write"
 import { overlapsSimilarBlock } from "@/lib/dedupe"
 import { reconcileStaleSchedule } from "@/lib/reconciliation"
 import {
@@ -424,6 +425,7 @@ async function loadScheduleContext(input: {
       .select(MEMORY_ITEM_SELECT)
       .eq("user_id", input.userId)
       .eq("status", "active")
+      .or(unexpiredOrFilter())
       .order("created_at", { ascending: false })
       .limit(20),
     input.adminClient

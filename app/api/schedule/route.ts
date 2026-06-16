@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 
 import { generateSchedule } from "@/lib/ai/claude"
+import { unexpiredOrFilter } from "@/lib/assistant/memory-write"
 import { overlapsSimilarBlock } from "@/lib/dedupe"
 import {
   mapMemoryItemRowToSummary,
@@ -240,6 +241,7 @@ export async function POST(request: Request) {
         .select(MEMORY_ITEM_SELECT)
         .eq("user_id", user.id)
         .eq("status", "active")
+        .or(unexpiredOrFilter())
         .order("created_at", { ascending: false })
         .limit(20),
       adminClient

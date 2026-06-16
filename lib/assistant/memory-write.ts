@@ -14,6 +14,15 @@ export function isMemoryDuplicateError(
   return Boolean(error) && error?.code === POSTGRES_UNIQUE_VIOLATION
 }
 
+// Read-side TTL. A memory is only visible while unexpired; pair this with
+// `.eq("status", "active")` on every memory_items read. Returns a PostgREST
+// or-filter meaning `expires_at IS NULL OR expires_at > now`, so notes with a
+// passed expiry (e.g. a deadline_context memory whose deadline is gone) drop out
+// of the planner, drawer, and schedule reads without needing a sweeper.
+export function unexpiredOrFilter(nowIso: string = new Date().toISOString()): string {
+  return `expires_at.is.null,expires_at.gt.${nowIso}`
+}
+
 export type MemoryInsertOutcome = { id: string | null; deduped: boolean }
 
 /**

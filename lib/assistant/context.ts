@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 
 import { ensureDefaultSecretaryMemoryForUser } from "@/lib/assistant/default-memory"
+import { unexpiredOrFilter } from "@/lib/assistant/memory-write"
 import { buildMemorySummaryMarkdown, deriveAvailabilityWindowsFromScheduleContext } from "@/lib/ai/claude"
 import { isExcludedScheduleEventTitle } from "@/lib/task-calendar-constants"
 import {
@@ -325,6 +326,7 @@ export async function loadAssistantRuntimeContext(
       .select(MEMORY_ITEM_SELECT)
       .eq("user_id", userId)
       .eq("status", "active")
+      .or(unexpiredOrFilter())
       .order("created_at", { ascending: false })
       .limit(200),
     supabase

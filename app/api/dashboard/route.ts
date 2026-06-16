@@ -18,6 +18,7 @@ import {
   TASK_SELECT,
   USER_INTEGRATION_SELECT,
 } from "@/lib/data/mappers"
+import { unexpiredOrFilter } from "@/lib/assistant/memory-write"
 import { listScheduleEventRowsInWindow } from "@/lib/supabase/schedule-events"
 import { GMAIL_READONLY_SCOPE, GOOGLE_CALENDAR_READONLY_SCOPE, hasOAuthScope } from "@/lib/google-oauth"
 import { isExcludedScheduleEventTitle } from "@/lib/task-calendar-constants"
@@ -645,6 +646,7 @@ export async function GET() {
         .select(MEMORY_ITEM_SELECT)
         .eq("user_id", user.id)
         .eq("status", "active")
+        .or(unexpiredOrFilter())
         .order("created_at", { ascending: false })
         .limit(60),
       adminClient
