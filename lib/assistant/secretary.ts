@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 
 import { normalizeMemoryContent } from "@/lib/ai/memory-normalize"
+import { insertMemoryItem } from "@/lib/assistant/memory-write"
 import { loadAssistantRuntimeContext } from "@/lib/assistant/context"
 import { overlapsSimilarBlock } from "@/lib/dedupe"
 import { generateSecretaryDialogueReply, type ImessageThreadContext } from "@/lib/assistant/dialogue"
@@ -331,29 +332,39 @@ async function handleRemember(
     return dedupeReceipt
   }
 
-  const { data, error } = await supabase
-    .from("memory_items")
-    .insert({
-      user_id: input.userId,
-      kind: "preference",
-      category: "user_instruction",
-      content: normalizedContent,
-      importance: "medium",
-      layer: "durable_preferences",
-      source_label: "master_input",
-      payload: {
-        promotedFrom: "master_input",
-        rawContent,
-        normalized: normalizedContent !== rawContent,
-      },
-      status: "active",
-      confidence: 0.9,
-    })
-    .select("id")
-    .single<{ id: string }>()
+  const { id: memoryId, deduped } = await insertMemoryItem(supabase, {
+    user_id: input.userId,
+    kind: "preference",
+    category: "user_instruction",
+    content: normalizedContent,
+    importance: "medium",
+    layer: "durable_preferences",
+    source_label: "master_input",
+    payload: {
+      promotedFrom: "master_input",
+      rawContent,
+      normalized: normalizedContent !== rawContent,
+    },
+    status: "active",
+    confidence: 0.9,
+  })
 
-  if (error || !data) {
-    throw new Error(error?.message ?? "Failed to save memory.")
+  if (deduped) {
+    // The pre-check above missed it (a case/whitespace variant, or a concurrent
+    // write), but the DB unique index caught it. Treat as an idempotent no-op.
+    const dedupeReceipt = makeReceipt("remember", "completed", "Memory already saved; no duplicate added.")
+    await insertToolRun(supabase, {
+      userId: input.userId,
+      threadId: input.threadId,
+      messageId: input.assistantMessageId,
+      receipt: dedupeReceipt,
+      payload: { content: normalizedContent, deduped: true },
+    })
+    return dedupeReceipt
+  }
+
+  if (!memoryId) {
+    throw new Error("Failed to save memory.")
   }
 
   const receipt = makeReceipt("remember", "completed", "Saved one durable memory item.")
@@ -362,13 +373,13 @@ async function handleRemember(
     threadId: input.threadId,
     messageId: input.assistantMessageId,
     receipt,
-    payload: { memoryId: data.id, content: normalizedContent, rawContent },
+    payload: { memoryId, content: normalizedContent, rawContent },
   })
   await insertChangeLog(supabase, {
     userId: input.userId,
     action: "memory.create",
     targetTable: "memory_items",
-    targetId: data.id,
+    targetId: memoryId,
     summary: "Saved memory from Master Input.",
     afterValue: { content: normalizedContent, rawContent },
   })

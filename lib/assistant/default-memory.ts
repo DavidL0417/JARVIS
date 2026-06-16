@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 
+import { insertMemoryItem } from "@/lib/assistant/memory-write"
 import type { MemoryImportance, MemoryKind, MemoryLayer } from "@/types"
 
 export const DEFAULT_TEMPLATE_SOURCE = "default_secretary_template"
@@ -133,11 +134,18 @@ export async function ensureDefaultSecretaryMemoryForUser(
     return { inserted: 0 }
   }
 
-  const { error: insertError } = await supabase.from("memory_items").insert(rowsToInsert)
-
-  if (insertError) {
-    throw new Error(insertError.message)
+  // Insert one row at a time through the shared gate. The per-source_ref check
+  // above is not atomic, so two concurrent first-load requests can both reach
+  // here; the DB unique index makes the loser's rows dedupe to a no-op instead
+  // of double-seeding. Per-row (not a single batch) so one conflicting seed
+  // doesn't abort the insert of the others after a partial delete.
+  let inserted = 0
+  for (const row of rowsToInsert) {
+    const { deduped } = await insertMemoryItem(supabase, { ...row })
+    if (!deduped) {
+      inserted += 1
+    }
   }
 
-  return { inserted: rowsToInsert.length }
+  return { inserted }
 }
