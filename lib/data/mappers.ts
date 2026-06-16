@@ -501,6 +501,7 @@ export function mapMemoryItemRowToSummary(row: MemoryItemRow): MemoryEntrySummar
     confidence: row.confidence,
     payload: row.payload ?? {},
     createdAt: row.created_at,
+    expiresAt: row.expires_at,
   }
 }
 

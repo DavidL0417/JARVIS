@@ -4,6 +4,7 @@ import {
   insertMemoryItem,
   isMemoryDuplicateError,
   POSTGRES_UNIQUE_VIOLATION,
+  unexpiredOrFilter,
 } from "../lib/assistant/memory-write"
 
 type MaybeSingleResult = {
@@ -40,6 +41,14 @@ describe("isMemoryDuplicateError", () => {
     expect(isMemoryDuplicateError({ code: "23503" })).toBe(false)
     expect(isMemoryDuplicateError(null)).toBe(false)
     expect(isMemoryDuplicateError(undefined)).toBe(false)
+  })
+})
+
+describe("unexpiredOrFilter", () => {
+  it("builds a PostgREST or-filter for null-or-future expiry", () => {
+    expect(unexpiredOrFilter("2026-06-15T00:00:00.000Z")).toBe(
+      "expires_at.is.null,expires_at.gt.2026-06-15T00:00:00.000Z",
+    )
   })
 })
 

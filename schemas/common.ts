@@ -170,6 +170,7 @@ export const memoryEntrySummarySchema = z.object({
   confidence: z.number().nullable(),
   payload: z.record(z.unknown()),
   createdAt: z.string().datetime({ offset: true }),
+  expiresAt: z.string().datetime({ offset: true }).nullable(),
 })
 
 export const sourceSnapshotSummarySchema = z.object({

@@ -460,6 +460,7 @@ export interface MemoryEntrySummary {
   confidence: number | null
   payload: Record<string, unknown>
   createdAt: string
+  expiresAt: string | null
 }
 
 export interface SourceSnapshotSummary {
