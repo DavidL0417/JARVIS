@@ -463,6 +463,17 @@ export interface MemoryEntrySummary {
   expiresAt: string | null
 }
 
+// Richer than MemoryEntrySummary: carries lifecycle fields the memory workbench
+// needs (status, supersedes back-reference, expiry, last-touched). Deliberately a
+// separate type so MemoryEntrySummary — shared by the dashboard/assistant/schedule
+// contracts — stays frozen.
+export interface MemoryItemDetail extends MemoryEntrySummary {
+  status: MemoryStatus
+  supersedesId: string | null
+  expiresAt: string | null
+  updatedAt: string
+}
+
 export interface SourceSnapshotSummary {
   id: string
   source: SourceKind

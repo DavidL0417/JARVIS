@@ -11,7 +11,9 @@ import type {
   DailyPlanRow,
   MemoryEntrySummary,
   MemoryImportance,
+  MemoryItemDetail,
   MemoryItemRow,
+  MemoryStatus,
   OnboardingTaskInput,
   PreferredCheckInMode,
   Priority,
@@ -164,6 +166,19 @@ function normalizeMemoryImportance(value: MemoryImportance | string | null | und
   }
 
   return "medium"
+}
+
+function normalizeMemoryStatus(value: MemoryStatus | string | null | undefined): MemoryStatus {
+  if (
+    value === "candidate" ||
+    value === "stale" ||
+    value === "superseded" ||
+    value === "archived"
+  ) {
+    return value
+  }
+
+  return "active"
 }
 
 function normalizeTimeValue(value: string | null | undefined, fallback: string) {
@@ -502,6 +517,16 @@ export function mapMemoryItemRowToSummary(row: MemoryItemRow): MemoryEntrySummar
     payload: row.payload ?? {},
     createdAt: row.created_at,
     expiresAt: row.expires_at,
+  }
+}
+
+export function mapMemoryItemRowToDetail(row: MemoryItemRow): MemoryItemDetail {
+  return {
+    ...mapMemoryItemRowToSummary(row),
+    status: normalizeMemoryStatus(row.status),
+    supersedesId: row.supersedes_id,
+    expiresAt: row.expires_at,
+    updatedAt: row.updated_at,
   }
 }
 

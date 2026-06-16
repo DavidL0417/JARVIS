@@ -2,18 +2,28 @@ import { NextResponse } from "next/server"
 import { z } from "zod"
 
 import { isMemoryDuplicateError } from "@/lib/assistant/memory-write"
-import { MEMORY_ITEM_SELECT, mapMemoryItemRowToSummary } from "@/lib/data/mappers"
+import { MEMORY_ITEM_SELECT, mapMemoryItemRowToDetail } from "@/lib/data/mappers"
+import { buildMemoryUpdate } from "@/lib/data/memory-mutations"
 import {
   isAuthenticationRequiredError,
   requireAuthenticatedUser,
 } from "@/lib/supabase/auth"
+import { memoryImportanceSchema } from "@/schemas/common"
 import type { MemoryItemRow } from "@/types"
 
 const memoryIdSchema = z.string().uuid()
 
-const updateMemorySchema = z.object({
-  insight: z.string().trim().min(1, "Memory cannot be empty.").max(2000, "Memory is too long."),
-})
+const updateMemorySchema = z
+  .object({
+    insight: z.string().trim().min(1, "Memory cannot be empty.").max(2000, "Memory is too long.").optional(),
+    importance: memoryImportanceSchema.optional(),
+    importanceNote: z.string().trim().min(1).max(500).nullable().optional(),
+  })
+  .refine(
+    (value) =>
+      value.insight !== undefined || value.importance !== undefined || value.importanceNote !== undefined,
+    { message: "Provide at least one field to update." },
+  )
 
 async function getValidatedMemoryId(params: Promise<{ id: string }>) {
   const { id } = await params
@@ -45,13 +55,11 @@ export async function PATCH(
   try {
     const { adminClient, user } = await requireAuthenticatedUser()
 
+    const updates = buildMemoryUpdate(parsedBody.data, new Date().toISOString())
+
     const { data, error } = await adminClient
       .from("memory_items")
-      .update({
-        content: parsedBody.data.insight,
-        source_label: "user_edit",
-        updated_at: new Date().toISOString(),
-      })
+      .update(updates)
       .eq("id", parsedMemoryId.data)
       .eq("user_id", user.id)
       .select(MEMORY_ITEM_SELECT)
@@ -73,7 +81,7 @@ export async function PATCH(
       return NextResponse.json({ error: "Memory not found." }, { status: 404 })
     }
 
-    return NextResponse.json({ success: true, memory: mapMemoryItemRowToSummary(data) })
+    return NextResponse.json({ success: true, memory: mapMemoryItemRowToDetail(data) })
   } catch (error) {
     if (isAuthenticationRequiredError(error)) {
       return NextResponse.json({ error: "Authentication required." }, { status: 401 })
