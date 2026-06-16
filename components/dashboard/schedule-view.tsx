@@ -900,6 +900,10 @@ export function ScheduleView({
     viewMode !== "1month" && displayDates.some((date) => isSameCalendarDay(date, now))
   const nowTopPx = (now.getHours() + now.getMinutes() / 60) * HOUR_PX
   const nowDayIndex = displayDates.findIndex((date) => isSameCalendarDay(date, now))
+  const nowTimeLabel = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`
+  // Width of the time gutter (the fixed first grid column). The now-line spans the
+  // day columns starting just past it, and today's dot is offset across them.
+  const GUTTER_PX = 56
 
   return (
     <section className="flex h-full flex-col">
@@ -971,7 +975,10 @@ export function ScheduleView({
       ) : null}
 
       <header className="mb-4 flex flex-wrap items-baseline gap-x-4 gap-y-1.5">
-        <h1 className="text-[28px] font-semibold leading-none text-foreground">
+        <h1
+          className="text-[28px] font-semibold leading-none text-foreground"
+          style={{ fontFamily: "var(--font-accent)" }}
+        >
           {viewMode === "1month"
             ? `${monthNames[monthViewDate.getMonth()]} ${monthViewDate.getFullYear()}`
             : formatDateRange()}
@@ -1248,7 +1255,7 @@ export function ScheduleView({
           </div>
 
           {/* Time grid */}
-          <div className={`grid ${dayColumnTemplate}`} style={{ minHeight: `${24 * HOUR_PX}px` }}>
+          <div className={`relative grid ${dayColumnTemplate}`} style={{ minHeight: `${24 * HOUR_PX}px` }}>
             {/* Time gutter */}
             <div className="relative">
               {Array.from({ length: 24 }).map((_, i) => (
@@ -1259,6 +1266,15 @@ export function ScheduleView({
                   {i === 0 ? "" : formatHour(i)}
                 </div>
               ))}
+              {/* Current-time badge, aligned to the now-line in the gutter */}
+              {showNowLine ? (
+                <div
+                  className="num pointer-events-none absolute right-1 z-[31] -translate-y-1/2 rounded-sm bg-copper px-1 py-px text-[9px] font-medium tabular-nums text-primary-foreground"
+                  style={{ top: `${nowTopPx}px` }}
+                >
+                  {nowTimeLabel}
+                </div>
+              ) : null}
             </div>
 
             {/* Day columns */}
@@ -1285,20 +1301,6 @@ export function ScheduleView({
                       style={{ top: `${i * HOUR_PX + HOUR_PX / 2}px` }}
                     />
                   ))}
-
-                  {/* Now line */}
-                  {showNowLine && nowDayIndex === dayIndex ? (
-                    <>
-                      <div
-                        className="pointer-events-none absolute left-0 right-0 z-[5] h-px bg-copper"
-                        style={{ top: `${nowTopPx}px` }}
-                      />
-                      <div
-                        className="pointer-events-none absolute z-[5] h-1.5 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-copper"
-                        style={{ top: `${nowTopPx}px`, left: 0 }}
-                      />
-                    </>
-                  ) : null}
 
                   {/* Events */}
                   {timedEvents
@@ -1363,7 +1365,7 @@ export function ScheduleView({
                                 </div>
                               ) : null}
                               {showTime ? (
-                                <p className="num text-[10px] leading-[14px] opacity-70">
+                                <p className="text-[10px] leading-[14px] opacity-70">
                                   {formatTileTimeRange(event.start, event.end)}
                                 </p>
                               ) : null}
@@ -1375,6 +1377,35 @@ export function ScheduleView({
                 </div>
               ),
             )}
+
+            {/* Now indicator — a single overlay spanning the whole grid so it sits
+                above every event tile (z-30, below the sticky z-35/z-40 headers).
+                A faint hairline stretches across all day columns; a thicker solid
+                segment + dot mark today's column. Only shown when today is in range.
+                All three center on nowTopPx so they stack cleanly. */}
+            {showNowLine ? (
+              <>
+                <div
+                  className="pointer-events-none absolute right-0 z-[30] h-px -translate-y-1/2 bg-copper/40"
+                  style={{ top: `${nowTopPx}px`, left: `${GUTTER_PX}px` }}
+                />
+                <div
+                  className="pointer-events-none absolute z-[30] h-0.5 -translate-y-1/2 rounded-full bg-copper"
+                  style={{
+                    top: `${nowTopPx}px`,
+                    left: `calc(${GUTTER_PX}px + ${nowDayIndex} * (100% - ${GUTTER_PX}px) / ${displayDates.length})`,
+                    width: `calc((100% - ${GUTTER_PX}px) / ${displayDates.length})`,
+                  }}
+                />
+                <div
+                  className="pointer-events-none absolute z-[30] h-1.5 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-copper"
+                  style={{
+                    top: `${nowTopPx}px`,
+                    left: `calc(${GUTTER_PX}px + ${nowDayIndex} * (100% - ${GUTTER_PX}px) / ${displayDates.length})`,
+                  }}
+                />
+              </>
+            ) : null}
           </div>
           {!isGoogleEventsLoading && !hasVisibleEvents ? (
             <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
