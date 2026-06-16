@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 
+import { isMemoryDuplicateError } from "@/lib/assistant/memory-write"
 import { MEMORY_ITEM_SELECT, mapMemoryItemRowToDetail } from "@/lib/data/mappers"
 import { buildMemoryUpdate } from "@/lib/data/memory-mutations"
 import {
@@ -65,6 +66,14 @@ export async function PATCH(
       .maybeSingle<MemoryItemRow>()
 
     if (error) {
+      // Editing this memory to match an existing active one collides with the
+      // content-identity unique index — surface it as a conflict, not a 500.
+      if (isMemoryDuplicateError(error)) {
+        return NextResponse.json(
+          { error: "A memory with this text already exists." },
+          { status: 409 },
+        )
+      }
       throw new Error(error.message)
     }
 

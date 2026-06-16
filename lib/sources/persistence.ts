@@ -8,6 +8,7 @@ import {
   SOURCE_SNAPSHOT_SELECT,
   TASK_SELECT,
 } from "@/lib/data/mappers"
+import { insertMemoryItem } from "@/lib/assistant/memory-write"
 import { findDuplicateCommitment, type CommitmentRef } from "@/lib/dedupe"
 import type { requireAuthenticatedUser } from "@/lib/supabase/auth"
 import { listScheduleEventRowsInWindow } from "@/lib/supabase/schedule-events"
@@ -532,13 +533,9 @@ export async function approveSourceCandidates(input: {
   }
 
   for (const candidate of memoryCandidates) {
-    const { error: memoryError } = await input.adminClient
-      .from("memory_items")
-      .insert(candidateToMemoryInsert(candidate, input.userId))
-
-    if (memoryError) {
-      throw new Error(memoryError.message)
-    }
+    // Through the shared gate: if this fact is already stored for the user+layer
+    // the insert dedupes to a no-op, but the candidate is still marked approved.
+    await insertMemoryItem(input.adminClient, { ...candidateToMemoryInsert(candidate, input.userId) })
 
     const { error: updateError } = await input.adminClient
       .from("source_candidates")

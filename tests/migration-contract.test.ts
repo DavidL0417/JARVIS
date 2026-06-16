@@ -78,6 +78,10 @@ const reentryUnconfirmedMigration = readFileSync(
   "supabase/migrations/20260612000000_reentry_unconfirmed_status.sql",
   "utf8",
 )
+const memoryDedupGateMigration = readFileSync(
+  "supabase/migrations/20260615180000_memory_dedup_gate.sql",
+  "utf8",
+)
 
 describe("production Supabase migration", () => {
   it("keeps OAuth tokens outside public tables", () => {
@@ -214,6 +218,19 @@ describe("production Supabase migration", () => {
     // The new index must NOT be partial on status — dismissed rows count too.
     expect(dismissPermanentMigration).not.toContain("where status <> 'dismissed'")
     expect(dismissPermanentMigration).not.toContain("disable row level security")
+  })
+
+  it("enforces memory content identity via a partial unique index without weakening RLS", () => {
+    expect(memoryDedupGateMigration).toContain("alter table public.memory_items")
+    expect(memoryDedupGateMigration).toContain("add column if not exists content_norm text")
+    expect(memoryDedupGateMigration).toContain("generated always as")
+    // Backlog collapse must scope to active rows only (tombstones untouched).
+    expect(memoryDedupGateMigration).toContain("where status = 'active'")
+    expect(memoryDedupGateMigration).toContain(
+      "create unique index if not exists memory_items_user_layer_content_key",
+    )
+    expect(memoryDedupGateMigration).toContain("(user_id, layer, content_norm)")
+    expect(memoryDedupGateMigration).not.toContain("disable row level security")
   })
 
   it("widens schedule_events status with 'unconfirmed' without touching tasks", () => {
