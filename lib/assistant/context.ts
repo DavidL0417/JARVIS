@@ -125,15 +125,27 @@ export function selectPlannerMemories(entries: MemoryEntrySummary[]): MemoryEntr
   })
 
   const perLayerCount = new Map<MemoryLayer, number>()
+  const seenInsights = new Set<string>()
   const selected: MemoryEntrySummary[] = []
 
   for (const entry of sorted) {
     if (selected.length >= PLANNER_MEMORY_TOTAL_CAP) break
 
+    // Collapse exact-duplicate notes (same text ignoring case/whitespace). Because we
+    // dedupe after the sort above, the highest layer/importance/recency copy is the one
+    // kept, and the planner stops ingesting the same rule multiple times — including the
+    // same fact stored in two different layers, which the per-(user,layer) DB unique
+    // index deliberately allows. The key matches the DB content_norm formula
+    // (trim + lowercase + whitespace-collapse). Semantic near-duplicates are handled by
+    // the consolidation pass (lib/assistant/memory-consolidation.ts), not here.
+    const insightKey = entry.insight.trim().toLowerCase().replace(/\s+/g, " ")
+    if (insightKey && seenInsights.has(insightKey)) continue
+
     const cap = PLANNER_MEMORY_LAYER_CAPS[entry.layer] ?? 5
     const count = perLayerCount.get(entry.layer) ?? 0
     if (count >= cap) continue
 
+    if (insightKey) seenInsights.add(insightKey)
     perLayerCount.set(entry.layer, count + 1)
     selected.push(entry)
   }
