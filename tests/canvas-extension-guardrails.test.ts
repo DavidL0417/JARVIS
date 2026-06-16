@@ -48,12 +48,15 @@ describe("Canvas extension guardrails", () => {
     expect(normalizeJarvisAppBaseUrl("https://mydearestjarvis.vercel.app/dashboard/canvas-extension")).toBe("https://mydearestjarvis.vercel.app")
   })
 
-  it("allows localhost dev ports 3000-3005 for pairing", () => {
-    for (const port of ["3000", "3001", "3002", "3003", "3004", "3005"]) {
+  it("allows any localhost/127.0.0.1 dev port for pairing", () => {
+    for (const port of ["3000", "3005", "3006", "5173", "8080"]) {
       expect(normalizeJarvisAppBaseUrl(`http://localhost:${port}/dashboard/canvas-extension`)).toBe(`http://localhost:${port}`)
     }
 
-    expect(() => normalizeJarvisAppBaseUrl("http://localhost:3006/dashboard/canvas-extension")).toThrow(/3000-3005/)
+    expect(normalizeJarvisAppBaseUrl("http://127.0.0.1:3006/dashboard/canvas-extension")).toBe("http://127.0.0.1:3006")
+
+    // Non-localhost http origins are still rejected.
+    expect(() => normalizeJarvisAppBaseUrl("http://evil.example.com:3000/dashboard/canvas-extension")).toThrow()
   })
 
   it("uses portless Chrome host permission patterns", () => {

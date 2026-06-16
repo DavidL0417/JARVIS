@@ -1,5 +1,3 @@
-const LOCAL_DEV_PORTS = new Set(["3000", "3001", "3002", "3003", "3004", "3005"])
-
 function isLocalhost(hostname) {
   return hostname === "localhost" || hostname === "127.0.0.1"
 }
@@ -17,11 +15,11 @@ export function normalizeJarvisAppBaseUrl(value) {
     return url.origin
   }
 
-  if (url.protocol === "http:" && isLocalhost(url.hostname) && LOCAL_DEV_PORTS.has(url.port)) {
+  if (url.protocol === "http:" && isLocalhost(url.hostname)) {
     return url.origin
   }
 
-  throw new Error("Use the production JARVIS URL or localhost ports 3000-3005.")
+  throw new Error("Use the production JARVIS URL or a localhost address.")
 }
 
 export function appHostPermissionPattern(appBaseUrl) {
