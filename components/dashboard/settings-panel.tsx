@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import { CalendarClock, Clock, History, Loader2, Pause, SlidersHorizontal } from "lucide-react"
+import { CalendarClock, Clock, History, Loader2, Pause, SlidersHorizontal, Type } from "lucide-react"
 
 import { RailSection } from "@/components/dashboard/rail-section"
 import { Slider } from "@/components/ui/slider"
@@ -9,6 +9,22 @@ import { Switch } from "@/components/ui/switch"
 import type { AutomationRunSummary } from "@/lib/automation-runs"
 
 const CHECK_IN_MODES = ["silent", "quiet", "gentle", "active"] as const
+
+// Device-level display prefs. Stored in localStorage and applied via data-* on
+// <html> (see app/layout.tsx + globals.css), not the server preferences row.
+const FONT_STORAGE_KEY = "jarvis-font"
+const FONT_WEIGHT_STORAGE_KEY = "jarvis-font-weight"
+const FONT_OPTIONS = [
+  { value: "onest", label: "Onest" },
+  { value: "geist", label: "Geist" },
+  { value: "ibm-plex", label: "IBM Plex Sans" },
+  { value: "hanken", label: "Hanken Grotesk" },
+  { value: "public-sans", label: "Public Sans" },
+] as const
+const FONT_WEIGHT_OPTIONS = [
+  { value: "regular", label: "Regular" },
+  { value: "medium", label: "Medium" },
+] as const
 
 interface PreferencesShape {
   timezone: string
@@ -89,6 +105,25 @@ export function SettingsPanel({ onChanged }: { onChanged?: () => void }) {
   const [loading, setLoading] = useState(true)
   const [savingField, setSavingField] = useState<string | null>(null)
   const [error, setError] = useState("")
+  const [fontFamily, setFontFamily] = useState("onest")
+  const [fontWeight, setFontWeight] = useState("medium")
+
+  useEffect(() => {
+    setFontFamily(window.localStorage.getItem(FONT_STORAGE_KEY) || "onest")
+    setFontWeight(window.localStorage.getItem(FONT_WEIGHT_STORAGE_KEY) || "medium")
+  }, [])
+
+  function chooseFont(value: string) {
+    setFontFamily(value)
+    window.localStorage.setItem(FONT_STORAGE_KEY, value)
+    document.documentElement.setAttribute("data-font", value)
+  }
+
+  function chooseFontWeight(value: string) {
+    setFontWeight(value)
+    window.localStorage.setItem(FONT_WEIGHT_STORAGE_KEY, value)
+    document.documentElement.setAttribute("data-font-weight", value)
+  }
 
   const tzOptions = useMemo(() => timezoneOptions(preferences?.timezone ?? deviceTimezone()), [preferences?.timezone])
 
@@ -188,6 +223,42 @@ export function SettingsPanel({ onChanged }: { onChanged?: () => void }) {
   return (
     <div className="flex min-w-0 flex-col gap-5 [&>*:last-child]:border-b-0 [&>*:last-child]:pb-0">
       {error ? <p className="text-[12px] text-destructive">{error}</p> : null}
+
+      <RailSection title="Display" icon={Type}>
+        <div className="grid grid-cols-2 gap-3">
+          <label className="flex flex-col gap-1.5">
+            <span className={LABEL_CLASS}>Font</span>
+            <select
+              className={SELECT_CLASS}
+              value={fontFamily}
+              onChange={(event) => chooseFont(event.target.value)}
+            >
+              {FONT_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1.5">
+            <span className={LABEL_CLASS}>Text weight</span>
+            <select
+              className={SELECT_CLASS}
+              value={fontWeight}
+              onChange={(event) => chooseFontWeight(event.target.value)}
+            >
+              {FONT_WEIGHT_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+        <p className="text-[10px] leading-snug text-muted-foreground">
+          Applies to this device. Dates, times, and the JARVIS mark always use JetBrains Mono.
+        </p>
+      </RailSection>
 
       <RailSection title="Time" icon={Clock}>
         <label className="flex flex-col gap-1.5">

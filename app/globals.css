@@ -69,7 +69,7 @@
   --popover-foreground: oklch(0.93 0.012 80);
 
   --muted: oklch(0.235 0.008 60);
-  --muted-foreground: oklch(0.62 0.010 70);
+  --muted-foreground: oklch(0.70 0.010 70);
 
   --primary: oklch(0.66 0.10 40);
   --primary-foreground: oklch(0.14 0.012 60);
@@ -106,8 +106,9 @@
 }
 
 @theme inline {
-  --font-sans: var(--font-jarvis-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-app-sans, var(--font-onest)), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-jarvis-mono), ui-monospace, 'SFMono-Regular', monospace;
+  --font-accent: var(--font-jetbrains), ui-monospace, 'SFMono-Regular', monospace;
   --font-serif: var(--font-sans);
 
   --color-background: var(--background);
@@ -152,6 +153,32 @@
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
+}
+
+/* Body face is device-selectable (Settings → Display); default Onest. The
+   accent face (JetBrains Mono) is fixed and drives the `.num` instrument marks. */
+:root {
+  --font-app-sans: var(--font-onest);
+}
+[data-font="onest"] {
+  --font-app-sans: var(--font-onest);
+}
+[data-font="geist"] {
+  --font-app-sans: var(--font-jarvis-sans);
+}
+[data-font="ibm-plex"] {
+  --font-app-sans: var(--font-ibm-plex);
+}
+[data-font="hanken"] {
+  --font-app-sans: var(--font-hanken);
+}
+[data-font="public-sans"] {
+  --font-app-sans: var(--font-public-sans);
+}
+/* Optional Medium body weight. Only un-weighted text inherits it; elements with
+   an explicit weight class keep theirs. */
+[data-font-weight="medium"] body {
+  font-weight: 500;
 }
 
 .dashboard-preview-grid {
@@ -819,7 +846,7 @@
     background-color: var(--rule-strong);
   }
   .num {
-    font-family: var(--font-sans);
+    font-family: var(--font-accent);
     font-feature-settings: 'tnum' 1, 'zero' 1, 'kern' 1;
     font-variant-numeric: tabular-nums;
     letter-spacing: 0 !important;
