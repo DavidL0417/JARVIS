@@ -21,10 +21,21 @@ const FONT_OPTIONS = [
   { value: "hanken", label: "Hanken Grotesk" },
   { value: "public-sans", label: "Public Sans" },
 ] as const
-const FONT_WEIGHT_OPTIONS = [
-  { value: "regular", label: "Regular" },
-  { value: "medium", label: "Medium" },
-] as const
+const FONT_WEIGHT_STOPS = [400, 500, 600, 700] as const
+const FONT_WEIGHT_LABELS: Record<number, string> = {
+  400: "Regular",
+  500: "Medium",
+  600: "Semibold",
+  700: "Bold",
+}
+// Tolerate the pre-slider "regular"/"medium" strings still in some devices'
+// localStorage; everything else normalizes to a known numeric stop.
+function normalizeFontWeight(raw: string | null): number {
+  if (raw === "regular") return 400
+  if (raw === "medium") return 500
+  const value = Number(raw)
+  return (FONT_WEIGHT_STOPS as readonly number[]).includes(value) ? value : 500
+}
 
 interface PreferencesShape {
   timezone: string
@@ -106,11 +117,11 @@ export function SettingsPanel({ onChanged }: { onChanged?: () => void }) {
   const [savingField, setSavingField] = useState<string | null>(null)
   const [error, setError] = useState("")
   const [fontFamily, setFontFamily] = useState("onest")
-  const [fontWeight, setFontWeight] = useState("medium")
+  const [fontWeight, setFontWeight] = useState(500)
 
   useEffect(() => {
     setFontFamily(window.localStorage.getItem(FONT_STORAGE_KEY) || "onest")
-    setFontWeight(window.localStorage.getItem(FONT_WEIGHT_STORAGE_KEY) || "medium")
+    setFontWeight(normalizeFontWeight(window.localStorage.getItem(FONT_WEIGHT_STORAGE_KEY)))
   }, [])
 
   function chooseFont(value: string) {
@@ -119,10 +130,10 @@ export function SettingsPanel({ onChanged }: { onChanged?: () => void }) {
     document.documentElement.setAttribute("data-font", value)
   }
 
-  function chooseFontWeight(value: string) {
+  function chooseFontWeight(value: number) {
     setFontWeight(value)
-    window.localStorage.setItem(FONT_WEIGHT_STORAGE_KEY, value)
-    document.documentElement.setAttribute("data-font-weight", value)
+    window.localStorage.setItem(FONT_WEIGHT_STORAGE_KEY, String(value))
+    document.documentElement.setAttribute("data-font-weight", String(value))
   }
 
   const tzOptions = useMemo(() => timezoneOptions(preferences?.timezone ?? deviceTimezone()), [preferences?.timezone])
@@ -225,38 +236,39 @@ export function SettingsPanel({ onChanged }: { onChanged?: () => void }) {
       {error ? <p className="text-[12px] text-destructive">{error}</p> : null}
 
       <RailSection title="Display" icon={Type}>
-        <div className="grid grid-cols-2 gap-3">
-          <label className="flex flex-col gap-1.5">
-            <span className={LABEL_CLASS}>Font</span>
-            <select
-              className={SELECT_CLASS}
-              value={fontFamily}
-              onChange={(event) => chooseFont(event.target.value)}
-            >
-              {FONT_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="flex flex-col gap-1.5">
+        <label className="flex flex-col gap-1.5">
+          <span className={LABEL_CLASS}>Font</span>
+          <select
+            className={SELECT_CLASS}
+            value={fontFamily}
+            onChange={(event) => chooseFont(event.target.value)}
+          >
+            {FONT_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <div className="flex flex-col gap-1.5">
+          <div className="flex items-center justify-between">
             <span className={LABEL_CLASS}>Text weight</span>
-            <select
-              className={SELECT_CLASS}
-              value={fontWeight}
-              onChange={(event) => chooseFontWeight(event.target.value)}
-            >
-              {FONT_WEIGHT_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </label>
+            <span className="text-[11px] font-medium text-foreground">
+              {FONT_WEIGHT_LABELS[fontWeight] ?? "Medium"}
+            </span>
+          </div>
+          <Slider
+            min={400}
+            max={700}
+            step={100}
+            value={[fontWeight]}
+            onValueChange={([value]) => chooseFontWeight(value ?? fontWeight)}
+            aria-label="Text weight"
+            className="py-1"
+          />
         </div>
         <p className="text-[10px] leading-snug text-muted-foreground">
-          Applies to this device. Dates, times, and the JARVIS mark always use JetBrains Mono.
+          Applies to this device.
         </p>
       </RailSection>
 

@@ -636,10 +636,7 @@ export default function DashboardPage() {
 
           <section className="flex min-w-0 flex-1 flex-col">
             <header className="flex h-16 shrink-0 items-center gap-5 border-b border-rule-strong px-6">
-              <div
-                className="flex min-w-0 items-center gap-3"
-                style={{ fontFamily: "var(--font-accent)" }}
-              >
+              <div className="flex min-w-0 items-center gap-3">
                 <span className="text-[17px] font-semibold leading-none text-foreground">
                   JARVIS
                 </span>

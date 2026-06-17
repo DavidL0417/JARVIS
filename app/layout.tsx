@@ -7,7 +7,6 @@ import {
   IBM_Plex_Sans,
   Hanken_Grotesk,
   Public_Sans,
-  JetBrains_Mono,
 } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
 import './globals.css'
@@ -32,14 +31,12 @@ const bricolage = Bricolage_Grotesque({
 const onest = Onest({ subsets: ['latin'], variable: '--font-onest', display: 'swap' })
 const ibmPlex = IBM_Plex_Sans({
   subsets: ['latin'],
-  weight: ['400', '500', '600'],
+  weight: ['400', '500', '600', '700'],
   variable: '--font-ibm-plex',
   display: 'swap',
 })
 const hanken = Hanken_Grotesk({ subsets: ['latin'], variable: '--font-hanken', display: 'swap' })
 const publicSans = Public_Sans({ subsets: ['latin'], variable: '--font-public-sans', display: 'swap' })
-// Accent / instrument face — wordmark, dates, times, numerals (the `.num` class).
-const jetbrainsMono = JetBrains_Mono({ subsets: ['latin'], variable: '--font-jetbrains', display: 'swap' })
 
 const FONT_VARS = [
   geistSans,
@@ -49,14 +46,13 @@ const FONT_VARS = [
   ibmPlex,
   hanken,
   publicSans,
-  jetbrainsMono,
 ]
   .map((font) => font.variable)
   .join(' ')
 
 // Restore the device's saved font choice before first paint to avoid a flash.
 // Mirrors the data-font defaults on <html> so unconfigured devices stay on Onest.
-const FONT_INIT_SCRIPT = `(function(){try{var d=document.documentElement;d.setAttribute('data-font',localStorage.getItem('jarvis-font')||'onest');d.setAttribute('data-font-weight',localStorage.getItem('jarvis-font-weight')||'medium');}catch(e){}})();`
+const FONT_INIT_SCRIPT = `(function(){try{var d=document.documentElement;d.setAttribute('data-font',localStorage.getItem('jarvis-font')||'onest');var w=localStorage.getItem('jarvis-font-weight')||'500';if(w==='regular')w='400';if(w==='medium')w='500';d.setAttribute('data-font-weight',w);}catch(e){}})();`
 
 export const metadata: Metadata = {
   title: 'JARVIS',
@@ -89,7 +85,7 @@ export default function RootLayout({
     <html
       lang="en"
       data-font="onest"
-      data-font-weight="medium"
+      data-font-weight="500"
       suppressHydrationWarning
       className={`dark ${FONT_VARS}`}
     >

@@ -975,10 +975,7 @@ export function ScheduleView({
       ) : null}
 
       <header className="mb-4 flex flex-wrap items-baseline gap-x-4 gap-y-1.5">
-        <h1
-          className="text-[28px] font-semibold leading-none text-foreground"
-          style={{ fontFamily: "var(--font-accent)" }}
-        >
+        <h1 className="text-[28px] font-semibold leading-none text-foreground">
           {viewMode === "1month"
             ? `${monthNames[monthViewDate.getMonth()]} ${monthViewDate.getFullYear()}`
             : formatDateRange()}
@@ -1240,9 +1237,10 @@ export function ScheduleView({
                             gridColumnStart: event.day + 1,
                             gridColumnEnd: (event.daySpanEnd ?? event.day) + 2,
                             gridRowStart: lane + 1,
+                            fontWeight: "calc(var(--app-weight) + 100)",
                             ...getAllDayPillStyle(event),
                           }}
-                          className="mx-1 overflow-hidden rounded-sm px-1.5 py-0.5 text-[10px] font-medium leading-tight"
+                          className="mx-1 overflow-hidden rounded-sm px-1.5 py-0.5 text-[10px] leading-tight"
                         >
                           <p className="truncate">{event.title}</p>
                         </div>,
@@ -1348,8 +1346,11 @@ export function ScheduleView({
                               }}
                             >
                               <p
-                                className="text-[11px] font-medium leading-[14px]"
+                                className="text-[12px] leading-[14px]"
                                 style={{
+                                  // Calendar entries read one weight step above
+                                  // the rest of the UI so they pop like Apple's.
+                                  fontWeight: "calc(var(--app-weight) + 100)",
                                   display: "-webkit-box",
                                   WebkitBoxOrient: "vertical",
                                   WebkitLineClamp: titleLines,

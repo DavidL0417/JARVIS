@@ -108,7 +108,6 @@
 @theme inline {
   --font-sans: var(--font-app-sans, var(--font-onest)), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-jarvis-mono), ui-monospace, 'SFMono-Regular', monospace;
-  --font-accent: var(--font-jetbrains), ui-monospace, 'SFMono-Regular', monospace;
   --font-serif: var(--font-sans);
 
   --color-background: var(--background);
@@ -155,8 +154,9 @@
   --color-sidebar-ring: var(--sidebar-ring);
 }
 
-/* Body face is device-selectable (Settings → Display); default Onest. The
-   accent face (JetBrains Mono) is fixed and drives the `.num` instrument marks. */
+/* Body face is device-selectable (Settings → Display); default Onest. The `.num`
+   instrument marks (dates, times, counts) use the same body face with tabular
+   numerals. */
 :root {
   --font-app-sans: var(--font-onest);
 }
@@ -175,10 +175,34 @@
 [data-font="public-sans"] {
   --font-app-sans: var(--font-public-sans);
 }
-/* Optional Medium body weight. Only un-weighted text inherits it; elements with
-   an explicit weight class keep theirs. */
-[data-font-weight="medium"] body {
-  font-weight: 500;
+/* Device-selectable body weight (Settings → Display). `--app-weight` is the base
+   weight for the body-text tier: ordinary copy (via body) plus the calendar
+   event labels, which opt in explicitly with `font-weight: var(--app-weight)`.
+   Headings, eyebrows, and buttons keep their own explicit weights. */
+:root {
+  --app-weight: 500;
+}
+[data-font-weight="400"] {
+  --app-weight: 400;
+}
+[data-font-weight="500"] {
+  --app-weight: 500;
+}
+[data-font-weight="600"] {
+  --app-weight: 600;
+}
+[data-font-weight="700"] {
+  --app-weight: 700;
+}
+/* Legacy values written before the weight slider existed. */
+[data-font-weight="regular"] {
+  --app-weight: 400;
+}
+[data-font-weight="medium"] {
+  --app-weight: 500;
+}
+body {
+  font-weight: var(--app-weight, 400);
 }
 
 .dashboard-preview-grid {
@@ -846,7 +870,7 @@
     background-color: var(--rule-strong);
   }
   .num {
-    font-family: var(--font-accent);
+    font-family: var(--font-sans);
     font-feature-settings: 'tnum' 1, 'zero' 1, 'kern' 1;
     font-variant-numeric: tabular-nums;
     letter-spacing: 0 !important;
