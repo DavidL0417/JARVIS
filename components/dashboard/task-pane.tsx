@@ -1,7 +1,28 @@
 "use client"
 
 import { useMemo, useState } from "react"
-import { Check, ChevronDown, ChevronRight, RotateCcw, Search, Trash2, X } from "lucide-react"
+import {
+  AlertCircle,
+  CalendarClock,
+  CalendarDays,
+  Check,
+  CheckCircle2,
+  ChevronDown,
+  ChevronRight,
+  Circle,
+  CircleSlash,
+  GraduationCap,
+  Hash,
+  ListChecks,
+  NotebookText,
+  RotateCcw,
+  Search,
+  Sparkles,
+  Tag,
+  Trash2,
+  X,
+} from "lucide-react"
+import type { LucideIcon } from "lucide-react"
 
 import { RailSheet } from "@/components/dashboard/rail-sheet"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
@@ -50,6 +71,48 @@ function deadlineLabel(value: string | null): string | null {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return null
   return date.toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })
+}
+
+// A group's leading glyph. Source channels carry their DESIGN.md signal hue (the
+// "abstract source channels flowing into a plan"); status uses semantic color;
+// JARVIS-native tasks wear the brand copper. `tone` is a CSS var/color string,
+// `className` a token utility — at most one is set.
+type Glyph = { Icon: LucideIcon; tone?: string; className?: string }
+
+function sourceGlyph(key: string): Glyph {
+  switch (key) {
+    case "Notion":
+      return { Icon: NotebookText, tone: "var(--signal-blue)" }
+    case "Canvas":
+      return { Icon: GraduationCap, tone: "var(--signal-teal)" }
+    case "Apple Reminders":
+      return { Icon: ListChecks, tone: "var(--signal-green)" }
+    case "Apple Calendar":
+      return { Icon: CalendarDays, tone: "var(--signal-teal)" }
+    default:
+      return { Icon: Sparkles, className: "text-copper" }
+  }
+}
+
+function statusGlyph(key: string): Glyph {
+  switch (key) {
+    case "Overdue":
+      return { Icon: AlertCircle, className: "text-destructive" }
+    case "Scheduled":
+      return { Icon: CalendarClock, className: "text-copper" }
+    case "Completed":
+      return { Icon: CheckCircle2, tone: "var(--signal-green)" }
+    case "Missed":
+      return { Icon: CircleSlash, className: "text-muted-foreground" }
+    default:
+      return { Icon: Circle, className: "text-muted-foreground" }
+  }
+}
+
+function groupGlyph(groupBy: GroupBy, key: string): Glyph {
+  if (groupBy === "source") return sourceGlyph(key)
+  if (groupBy === "status") return statusGlyph(key)
+  return { Icon: Hash, className: "text-muted-foreground" }
 }
 
 function pushInto(map: Map<string, Task[]>, key: string, task: Task) {
@@ -166,7 +229,7 @@ export function TaskPane({
     return (
       <li
         key={task.id}
-        className="group flex items-start gap-2.5 rounded-sm px-2 py-[7px] transition-colors hover:bg-muted/20"
+        className="group flex items-start gap-2.5 rounded-md px-2 py-2 transition-colors hover:bg-muted/30"
       >
         {missed ? (
           <Tooltip>
@@ -175,7 +238,7 @@ export function TaskPane({
                 type="button"
                 onClick={() => void handleRestore(task)}
                 aria-label="Restore to todo"
-                className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:text-foreground"
+                className="mt-px flex h-4 w-4 shrink-0 items-center justify-center rounded-sm text-muted-foreground/70 transition-colors hover:text-foreground"
               >
                 <RotateCcw className="h-3.5 w-3.5" />
               </button>
@@ -187,24 +250,47 @@ export function TaskPane({
             type="button"
             onClick={() => void handleToggleComplete(task)}
             aria-label={completed ? "Mark todo" : "Mark complete"}
-            className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border transition-colors ${
-              completed ? "border-copper bg-copper text-primary-foreground" : "border-rule-strong hover:border-foreground"
+            className={`mt-px flex h-4 w-4 shrink-0 items-center justify-center rounded-[5px] border transition-colors ${
+              completed
+                ? "border-copper bg-copper text-primary-foreground"
+                : "border-rule-strong hover:border-copper"
             }`}
           >
             {completed ? <Check className="h-3 w-3" strokeWidth={3} /> : null}
           </button>
         )}
         <div className="min-w-0 flex-1">
-          <p className={`line-clamp-2 text-[13px] leading-snug ${completed || missed ? "text-muted-foreground" : "text-foreground"} ${completed ? "line-through" : ""}`}>
+          <p
+            className={`line-clamp-2 text-[13px] leading-snug ${
+              completed ? "text-muted-foreground line-through" : missed ? "text-muted-foreground" : "text-foreground"
+            }`}
+          >
             {task.title}
           </p>
-          {(date || visibleTags.length > 0 || overdue || missed) ? (
-            <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-muted-foreground">
-              {overdue ? <span className="num font-medium uppercase text-destructive">Overdue</span> : null}
-              {missed ? <span className="num font-medium uppercase text-muted-foreground">Missed</span> : null}
-              {date ? <span className="num">{date}</span> : null}
-              {visibleTags.length > 0 ? <span className="truncate">{visibleTags.join(" · ")}</span> : null}
-            </p>
+          {date || visibleTags.length > 0 || overdue || missed ? (
+            <div className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[11px] text-muted-foreground">
+              {overdue ? (
+                <span className="num inline-flex items-center gap-1 font-medium uppercase tracking-wide text-destructive">
+                  <AlertCircle className="h-3 w-3" /> Overdue
+                </span>
+              ) : null}
+              {missed ? (
+                <span className="num inline-flex items-center gap-1 font-medium uppercase tracking-wide text-muted-foreground/80">
+                  <CircleSlash className="h-3 w-3" /> Missed
+                </span>
+              ) : null}
+              {date ? (
+                <span className="num inline-flex items-center gap-1">
+                  <CalendarClock className="h-3 w-3 text-muted-foreground/70" /> {date}
+                </span>
+              ) : null}
+              {visibleTags.length > 0 ? (
+                <span className="inline-flex min-w-0 items-center gap-1">
+                  <Tag className="h-3 w-3 shrink-0 text-muted-foreground/70" />
+                  <span className="truncate">{visibleTags.join(" · ")}</span>
+                </span>
+              ) : null}
+            </div>
           ) : null}
         </div>
         <div className="flex shrink-0 items-center opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
@@ -214,7 +300,7 @@ export function TaskPane({
                 type="button"
                 onClick={() => void onDeleteTask(task.id)}
                 aria-label="Delete"
-                className="flex h-7 w-7 items-center justify-center rounded-sm text-muted-foreground hover:bg-accent hover:text-destructive"
+                className="flex h-7 w-7 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-accent hover:text-destructive"
               >
                 <Trash2 className="h-3.5 w-3.5" />
               </button>
@@ -228,53 +314,56 @@ export function TaskPane({
 
   return (
     <RailSheet isOpen={isOpen} onClose={onClose} title="Tasks" width="wide">
-      <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-5">
         <div className="relative">
-          <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
           <input
             type="text"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Search all tasks"
             aria-label="Search all tasks"
-            className="h-8 w-full rounded-sm border border-rule bg-transparent pl-7 pr-7 text-[12.5px] text-foreground placeholder:text-muted-foreground focus:border-rule-strong focus:outline-none"
+            className="h-9 w-full rounded-md border border-rule bg-muted/20 pl-8 pr-8 text-[13px] text-foreground transition-colors placeholder:text-muted-foreground focus:border-copper focus:bg-transparent focus:outline-none"
           />
           {query ? (
             <button
               type="button"
               onClick={() => setQuery("")}
               aria-label="Clear search"
-              className="absolute right-1.5 top-1/2 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-sm text-muted-foreground hover:bg-accent hover:text-foreground"
+              className="absolute right-1.5 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
             >
-              <X className="h-3.5 w-3.5" />
+              <X className="h-4 w-4" />
             </button>
           ) : null}
         </div>
 
         {isSearching ? (
           <div>
-            <div className="mb-2 flex items-baseline gap-2">
+            <div className="mb-2.5 flex items-center gap-2">
+              <Search className="h-3.5 w-3.5 text-copper" aria-hidden="true" />
               <h3 className="eyebrow">Results</h3>
-              <span className="num text-[11px] font-medium uppercase text-muted-foreground">{results.length}</span>
+              <span className="num rounded-full bg-muted/60 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+                {results.length}
+              </span>
             </div>
             {results.length === 0 ? (
-              <p className="text-[12.5px] text-muted-foreground">No tasks match “{query.trim()}”.</p>
+              <p className="px-2 text-[12.5px] text-muted-foreground">No tasks match “{query.trim()}”.</p>
             ) : (
               <ul className="flex flex-col gap-0.5">{results.map(renderRow)}</ul>
             )}
           </div>
         ) : (
           <>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2.5">
               <span className="eyebrow">Group by</span>
-              <div className="inline-flex w-fit rounded-sm border border-rule bg-secondary/10 p-0.5">
+              <div className="inline-flex w-fit gap-0.5 rounded-md border border-rule bg-muted/20 p-0.5">
                 {GROUP_OPTIONS.map((option) => (
                   <button
                     key={option.id}
                     type="button"
                     aria-pressed={groupBy === option.id}
                     onClick={() => setGroupBy(option.id)}
-                    className={`rounded-sm px-2 py-1 text-[11px] transition-colors ${
+                    className={`rounded-[5px] px-2.5 py-1 text-[11.5px] font-medium transition-colors ${
                       groupBy === option.id
                         ? "bg-copper-soft text-copper"
                         : "text-muted-foreground hover:text-foreground"
@@ -286,27 +375,42 @@ export function TaskPane({
               </div>
             </div>
 
-            <div className="flex flex-col gap-5">
+            <div className="flex flex-col gap-6">
               {groups.length === 0 ? (
-                <p className="text-[12.5px] text-muted-foreground">No tasks yet.</p>
+                <p className="px-2 text-[12.5px] text-muted-foreground">No tasks yet.</p>
               ) : (
-                groups.map((group) => (
-                  <div key={group.key}>
-                    <button
-                      type="button"
-                      onClick={() => toggleGroup(group.key)}
-                      className="flex w-full items-center gap-2 py-1 text-left text-muted-foreground transition-colors hover:text-foreground"
-                      aria-expanded={!isCollapsed(group.key)}
-                    >
-                      <h3 className="eyebrow truncate">{group.key}</h3>
-                      <span className="num text-[11px] font-medium uppercase">{group.tasks.length}</span>
-                      {isCollapsed(group.key) ? <ChevronRight className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-                    </button>
-                    {!isCollapsed(group.key) ? (
-                      <ul className="mt-1 flex flex-col gap-0.5">{group.tasks.map(renderRow)}</ul>
-                    ) : null}
-                  </div>
-                ))
+                groups.map((group) => {
+                  const glyph = groupGlyph(groupBy, group.key)
+                  const open = !isCollapsed(group.key)
+                  return (
+                    <div key={group.key}>
+                      <button
+                        type="button"
+                        onClick={() => toggleGroup(group.key)}
+                        className="group/h flex w-full items-center gap-2 border-b border-rule/60 pb-1.5 text-left transition-colors"
+                        aria-expanded={open}
+                      >
+                        <glyph.Icon
+                          className={`h-3.5 w-3.5 shrink-0 ${glyph.className ?? ""}`}
+                          style={glyph.tone ? { color: glyph.tone } : undefined}
+                          aria-hidden="true"
+                        />
+                        <h3 className="eyebrow truncate text-foreground/90">{group.key}</h3>
+                        <span className="num rounded-full bg-muted/60 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+                          {group.tasks.length}
+                        </span>
+                        {open ? (
+                          <ChevronDown className="ml-auto h-3.5 w-3.5 text-muted-foreground transition-colors group-hover/h:text-foreground" />
+                        ) : (
+                          <ChevronRight className="ml-auto h-3.5 w-3.5 text-muted-foreground transition-colors group-hover/h:text-foreground" />
+                        )}
+                      </button>
+                      {open ? (
+                        <ul className="mt-1.5 flex flex-col gap-0.5">{group.tasks.map(renderRow)}</ul>
+                      ) : null}
+                    </div>
+                  )
+                })
               )}
             </div>
           </>
