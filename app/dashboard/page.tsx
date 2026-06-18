@@ -458,6 +458,21 @@ export default function DashboardPage() {
     }
   }
 
+  async function handleInferredDeadline(taskId: string, action: "accept" | "dismiss") {
+    setTaskErrorMessage("")
+
+    try {
+      await fetchJson<{ success: true }>(`/api/tasks/${taskId}/inferred-deadline`, "Failed to update the deadline.", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action }),
+      })
+      await loadDashboard(true)
+    } catch (error) {
+      setTaskErrorMessage(error instanceof Error ? error.message : "Failed to update the deadline.")
+    }
+  }
+
   async function handleUndoAutoImport(candidateId: string) {
     try {
       await fetchJson<{ success: true }>("/api/sources/candidates/undo", "Failed to undo auto-import.", {
@@ -610,6 +625,8 @@ export default function DashboardPage() {
                 onRestoreTask: (taskId) => handleUpdateTask(taskId, { status: "todo" }),
                 onDecide: handleRiskDecision,
                 onClearDecision: handleClearRiskDecision,
+                onAcceptDeadline: (taskId) => handleInferredDeadline(taskId, "accept"),
+                onKeepUndated: (taskId) => handleInferredDeadline(taskId, "dismiss"),
               }}
             />
             <TaskManager

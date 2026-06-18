@@ -7,6 +7,7 @@ export type AutomationRunKind =
   | "pre_plan_refresh"
   | "plan_build"
   | "reconciliation"
+  | "deadline_inference"
 
 export type AutomationRunStatus = "completed" | "skipped_paused" | "skipped_idle" | "failed"
 

@@ -27,6 +27,9 @@ function makeTask(overrides: Partial<Task> & { title: string }): Task {
     planId: null,
     externalTaskId: null,
     lastSyncedFrom: "local",
+    inferredDeadline: null,
+    inferredDeadlineReason: null,
+    inferredDeadlineDismissed: false,
     ...overrides,
   }
 }

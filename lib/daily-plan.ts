@@ -1,4 +1,5 @@
 import { generateSchedule } from "@/lib/ai/claude"
+import { inferDeadlinesForUser } from "@/lib/assistant/infer-deadlines"
 import {
   DEFAULT_CLAUDE_PLANNER_MODEL_KEY,
   getClaudePlannerModelOption,
@@ -707,6 +708,14 @@ export async function buildDailyPlan(input: {
   // Reconcile any stale schedule before planning so unconfirmed blocks free up
   // and returned-to-todo tasks are available for re-placement.
   await reconcileStaleSchedule(input.adminClient, input.userId, now)
+  // Refresh inferred deadlines for undated tasks (Workstream 2) before planning,
+  // so fresh suggestions surface in the rail on the next load. Best-effort — a
+  // missing anchor, an LLM hiccup, or no undated tasks must never break the plan.
+  try {
+    await inferDeadlinesForUser(input.adminClient, input.userId)
+  } catch {
+    // Intentionally swallowed: inference is advisory, planning is not.
+  }
   const sourceRefresh = await refreshSourcesForUser({
     adminClient: input.adminClient,
     userId: input.userId,

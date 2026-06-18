@@ -1,11 +1,12 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import { Archive, Clock3, Loader2, ShieldAlert, X } from "lucide-react"
+import { Archive, Clock3, Loader2, ShieldAlert, Sparkles, X } from "lucide-react"
 
+import { DeadlinesReviewDrawer } from "@/components/dashboard/deadlines-review-drawer"
 import { RailSection } from "@/components/dashboard/rail-section"
 import { RiskArchiveDrawer } from "@/components/dashboard/risk-archive-drawer"
-import { buildNeedsYou, type NeedsYouItem } from "@/lib/needs-you"
+import { buildNeedsYou, type NeedsYouItem, type SuggestedDeadlineItem } from "@/lib/needs-you"
 import { RISK_TYPE_CONFIG, type RiskActionConfig, type RiskType } from "@/lib/risk-types"
 import type { DailyPlan, DashboardReentry, RiskDecision, Task } from "@/types"
 
@@ -25,6 +26,15 @@ export interface NeedsYouHandlers {
     action: "snooze" | "dismiss"
   }) => Promise<void> | void
   onClearDecision: (input: { riskType: RiskType; subjectKey: string }) => Promise<void> | void
+  /** Inferred-deadline suggestions (Workstream 2). */
+  onAcceptDeadline: (taskId: string) => Promise<void> | void
+  onKeepUndated: (taskId: string) => Promise<void> | void
+}
+
+function formatSuggestedDate(iso: string) {
+  const date = new Date(iso)
+  if (Number.isNaN(date.getTime())) return iso
+  return date.toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" })
 }
 
 function severityTone(severity: NeedsYouItem["severity"]) {
@@ -119,8 +129,9 @@ export function NeedsYouPanel({
 }) {
   const [pendingKeys, setPendingKeys] = useState<Record<string, boolean>>({})
   const [archiveOpen, setArchiveOpen] = useState(false)
+  const [deadlinesOpen, setDeadlinesOpen] = useState(false)
 
-  const { items, archive } = useMemo(
+  const { items, suggestions, archive } = useMemo(
     () =>
       buildNeedsYou({
         riskItems: dailyPlan?.riskItems ?? [],
@@ -129,6 +140,27 @@ export function NeedsYouPanel({
       }),
     [dailyPlan?.riskItems, tasks, riskDecisions],
   )
+
+  const runSuggestionAction = async (
+    suggestion: SuggestedDeadlineItem,
+    action: "accept" | "keep",
+  ) => {
+    const key = `suggestion:${suggestion.taskId}`
+    setPendingKeys((prev) => ({ ...prev, [key]: true }))
+    try {
+      if (action === "accept") {
+        await handlers.onAcceptDeadline(suggestion.taskId)
+      } else {
+        await handlers.onKeepUndated(suggestion.taskId)
+      }
+    } finally {
+      setPendingKeys((prev) => {
+        const next = { ...prev }
+        delete next[key]
+        return next
+      })
+    }
+  }
 
   const runAction = async (item: NeedsYouItem, action: RiskActionConfig) => {
     setPendingKeys((prev) => ({ ...prev, [item.key]: true }))
@@ -177,7 +209,7 @@ export function NeedsYouPanel({
       <RailSection
         title="Needs you"
         icon={ShieldAlert}
-        count={items.length}
+        count={items.length + suggestions.length}
         action={
           archive.length > 0 ? (
             <button
@@ -194,11 +226,67 @@ export function NeedsYouPanel({
       >
         {reentry ? <ReentryNote reentry={reentry} /> : null}
 
-        {items.length === 0 ? (
+        {suggestions.length > 0 ? (
+          <ul className="flex flex-col gap-3">
+            {suggestions.map((suggestion) => {
+              const key = `suggestion:${suggestion.taskId}`
+              const isPending = Boolean(pendingKeys[key])
+              const disabled = isPending || isPlanning
+
+              return (
+                <li key={key} className="grid grid-cols-[1rem_minmax(0,1fr)] gap-2">
+                  <Sparkles className="mt-0.5 h-3.5 w-3.5 text-copper" aria-hidden="true" />
+                  <div className="min-w-0">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="line-clamp-1 text-[12px] font-medium text-foreground">{suggestion.title}</span>
+                      <span className="num text-[10px] uppercase text-copper">suggested</span>
+                    </div>
+                    <p className="mt-0.5 line-clamp-3 text-[12px] leading-5 text-muted-foreground">
+                      Deadline {formatSuggestedDate(suggestion.suggestedDeadline)} — {suggestion.reason}
+                    </p>
+                    <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => void runSuggestionAction(suggestion, "accept")}
+                        disabled={disabled}
+                        className="inline-flex h-7 items-center gap-1.5 rounded-sm border border-copper/50 bg-copper-soft px-2 text-[11px] font-medium uppercase text-copper transition-colors hover:bg-copper-soft/70 disabled:opacity-50"
+                      >
+                        {isPending ? <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" /> : null}
+                        <span>Set deadline</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void runSuggestionAction(suggestion, "keep")}
+                        disabled={disabled}
+                        className="inline-flex h-7 items-center rounded-sm border border-rule px-2 text-[11px] uppercase text-muted-foreground transition-colors hover:border-rule-strong hover:text-foreground disabled:opacity-50"
+                      >
+                        Keep undated
+                      </button>
+                    </div>
+                  </div>
+                </li>
+              )
+            })}
+          </ul>
+        ) : null}
+
+        {suggestions.length > 0 ? (
+          <button
+            type="button"
+            onClick={() => setDeadlinesOpen(true)}
+            className="-mt-1 self-start text-[11px] uppercase text-muted-foreground transition-colors hover:text-foreground"
+          >
+            Review all deadlines →
+          </button>
+        ) : null}
+
+        {items.length === 0 && suggestions.length === 0 ? (
           <p className="text-[12px] leading-5 text-muted-foreground">
             Nothing needs you right now.
           </p>
-        ) : (
+        ) : null}
+
+        {items.length > 0 ? (
           <ul className="flex flex-col gap-3">
             {items.map((item) => {
               const config = RISK_TYPE_CONFIG[item.riskType]
@@ -249,7 +337,7 @@ export function NeedsYouPanel({
               )
             })}
           </ul>
-        )}
+        ) : null}
       </RailSection>
 
       <RiskArchiveDrawer
@@ -258,6 +346,15 @@ export function NeedsYouPanel({
         entries={archive}
         onRestoreTask={handlers.onRestoreTask}
         onClearDecision={handlers.onClearDecision}
+      />
+
+      <DeadlinesReviewDrawer
+        isOpen={deadlinesOpen}
+        onClose={() => setDeadlinesOpen(false)}
+        suggestions={suggestions}
+        tasks={tasks}
+        onAcceptDeadline={handlers.onAcceptDeadline}
+        onKeepUndated={handlers.onKeepUndated}
       />
     </>
   )
