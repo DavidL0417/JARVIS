@@ -18,10 +18,17 @@ working piecemeal.
   `POST/DELETE /api/risks/decisions`. The standalone `ReentryRecap` and the Risk Radar
   section of `ContextRailPanel` are removed. **Deferred within W1:** the morning-beat daily
   digest cron (the consolidated surface exists; the scheduled push does not).
-- **Workstream 2 — undated tasks / inferred deadlines:** not started.
-- **Workstream 3 — TaskManager routing, AutoImportDigest deletion, Plan Basis relocation:**
-  not started. Plan Basis still renders in the rail (collapsed/relocated here), and
-  AutoImportDigest is still present, pending W3.
+- **Workstream 3 — routing, AutoImportDigest deletion, Plan Basis relocation: shipped.**
+  Event-kind imports with a concrete time become real calendar events
+  (`schedule_events`, `source="imported"`, provisional via `is_checked_in`) instead of
+  tasks; `candidateToScheduleEventInsert` + an event bucket in `approveSourceCandidates`,
+  undo by `approved_event_id`, extraction prompt tightened. Provisional events render with
+  a copper dashed outline + confirm checkmark and block the planner immediately.
+  AutoImportDigest deleted — its job moved onto a per-task provisional marker (the
+  `source-review` tag → Imported badge + inline Confirm/Reject in the TaskManager). Plan
+  Basis relocated out of the rail to a collapsed disclosure in the schedule column. Right
+  rail is now two panels: "Needs you" + tasks-only TaskManager. Migration applied to prod.
+- **Workstream 2 — undated tasks / inferred deadlines:** not started (the remaining slice).
 
 ## Goal
 
