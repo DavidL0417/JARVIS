@@ -3,6 +3,7 @@ import { z } from "zod"
 
 import { mapTaskRowToTask, mapTaskToUpdate, TASK_SELECT } from "@/lib/data/mappers"
 import { markCanvasTaskComplete } from "@/lib/sources/canvas-completion"
+import { syncNotionTaskCompletion } from "@/lib/sources/notion-completion"
 import {
   isAuthenticationRequiredError,
   requireAuthenticatedUser,
@@ -88,6 +89,18 @@ export async function PATCH(
             task: data,
           })
         : null
+
+    // Notion two-way write-back: reflect completion / reopen on the linked Notion
+    // page. Side effect only (the externalWrite response contract is Canvas-shaped)
+    // and best-effort, so a Notion hiccup never fails the task update.
+    if (parsedBody.data.status === "completed" || parsedBody.data.status === "todo") {
+      await syncNotionTaskCompletion({
+        adminClient,
+        userId: user.id,
+        task: data,
+        completed: parsedBody.data.status === "completed",
+      }).catch(() => null)
+    }
 
     const responsePayload: TaskMutationResponse = {
       success: true,

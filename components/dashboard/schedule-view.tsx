@@ -344,6 +344,10 @@ interface ScheduleViewProps {
 }
 
 const HOUR_PX = 48
+// Total height of one day's time grid (00:00–24:00). Events are clamped to this
+// so anything running past midnight (e.g. 23:00–01:00) ends at the grid's bottom
+// edge instead of spilling below the last hour row.
+const DAY_PX = 24 * HOUR_PX
 // Apple-style floor: events shorter than ~27 min all render at this single
 // height instead of shrinking with duration. It's sized to fit exactly one
 // line of title (14px) plus the tile's py-1 padding (8px), so a one-line tile
@@ -442,7 +446,15 @@ export function ScheduleView({
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null)
   const [selectedTaskReminder, setSelectedTaskReminder] = useState<CalendarEvent | null>(null)
   const [now, setNow] = useState(() => new Date())
+  // Drives the directional slide-in when paging between days. `navTick` forces
+  // the grid blocks to replay their CSS animation on each navigation; `navDir`
+  // picks which direction they enter from.
+  const [navDir, setNavDir] = useState<"prev" | "next" | null>(null)
+  const [navTick, setNavTick] = useState(0)
   const gridScrollRef = useRef<HTMLDivElement | null>(null)
+  const dayHeaderRef = useRef<HTMLDivElement | null>(null)
+  const allDayRef = useRef<HTMLDivElement | null>(null)
+  const timeGridRef = useRef<HTMLDivElement | null>(null)
   const hasAutoScrolledRef = useRef(false)
   const successResetTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -614,6 +626,8 @@ export function ScheduleView({
     } else {
       const newDate = new Date(selectedDate)
       newDate.setDate(newDate.getDate() - 1)
+      setNavDir("prev")
+      setNavTick((tick) => tick + 1)
       setSelectedDate(newDate)
     }
   }
@@ -624,6 +638,8 @@ export function ScheduleView({
     } else {
       const newDate = new Date(selectedDate)
       newDate.setDate(newDate.getDate() + 1)
+      setNavDir("next")
+      setNavTick((tick) => tick + 1)
       setSelectedDate(newDate)
     }
   }
@@ -697,9 +713,12 @@ export function ScheduleView({
   }, [allDayLanes])
   const hasVisibleEvents = events.length > 0
 
+  // Re-arm the content-first auto-scroll only when the view mode changes (or on
+  // first mount). Day navigation deliberately preserves the vertical scroll
+  // position so paging through days doesn't yank the grid up or down.
   useEffect(() => {
     hasAutoScrolledRef.current = false
-  }, [selectedDate, viewMode])
+  }, [viewMode])
 
   useEffect(() => {
     if (viewMode === "1month" || !gridScrollRef.current || hasAutoScrolledRef.current) {
@@ -729,6 +748,51 @@ export function ScheduleView({
     hasAutoScrolledRef.current = true
   }, [displayDates, isGoogleEventsLoading, now, timedEvents, viewMode])
 
+  // Glide the grid sideways when paging between days. We animate transform only
+  // (never opacity) and never remount the blocks, so the content stays fully
+  // visible the whole time — no fade-out, no black blink. Each block is animated
+  // on its own (rather than a shared wrapper) so the sticky day-header and
+  // all-day rows keep sticking during the slide.
+  useEffect(() => {
+    if (navTick === 0 || !navDir) return
+    if (
+      typeof window !== "undefined" &&
+      window.matchMedia?.("(prefers-reduced-motion: reduce)").matches
+    ) {
+      return
+    }
+    const fromX = navDir === "next" ? "7%" : "-7%"
+    const els = [dayHeaderRef.current, allDayRef.current, timeGridRef.current].filter(
+      (el): el is HTMLDivElement => el !== null,
+    )
+    // `will-change` + a 3D transform promote each block to its own GPU layer up
+    // front, so the slide composites instead of repainting frame-by-frame while
+    // the event tiles re-render. The curve is a long-tailed decelerate (the kind
+    // iOS-style sheets use): it eases in off the mark and settles gently into
+    // place rather than snapping, so the pan reads smooth rather than jumpy.
+    const animations = els.map((el) => {
+      el.style.willChange = "transform"
+      return el.animate(
+        [
+          { transform: `translate3d(${fromX}, 0, 0)` },
+          { transform: "translate3d(0, 0, 0)" },
+        ],
+        { duration: 420, easing: "cubic-bezier(0.32, 0.72, 0, 1)" },
+      )
+    })
+    let cancelled = false
+    Promise.all(animations.map((animation) => animation.finished))
+      .then(() => {
+        if (cancelled) return
+        for (const el of els) el.style.willChange = ""
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+      for (const el of els) el.style.willChange = ""
+    }
+  }, [navTick, navDir])
+
   const formatDateRange = () => {
     const start = new Date(selectedDate)
     if (viewMode === "1day") {
@@ -749,7 +813,8 @@ export function ScheduleView({
 
   const getEventStyle = (event: CalendarEvent) => {
     const top = event.startHour * HOUR_PX
-    const height = event.duration * HOUR_PX
+    const maxHeight = Math.max(DAY_PX - top, MIN_EVENT_PX)
+    const height = Math.min(event.duration * HOUR_PX, maxHeight)
     return {
       top: `${top}px`,
       height: `${Math.max(height, MIN_EVENT_PX)}px`,
@@ -1174,6 +1239,7 @@ export function ScheduleView({
         <div ref={gridScrollRef} className="relative flex-1 overflow-auto">
           {/* Day headers */}
           <div
+            ref={dayHeaderRef}
             className={`sticky top-0 z-[40] grid bg-background ${dayColumnTemplate} border-b border-rule-strong`}
           >
             <div className="h-14" />
@@ -1198,6 +1264,7 @@ export function ScheduleView({
 
           {/* All-day lane */}
           <div
+            ref={allDayRef}
             className={`sticky top-14 z-[35] grid bg-background ${dayColumnTemplate} border-b border-rule`}
           >
             <div className="num flex min-h-9 items-start justify-end px-2 py-1.5 text-[11px] font-medium uppercase text-muted-foreground">
@@ -1277,7 +1344,11 @@ export function ScheduleView({
           </div>
 
           {/* Time grid */}
-          <div className={`relative grid ${dayColumnTemplate}`} style={{ minHeight: `${24 * HOUR_PX}px` }}>
+          <div
+            ref={timeGridRef}
+            className={`relative grid ${dayColumnTemplate}`}
+            style={{ minHeight: `${DAY_PX}px` }}
+          >
             {/* Time gutter */}
             <div className="relative">
               {Array.from({ length: 24 }).map((_, i) => (
@@ -1305,7 +1376,7 @@ export function ScheduleView({
                 <div
                   key={dayIndex}
                   className="relative border-l border-rule"
-                  style={{ height: `${24 * HOUR_PX}px` }}
+                  style={{ height: `${DAY_PX}px` }}
                 >
                   {/* Hour ticks */}
                   {Array.from({ length: 24 }).map((_, i) => (
@@ -1338,7 +1409,11 @@ export function ScheduleView({
                       // when the tile has lines to spare. A tile covered by a
                       // cascading neighbor only counts its UNCOVERED strip —
                       // otherwise its location/time lines poke out from beneath.
-                      const tileHeightPx = Math.max(event.duration * HOUR_PX, MIN_EVENT_PX)
+                      const maxTileHeightPx = Math.max(DAY_PX - event.startHour * HOUR_PX, MIN_EVENT_PX)
+                      const tileHeightPx = Math.min(
+                        Math.max(event.duration * HOUR_PX, MIN_EVENT_PX),
+                        maxTileHeightPx,
+                      )
                       const visibleHeightPx =
                         layout.visibleMinutes !== undefined
                           ? Math.min(tileHeightPx, (layout.visibleMinutes / 60) * HOUR_PX)

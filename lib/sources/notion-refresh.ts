@@ -5,9 +5,10 @@ import {
   type NotionPageResult,
   type NotionPropertyValue,
 } from "@/lib/notion"
-import { insertAndAutoApproveSourceCandidates, insertSourceSnapshot } from "@/lib/sources/persistence"
+import { insertSourceSnapshot } from "@/lib/sources/persistence"
 import { getStoredIntegrationToken } from "@/lib/supabase/integration-tokens"
 import { createSupabaseAdminClient } from "@/lib/supabase/server"
+import { TASKS_CALENDAR_ID } from "@/lib/task-calendar-constants"
 import type { ExtractedSourceCandidate } from "@/lib/sources/extraction"
 import type { Priority } from "@/types"
 import type { SourceIntakeResponse } from "@/schemas/sources"
@@ -105,20 +106,24 @@ function parseDueAt(page: NotionPageResult): { dueAt: string | null; allDay: boo
     namedDateProperty ||
     Object.values(properties).find((property) => property.type === "date") ||
     null
-  const value = fallbackDateProperty?.date?.start ?? null
+  const startValue = fallbackDateProperty?.date?.start ?? null
   const endValue = fallbackDateProperty?.date?.end ?? null
 
-  if (!value) {
+  if (!startValue) {
     return { dueAt: null, allDay: false }
   }
 
-  const parsed = new Date(value)
+  // A ranged Due Date (start..end) means the work is due by the END of the range,
+  // not the day it opens. Use the end when present so a multi-day assignment lands
+  // on its real deadline.
+  const dueValue = endValue ?? startValue
+  const parsed = new Date(dueValue)
   if (Number.isNaN(parsed.getTime())) {
     return { dueAt: null, allDay: false }
   }
 
-  const isDateOnly = /^\d{4}-\d{2}-\d{2}$/.test(value.trim())
-  const isMultiDay = Boolean(endValue && endValue !== value)
+  const isDateOnly = /^\d{4}-\d{2}-\d{2}$/.test(dueValue.trim())
+  const isMultiDay = Boolean(endValue && endValue !== startValue)
   return {
     dueAt: parsed.toISOString(),
     allDay: isDateOnly || isMultiDay,
@@ -238,6 +243,13 @@ function pagesToCandidates(pages: NotionPageResult[], databaseName: string | nul
       continue
     }
 
+    // Skip Notion structural artifacts that get pulled in when a Canvas page is
+    // mirrored into Notion (block-type sub-pages like "• Attachment", "• Page",
+    // "• External Url"). They are never real tasks.
+    if (/^[••]\s/.test(title)) {
+      continue
+    }
+
     const { dueAt, allDay } = parseDueAt(page)
     const durationMinutes = parseDurationMinutes(page)
     const properties = renderPageProperties(page)
@@ -255,6 +267,10 @@ function pagesToCandidates(pages: NotionPageResult[], databaseName: string | nul
       confidence: dueAt ? 0.95 : 0.75,
       evidence: `${sourceLabel}${page.url ? ` (${page.url})` : ""}`,
       allDay: allDay || multiDayByDuration,
+      // Link back to the Notion page so the approved task carries it as
+      // external_task_id — the join key for completion sync in both directions.
+      externalId: page.id ?? null,
+      externalSource: "notion",
     })
   }
 
@@ -276,6 +292,140 @@ function buildSummary(candidates: ExtractedSourceCandidate[], pages: NotionPageR
   }
 
   return `${label} import found ${candidates.length} open task${candidates.length === 1 ? "" : "s"}: ${dueCount} with due dates, ${noDateCount} needing dates.`
+}
+
+// Notion is the source of truth for completion. On each sync: a page that is
+// completed or archived in Notion marks its linked JARVIS task done (matched by
+// the Notion page id stored in external_task_id), and any still-pending Notion
+// candidate whose page is no longer an open row is dismissed so the backlog
+// drains instead of growing every refresh.
+async function applyNotionCompletionSync(
+  adminClient: ReturnType<typeof createSupabaseAdminClient>,
+  userId: string,
+  pages: NotionPageResult[],
+): Promise<{ completedTaskCount: number; prunedCandidateCount: number }> {
+  const nowIso = new Date().toISOString()
+  const completedPageIds = pages
+    .filter((page) => page.id && (isCompletedPage(page) || page.archived))
+    .map((page) => page.id as string)
+  const openPageIds = new Set(
+    pages.filter((page) => page.id && !isCompletedPage(page) && !page.archived).map((page) => page.id as string),
+  )
+
+  let completedTaskCount = 0
+  if (completedPageIds.length > 0) {
+    const { data: doneRows } = await adminClient
+      .from("tasks")
+      .update({ status: "completed", scheduled_for: null, updated_at: nowIso })
+      .eq("user_id", userId)
+      .in("external_task_id", completedPageIds)
+      .neq("status", "completed")
+      .select("id")
+    completedTaskCount = (doneRows ?? []).length
+  }
+
+  // Dismiss pending candidates whose Notion page is no longer an open row. Scoped
+  // to candidates that carry a Notion page link, so non-Notion candidates are
+  // never touched.
+  const { data: pendingRows } = await adminClient
+    .from("source_candidates")
+    .select("id, payload")
+    .eq("user_id", userId)
+    .eq("status", "pending")
+  const staleIds = (pendingRows ?? [])
+    .filter((row) => {
+      const ext = (row.payload as Record<string, unknown> | null)?.externalId
+      return typeof ext === "string" && !openPageIds.has(ext)
+    })
+    .map((row) => row.id as string)
+  let prunedCandidateCount = 0
+  if (staleIds.length > 0) {
+    await adminClient.from("source_candidates").update({ status: "dismissed", updated_at: nowIso }).in("id", staleIds)
+    prunedCandidateCount = staleIds.length
+  }
+
+  return { completedTaskCount, prunedCandidateCount }
+}
+
+/**
+ * Mirror the OPEN rows of the Notion Tasks DB into JARVIS tasks 1:1, keyed by the
+ * Notion page id (`external_task_id`). The page is the identity: two rows with the
+ * same title stay two tasks, a row whose title/date changed is refreshed in place,
+ * and an open row with no task gets one created (which is how a row JARVIS lost
+ * track of comes back). Completed/archived pages were already reconciled by
+ * applyNotionCompletionSync, so they are skipped here. Notion only ever yields
+ * task/deadline rows (never events), so everything lands in the tasks table.
+ */
+async function mirrorOpenNotionPagesToTasks(
+  adminClient: ReturnType<typeof createSupabaseAdminClient>,
+  userId: string,
+  pages: NotionPageResult[],
+): Promise<{ created: number; updated: number }> {
+  const nowIso = new Date().toISOString()
+  let created = 0
+  let updated = 0
+
+  for (const page of pages) {
+    if (!page.id || page.archived || isCompletedPage(page)) {
+      continue
+    }
+
+    const title = getPageTitle(page)
+    // Skip empty titles and Notion block-type artifacts ("• Attachment", etc.).
+    if (!title || /^[••]\s/.test(title)) {
+      continue
+    }
+
+    const { dueAt, allDay } = parseDueAt(page)
+    const durationMinutes = parseDurationMinutes(page)
+    const allDayFinal = allDay || (durationMinutes ?? 0) >= 1440
+    const priority = parsePriority(page)
+    const course = parseCourse(page)
+
+    const { data: existing } = await adminClient
+      .from("tasks")
+      .select("id, status")
+      .eq("user_id", userId)
+      .eq("external_task_id", page.id)
+      .maybeSingle<{ id: string; status: string }>()
+
+    if (existing) {
+      // Notion is source of truth for the row's content — refresh the mirrored
+      // fields, but never reopen a completed task or disturb its scheduling.
+      if (existing.status !== "completed") {
+        await adminClient
+          .from("tasks")
+          .update({ title, deadline: dueAt, all_day: allDayFinal, priority, updated_at: nowIso })
+          .eq("id", existing.id)
+          .eq("user_id", userId)
+        updated += 1
+      }
+      continue
+    }
+
+    await adminClient.from("tasks").insert({
+      user_id: userId,
+      title,
+      description: renderPageProperties(page) || null,
+      deadline: dueAt,
+      duration_minutes: durationMinutes,
+      priority,
+      status: "todo",
+      scheduled_for: null,
+      is_immutable: false,
+      all_day: allDayFinal,
+      calendar_id: TASKS_CALENDAR_ID,
+      tags: course ? [course] : [],
+      source_snapshot_id: null,
+      source_candidate_id: null,
+      plan_id: null,
+      external_task_id: page.id,
+      last_synced_from: "notion",
+    })
+    created += 1
+  }
+
+  return { created, updated }
 }
 
 export async function refreshNotionForUser(userId: string): Promise<SourceIntakeResponse> {
@@ -305,6 +455,12 @@ export async function refreshNotionForUser(userId: string): Promise<SourceIntake
 
   const databaseName = normalizeText(integration?.selected_source_name)
   const pages = await queryNotionDatabase(token.access_token, databaseId)
+  // 1:1 mirror: reconcile completion/removal first, then upsert the open rows as
+  // tasks keyed by Notion page id. No candidate/approve step — the Notion Tasks DB
+  // is authoritative, so every open row IS a task (dated or not, never deduped by
+  // content).
+  const completionSync = await applyNotionCompletionSync(adminClient, userId, pages)
+  const mirror = await mirrorOpenNotionPagesToTasks(adminClient, userId, pages)
   const extractedCandidates = pagesToCandidates(pages, databaseName)
   const summary = buildSummary(extractedCandidates, pages, databaseName)
   const sourceSnapshot = await insertSourceSnapshot({
@@ -318,14 +474,12 @@ export async function refreshNotionForUser(userId: string): Promise<SourceIntake
       databaseId,
       databaseName,
       rowCount: pages.length,
-      candidateCount: extractedCandidates.length,
+      openRowCount: extractedCandidates.length,
+      tasksCreated: mirror.created,
+      tasksUpdated: mirror.updated,
+      completedTaskCount: completionSync.completedTaskCount,
+      prunedCandidateCount: completionSync.prunedCandidateCount,
     },
-  })
-  const candidates = await insertAndAutoApproveSourceCandidates({
-    adminClient,
-    userId,
-    sourceSnapshotId: sourceSnapshot.id,
-    candidates: extractedCandidates,
   })
 
   await adminClient
@@ -342,6 +496,6 @@ export async function refreshNotionForUser(userId: string): Promise<SourceIntake
     success: true,
     sourceSnapshot,
     sourceFile: null,
-    candidates,
+    candidates: [],
   }
 }
