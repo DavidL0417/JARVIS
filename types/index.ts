@@ -102,6 +102,10 @@ export interface TaskRow {
   all_day: boolean
   calendar_id: string | null
   tags: string[]
+  // Structured facets promoted out of `tags`: the owning course (resolved label)
+  // and the kind of work. Null when the source carries no such signal.
+  course: string | null
+  category: string | null
   source_snapshot_id: string | null
   source_candidate_id: string | null
   plan_id: string | null
@@ -313,6 +317,8 @@ export type TaskInsertRow = Omit<
   | "id"
   | "created_at"
   | "updated_at"
+  | "course"
+  | "category"
   | "source_snapshot_id"
   | "source_candidate_id"
   | "plan_id"
@@ -322,6 +328,8 @@ export type TaskInsertRow = Omit<
   | "inferred_deadline_reason"
   | "inferred_deadline_dismissed"
 > & {
+  course?: string | null
+  category?: string | null
   source_snapshot_id?: string | null
   source_candidate_id?: string | null
   plan_id?: string | null
@@ -395,6 +403,10 @@ export interface Task {
   allDay: boolean
   calendarId: string | null
   tags: string[]
+  // Structured facets promoted out of `tags` — drive the course/type chips and
+  // the pane's facet filtering. Null when the source carries no such signal.
+  course: string | null
+  category: string | null
   sourceSnapshotId: string | null
   sourceCandidateId: string | null
   planId: string | null

@@ -81,6 +81,8 @@ export const taskSchema = z.object({
   allDay: z.boolean(),
   calendarId: z.string().min(1).nullable(),
   tags: z.array(tagSchema),
+  course: z.string().min(1).nullable(),
+  category: z.string().min(1).nullable(),
   sourceSnapshotId: z.string().uuid().nullable(),
   sourceCandidateId: z.string().uuid().nullable(),
   planId: z.string().uuid().nullable(),

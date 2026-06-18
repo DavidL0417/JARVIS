@@ -18,6 +18,7 @@ export type NotionPropertyValue = {
   status?: { name?: string | null } | null
   select?: { name?: string | null } | null
   multi_select?: Array<{ name?: string | null }>
+  relation?: Array<{ id?: string | null }>
   checkbox?: boolean
   number?: number | null
   url?: string | null

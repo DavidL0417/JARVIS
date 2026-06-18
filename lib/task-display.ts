@@ -1,9 +1,33 @@
 import type { Task } from "@/types"
 
 // Tags that carry no signal in a task row: the kind tags ("task"/"deadline"/
-// "event") duplicate the status the row already shows, and "source-review" is a
-// retired provisional marker. Hidden from display, never stripped from the data.
-export const NOISE_TAGS = new Set(["source-review", "task", "deadline", "event"])
+// "event") duplicate the status the row already shows, "source-review" is a
+// retired provisional marker, and the source markers ("canvas", "apple-reminders",
+// …) duplicate `lastSyncedFrom` (shown as the row's source glyph / section).
+// Hidden from display, never stripped from the data.
+export const NOISE_TAGS = new Set([
+  "source-review",
+  "task",
+  "deadline",
+  "event",
+  "canvas",
+  "notion",
+  "gmail",
+  "apple-reminders",
+  "apple_reminders",
+  "caldav",
+])
+
+// "MATH 240 — Linear Algebra" → "MATH 240" for a compact course chip (the code
+// before the em/en dash). The full label stays available for tooltips/filtering.
+// Plain hyphens are preserved so "SOCIOL 310-0 — …" keeps its section number.
+export function shortCourseLabel(course: string | null | undefined): string | null {
+  if (!course) {
+    return null
+  }
+  const head = course.split(/\s*[—–]\s*/)[0]?.trim()
+  return head && head.length > 0 ? head : course
+}
 
 // Overdue = a live task with a deadline in the past. Completed and missed tasks
 // are never overdue (missed work ages out to the "Needs you" Archive instead).

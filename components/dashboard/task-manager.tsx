@@ -19,7 +19,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { RailSection } from "@/components/dashboard/rail-section"
 import { TaskRow, TaskCheckbox } from "@/components/dashboard/task-row"
 import { TASKS_CALENDAR_ID } from "@/lib/task-calendar-constants"
-import { NOISE_TAGS, compareByDeadline, formatDeadlineShort, isTaskOverdue } from "@/lib/task-display"
+import { NOISE_TAGS, compareByDeadline, formatDeadlineShort, isTaskOverdue, shortCourseLabel } from "@/lib/task-display"
 import { searchTasks } from "@/lib/task-search"
 import type { Calendar } from "./calendars-sidebar"
 import type { CreateTaskRequest, ScheduleEvent, Task, UpdateTaskRequest } from "@/types"
@@ -285,7 +285,15 @@ export function TaskManager({
         ? calendars.find((c) => c.id === task.calendarId)?.name
         : null
     const calendarColor = calendarName ? calendars.find((c) => c.id === task.calendarId)?.color : null
-    const meta = [calendarName, ...task.tags.filter((tag) => !NOISE_TAGS.has(tag))].filter(Boolean) as string[]
+    // Course + category lead the meta line; free-form tags (minus source markers
+    // and the facets already shown) trail. The redundant source tag is gone.
+    const courseLabel = shortCourseLabel(task.course)
+    const meta = [
+      calendarName,
+      courseLabel,
+      task.category,
+      ...task.tags.filter((tag) => !NOISE_TAGS.has(tag) && tag !== task.course && tag !== task.category),
+    ].filter(Boolean) as string[]
 
     if (isEditing) {
       return (

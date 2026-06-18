@@ -15,6 +15,11 @@ export type SearchableTask = {
   title: string
   tags: string[]
   description: string | null
+  // Structured facets search alongside tags (the course is the highest-value
+  // hit): a query like "math" lands an exact token match on course "MATH 240"
+  // instead of leaning on fuzzy title matching.
+  course?: string | null
+  category?: string | null
 }
 
 const TOKEN_SPLIT = /[\s_\-/.,&():]+/
@@ -77,37 +82,25 @@ function bestTokenScore(term: string, tokens: string[], weights: Tier): number {
   return best
 }
 
-// Anchored single-token subsequence: term shares the first char of a token and is a
-// subsequence of it ("mstr"->"mastering"). The anchor is the guard against the old
-// "mlm matches any prose" bug.
-function anchoredTokenFuzzy(term: string, tokens: string[]): boolean {
-  return tokens.some((token) => token[0] === term[0] && isSubsequence(term, token))
+// After the shared first char, the term's second char must fall within the token's
+// first 3 characters — an abbreviation stays anchored to the word start
+// ("mstr"->"ma..."). This is what stops a short query from threading a longer name
+// it merely passes through ("math" subsequences "m[cgr]a[t][h]" but its 'a' lands
+// at index 4, so it's rejected).
+function earlyAnchored(term: string, token: string): boolean {
+  if (term.length < 2) {
+    return true
+  }
+  const secondAt = token.indexOf(term[1], 1)
+  return secondAt !== -1 && secondAt <= 2
 }
 
-// Compact / initialism across tokens, anchored at a token start ("wk6" -> "[w]ee[k] [6]").
-// Skipped for digit-only terms so "220" never bleeds into "222"/"06".
-function compactMatch(term: string, tokens: string[]): boolean {
-  if (/^\d+$/.test(term)) {
-    return false
-  }
-  for (let start = 0; start < tokens.length; start += 1) {
-    if (tokens[start][0] !== term[0]) {
-      continue
-    }
-    let consumed = 0
-    for (let t = start; t < tokens.length && consumed < term.length; t += 1) {
-      const token = tokens[t]
-      for (let c = 0; c < token.length && consumed < term.length; c += 1) {
-        if (token[c] === term[consumed]) {
-          consumed += 1
-        }
-      }
-    }
-    if (consumed === term.length) {
-      return true
-    }
-  }
-  return false
+// Anchored single-token subsequence: term shares the first char of a token, stays
+// anchored near its start, and is a subsequence of it ("mstr"->"mastering"). The
+// anchor + early-anchor guard is what keeps a 3-4 letter query from matching
+// unrelated prose or names ("mlm"/"math" no longer bleed across words).
+function anchoredTokenFuzzy(term: string, tokens: string[]): boolean {
+  return tokens.some((token) => token[0] === term[0] && earlyAnchored(term, token) && isSubsequence(term, token))
 }
 
 function fieldScore(term: string, tokens: string[], weights: Tier): number {
@@ -115,7 +108,7 @@ function fieldScore(term: string, tokens: string[], weights: Tier): number {
   if (direct > 0) {
     return direct
   }
-  if (weights.fuzzy > 0 && term.length >= 3 && (anchoredTokenFuzzy(term, tokens) || compactMatch(term, tokens))) {
+  if (weights.fuzzy > 0 && term.length >= 3 && anchoredTokenFuzzy(term, tokens)) {
     return weights.fuzzy
   }
   return 0
@@ -123,7 +116,8 @@ function fieldScore(term: string, tokens: string[], weights: Tier): number {
 
 export function scoreTaskMatch(task: SearchableTask, terms: string[], _fullQuery?: string): number {
   const titleTokens = tokenize(task.title)
-  const tagTokens = tokenize(task.tags.join(" "))
+  // Course + category ride with tags (course is the highest-value structured hit).
+  const tagTokens = tokenize([task.tags.join(" "), task.course ?? "", task.category ?? ""].join(" "))
   const descriptionTokens = tokenize(task.description ?? "")
   let score = 0
   let matched = 0

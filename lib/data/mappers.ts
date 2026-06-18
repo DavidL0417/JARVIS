@@ -54,7 +54,7 @@ export const USER_PROFILE_SELECT = "id, email, name, avatar_url, created_at, upd
 export const PREFERENCES_SELECT =
   "id, user_id, timezone, sleep_pattern, peak_energy_window, procrastination_pattern, workday_start, workday_end, default_task_duration_minutes, break_duration_minutes, preferred_focus_block_minutes, preferred_checkin_mode, calendar_id, planner_horizon_days, created_at, updated_at"
 export const TASK_SELECT =
-  "id, user_id, title, description, deadline, duration_minutes, priority, status, scheduled_for, created_at, updated_at, is_immutable, all_day, calendar_id, tags, source_snapshot_id, source_candidate_id, plan_id, external_task_id, last_synced_from, inferred_deadline, inferred_deadline_reason, inferred_deadline_dismissed"
+  "id, user_id, title, description, deadline, duration_minutes, priority, status, scheduled_for, created_at, updated_at, is_immutable, all_day, calendar_id, tags, course, category, source_snapshot_id, source_candidate_id, plan_id, external_task_id, last_synced_from, inferred_deadline, inferred_deadline_reason, inferred_deadline_dismissed"
 export const SCHEDULE_EVENT_SELECT =
   "id, user_id, task_id, title, starts_at, ends_at, source, priority, status, location, external_event_id, gcal_event_id, last_synced_from, created_at, updated_at, is_immutable, is_checked_in, all_day, calendar_id, plan_id"
 export const USER_CALENDAR_SELECT =
@@ -244,6 +244,8 @@ export function mapTaskRowToTask(row: TaskRow): Task {
     allDay: row.all_day,
     calendarId: normalizeNullableText(row.calendar_id),
     tags: normalizeTags(row.tags),
+    course: normalizeNullableText(row.course),
+    category: normalizeNullableText(row.category),
     sourceSnapshotId: row.source_snapshot_id,
     sourceCandidateId: row.source_candidate_id,
     planId: row.plan_id,
@@ -316,6 +318,8 @@ export function mapTaskToInsert(task: Task): TaskInsertRow {
     all_day: task.allDay,
     calendar_id: normalizeNullableText(task.calendarId),
     tags: normalizeTags(task.tags),
+    course: normalizeNullableText(task.course),
+    category: normalizeNullableText(task.category),
     source_snapshot_id: task.sourceSnapshotId,
     source_candidate_id: task.sourceCandidateId,
     plan_id: task.planId,
@@ -369,6 +373,14 @@ export function mapTaskToUpdate(task: Partial<Omit<Task, "id" | "userId">>): Tas
 
   if ("tags" in task) {
     update.tags = normalizeTags(task.tags)
+  }
+
+  if ("course" in task) {
+    update.course = normalizeNullableText(task.course)
+  }
+
+  if ("category" in task) {
+    update.category = normalizeNullableText(task.category)
   }
 
   if ("sourceSnapshotId" in task) {

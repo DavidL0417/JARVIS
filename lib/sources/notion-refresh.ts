@@ -132,13 +132,88 @@ function parseDueAt(page: NotionPageResult): { dueAt: string | null; allDay: boo
   }
 }
 
-function parseCourse(page: NotionPageResult) {
+// The course property is often a *relation* to a Courses database, not text — so
+// `propertyText` alone returns null (it has no relation case), which is why course
+// chips were missing. When it's a relation we map each related page id to its
+// resolved title via `courseLabels` (built once per sync by resolveCourseLabels);
+// otherwise we read it as text/select.
+function parseCourse(page: NotionPageResult, courseLabels?: Map<string, string>): string | null {
   const property = findProperty(
     page.properties || {},
     (name) => /(course|class|subject|project)/i.test(name),
   )
+  if (!property) {
+    return null
+  }
+  if (property.type === "relation") {
+    if (!courseLabels) {
+      return null
+    }
+    const labels = (property.relation || [])
+      .map((entry) => (entry?.id ? courseLabels.get(entry.id) : null))
+      .filter((label): label is string => Boolean(label))
+    return labels.length > 0 ? normalizeText([...new Set(labels)].join(", ")) : null
+  }
+  return propertyText(property)
+}
 
+// The kind of work, from the Notion Category/Type select (e.g. "Problem Set",
+// "Reading", "Application"). `propertyText` already flattens select/multi_select.
+function parseCategory(page: NotionPageResult): string | null {
+  const property = findProperty(
+    page.properties || {},
+    (name) => /(category|type|kind)/i.test(name),
+  )
   return propertyText(property ?? undefined)
+}
+
+// Course is frequently a relation whose value is just a page id; the human label
+// ("MATH 240 — Linear Algebra") lives on the related page. Collect the related
+// course-page ids referenced by a page.
+function courseRelationIds(page: NotionPageResult): string[] {
+  const property = findProperty(
+    page.properties || {},
+    (name) => /(course|class|subject|project)/i.test(name),
+  )
+  if (!property || property.type !== "relation") {
+    return []
+  }
+  return (property.relation || [])
+    .map((entry) => entry?.id ?? null)
+    .filter((id): id is string => Boolean(id))
+}
+
+// Resolve every referenced course page id to its title in one batched pass per
+// sync (a handful of courses), so the per-page parseCourse is a cheap map lookup.
+async function resolveCourseLabels(
+  accessToken: string,
+  pages: NotionPageResult[],
+): Promise<Map<string, string>> {
+  const ids = new Set<string>()
+  for (const page of pages) {
+    for (const id of courseRelationIds(page)) {
+      ids.add(id)
+    }
+  }
+  const labels = new Map<string, string>()
+  await Promise.all(
+    [...ids].map(async (id) => {
+      try {
+        const related = await fetchNotionJson<NotionPageResult>(
+          accessToken,
+          `https://api.notion.com/v1/pages/${encodeURIComponent(id)}`,
+        )
+        const title = getPageTitle(related)
+        if (title) {
+          labels.set(id, title)
+        }
+      } catch {
+        // A course page we can't read (unshared/deleted) just yields no label; the
+        // task still imports, just without a course chip.
+      }
+    }),
+  )
+  return labels
 }
 
 function parseDurationMinutes(page: NotionPageResult) {
@@ -406,13 +481,14 @@ async function mirrorOpenNotionPagesToTasks(
   adminClient: ReturnType<typeof createSupabaseAdminClient>,
   userId: string,
   pages: NotionPageResult[],
+  courseLabels: Map<string, string>,
 ): Promise<{ created: number; updated: number }> {
   const nowIso = new Date().toISOString()
   let created = 0
   let updated = 0
 
   for (const page of pages) {
-    if (!page.id || page.archived || isCompletedPage(page)) {
+    if (!page.id || page.archived) {
       continue
     }
 
@@ -422,33 +498,60 @@ async function mirrorOpenNotionPagesToTasks(
       continue
     }
 
+    // Facets are refreshed for every row — including finished ones, so a course
+    // that was a relation (and previously dropped) backfills onto old tasks.
+    const completed = isCompletedPage(page)
+    const course = parseCourse(page, courseLabels)
+    const category = parseCategory(page)
+
+    const { data: existing } = await adminClient
+      .from("tasks")
+      .select("id, status, course, category")
+      .eq("user_id", userId)
+      .eq("external_task_id", page.id)
+      .maybeSingle<{ id: string; status: string; course: string | null; category: string | null }>()
+
+    if (existing) {
+      const facetsChanged =
+        (existing.course ?? null) !== (course ?? null) || (existing.category ?? null) !== (category ?? null)
+      // A finished task is never reopened or re-dated — only its facets are
+      // backfilled, and only when they actually changed (no churn each sync).
+      if (existing.status === "completed" || completed) {
+        if (facetsChanged) {
+          await adminClient
+            .from("tasks")
+            .update({ course, category, updated_at: nowIso })
+            .eq("id", existing.id)
+            .eq("user_id", userId)
+          updated += 1
+        }
+        continue
+      }
+
+      // Open row: Notion is source of truth for content; refresh it and the facets.
+      const { dueAt, allDay } = parseDueAt(page)
+      const durationMinutes = parseDurationMinutes(page)
+      const allDayFinal = allDay || (durationMinutes ?? 0) >= 1440
+      const priority = parsePriority(page)
+      await adminClient
+        .from("tasks")
+        .update({ title, deadline: dueAt, all_day: allDayFinal, priority, course, category, updated_at: nowIso })
+        .eq("id", existing.id)
+        .eq("user_id", userId)
+      updated += 1
+      continue
+    }
+
+    // No task yet. A completed page is never resurrected as a fresh todo — the
+    // completion sync owns finished rows; only open pages seed new tasks.
+    if (completed) {
+      continue
+    }
+
     const { dueAt, allDay } = parseDueAt(page)
     const durationMinutes = parseDurationMinutes(page)
     const allDayFinal = allDay || (durationMinutes ?? 0) >= 1440
     const priority = parsePriority(page)
-    const course = parseCourse(page)
-
-    const { data: existing } = await adminClient
-      .from("tasks")
-      .select("id, status")
-      .eq("user_id", userId)
-      .eq("external_task_id", page.id)
-      .maybeSingle<{ id: string; status: string }>()
-
-    if (existing) {
-      // Notion is source of truth for the row's content — refresh the mirrored
-      // fields, but never reopen a completed task or disturb its scheduling.
-      if (existing.status !== "completed") {
-        await adminClient
-          .from("tasks")
-          .update({ title, deadline: dueAt, all_day: allDayFinal, priority, updated_at: nowIso })
-          .eq("id", existing.id)
-          .eq("user_id", userId)
-        updated += 1
-      }
-      continue
-    }
-
     await adminClient.from("tasks").insert({
       user_id: userId,
       title,
@@ -461,7 +564,9 @@ async function mirrorOpenNotionPagesToTasks(
       is_immutable: false,
       all_day: allDayFinal,
       calendar_id: TASKS_CALENDAR_ID,
-      tags: course ? [course] : [],
+      tags: [],
+      course,
+      category,
       source_snapshot_id: null,
       source_candidate_id: null,
       plan_id: null,
@@ -506,7 +611,10 @@ export async function refreshNotionForUser(userId: string): Promise<SourceIntake
   // is authoritative, so every open row IS a task (dated or not, never deduped by
   // content).
   const completionSync = await applyNotionCompletionSync(adminClient, userId, pages, complete)
-  const mirror = await mirrorOpenNotionPagesToTasks(adminClient, userId, pages)
+  // Resolve course relations → labels once per sync; the mirror then reads them
+  // as cheap map lookups instead of an API call per page.
+  const courseLabels = await resolveCourseLabels(token.access_token, pages)
+  const mirror = await mirrorOpenNotionPagesToTasks(adminClient, userId, pages, courseLabels)
   const extractedCandidates = pagesToCandidates(pages, databaseName)
   const summary = buildSummary(extractedCandidates, pages, databaseName)
   const sourceSnapshot = await insertSourceSnapshot({

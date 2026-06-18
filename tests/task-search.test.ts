@@ -2,8 +2,14 @@ import { describe, expect, it } from "vitest"
 
 import { isSubsequence, searchTasks, type SearchableTask } from "@/lib/task-search"
 
-function task(title: string, tags: string[] = [], description: string | null = null): SearchableTask {
-  return { title, tags, description }
+function task(
+  title: string,
+  tags: string[] = [],
+  description: string | null = null,
+  course: string | null = null,
+  category: string | null = null,
+): SearchableTask {
+  return { title, tags, description, course, category }
 }
 
 describe("isSubsequence", () => {
@@ -92,6 +98,35 @@ describe("searchTasks", () => {
 
   it("tokenizes course codes so a separator-glued code is searchable by part", () => {
     const results = searchTasks([task("Problem set", ["2026SP_IEMS_225-0_SEC01"])], "iems")
+    expect(results).toHaveLength(1)
+  })
+
+  it("does not let 'math' thread across unrelated words (the McGrath / Mastering bug)", () => {
+    const results = searchTasks(
+      [
+        task("Synthesize questions from Mary McGrath"),
+        task("Mastering Your Pitch: Watch. Reflect. Present Better."),
+        task("A Mother Who Leaves is a Mother Who Loves"),
+        task("Week 6 MLM Problems", [], null, "MATH 240"),
+      ],
+      "math",
+    )
+    expect(results.map((t) => t.title)).toEqual(["Week 6 MLM Problems"])
+  })
+
+  it("matches the structured course facet", () => {
+    const results = searchTasks(
+      [task("Week 9 MLM Problems", [], null, "MATH 240 — Linear Algebra"), task("Buy groceries")],
+      "math",
+    )
+    expect(results.map((t) => t.title)).toEqual(["Week 9 MLM Problems"])
+  })
+
+  it("matches the structured category facet", () => {
+    const results = searchTasks(
+      [task("McAdoo reading", [], null, "SOCIOL 310", "Reading"), task("Buy groceries")],
+      "reading",
+    )
     expect(results).toHaveLength(1)
   })
 })
