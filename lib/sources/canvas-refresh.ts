@@ -178,6 +178,7 @@ function taskFieldsForCandidate(candidate: CanvasTaskCandidate, userId: string, 
     source_snapshot_id: sourceSnapshotId,
     source_candidate_id: sourceCandidateId,
     plan_id: null,
+    last_synced_from: "canvas" as const,
   }
 }
 

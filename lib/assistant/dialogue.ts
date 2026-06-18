@@ -56,6 +56,8 @@ function taskSourceLabel(task: Task): string {
   if (task.lastSyncedFrom === "apple_reminders") return "Apple Reminders"
   if (task.lastSyncedFrom === "caldav") return "Apple Calendar"
   if (task.lastSyncedFrom === "notion") return "Notion"
+  if (task.lastSyncedFrom === "gmail") return "Gmail"
+  if (task.lastSyncedFrom === "canvas") return "Canvas"
   return "JARVIS"
 }
 

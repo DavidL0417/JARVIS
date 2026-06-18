@@ -5,7 +5,6 @@ import {
   AlertCircle,
   CalendarClock,
   CalendarDays,
-  Check,
   CheckCircle2,
   ChevronDown,
   ChevronRight,
@@ -14,6 +13,7 @@ import {
   GraduationCap,
   Hash,
   ListChecks,
+  Mail,
   NotebookText,
   RotateCcw,
   Search,
@@ -25,15 +25,13 @@ import {
 import type { LucideIcon } from "lucide-react"
 
 import { RailSheet } from "@/components/dashboard/rail-sheet"
+import { TaskRow, TaskCheckbox } from "@/components/dashboard/task-row"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
+import { NOISE_TAGS, compareByDeadline, formatDeadlineShort, isTaskOverdue } from "@/lib/task-display"
 import { searchTasks } from "@/lib/task-search"
 import type { Task, UpdateTaskRequest } from "@/types"
 
 type GroupBy = "source" | "status" | "tag"
-
-// Kind/marker tags carry no grouping signal (the row already shows status, and the
-// course is the meaningful tag). Hidden from the tag view and the row meta.
-const NOISE_TAGS = new Set(["source-review", "task", "deadline", "event"])
 
 const GROUP_OPTIONS: { id: GroupBy; label: string }[] = [
   { id: "source", label: "Source" },
@@ -43,34 +41,20 @@ const GROUP_OPTIONS: { id: GroupBy; label: string }[] = [
 
 function taskSourceLabel(task: Task): string {
   if (task.lastSyncedFrom === "notion") return "Notion"
+  if (task.lastSyncedFrom === "gmail") return "Gmail"
+  if (task.lastSyncedFrom === "canvas") return "Canvas"
   if (task.lastSyncedFrom === "apple_reminders") return "Apple Reminders"
   if (task.lastSyncedFrom === "caldav") return "Apple Calendar"
   if (task.tags.includes("canvas")) return "Canvas"
   return "JARVIS"
 }
 
-function isOverdue(task: Task, nowMs: number): boolean {
-  return (
-    task.status !== "completed" &&
-    task.status !== "missed" &&
-    Boolean(task.deadline) &&
-    new Date(task.deadline as string).getTime() < nowMs
-  )
-}
-
 function statusLabel(task: Task, nowMs: number): string {
   if (task.status === "completed") return "Completed"
   if (task.status === "missed") return "Missed"
-  if (isOverdue(task, nowMs)) return "Overdue"
+  if (isTaskOverdue(task, nowMs)) return "Overdue"
   if (task.status === "scheduled" || task.scheduledFor) return "Scheduled"
   return "Todo"
-}
-
-function deadlineLabel(value: string | null): string | null {
-  if (!value) return null
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return null
-  return date.toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })
 }
 
 // A group's leading glyph. Source channels carry their DESIGN.md signal hue (the
@@ -85,6 +69,8 @@ function sourceGlyph(key: string): Glyph {
       return { Icon: NotebookText, tone: "var(--signal-blue)" }
     case "Canvas":
       return { Icon: GraduationCap, tone: "var(--signal-teal)" }
+    case "Gmail":
+      return { Icon: Mail, tone: "var(--signal-copper)" }
     case "Apple Reminders":
       return { Icon: ListChecks, tone: "var(--signal-green)" }
     case "Apple Calendar":
@@ -125,7 +111,7 @@ function pushInto(map: Map<string, Task[]>, key: string, task: Task) {
 }
 
 const STATUS_ORDER = ["Overdue", "Todo", "Scheduled", "Completed", "Missed"]
-const SOURCE_ORDER = ["Notion", "Canvas", "Apple Reminders", "Apple Calendar", "JARVIS"]
+const SOURCE_ORDER = ["Notion", "Canvas", "Gmail", "Apple Reminders", "Apple Calendar", "JARVIS"]
 
 // Only the Status view collapses Completed/Missed by default; a free-form tag that
 // happens to be named "Completed" stays expanded.
@@ -134,9 +120,8 @@ function defaultCollapsed(groupBy: GroupBy, key: string): boolean {
 }
 
 function compareForList(left: Task, right: Task): number {
-  const leftMs = left.deadline ? new Date(left.deadline).getTime() : Number.POSITIVE_INFINITY
-  const rightMs = right.deadline ? new Date(right.deadline).getTime() : Number.POSITIVE_INFINITY
-  if (leftMs !== rightMs) return leftMs - rightMs
+  const byDeadline = compareByDeadline(left, right)
+  if (byDeadline !== 0) return byDeadline
   return left.title.localeCompare(right.title)
 }
 
@@ -220,54 +205,46 @@ export function TaskPane({
   }
 
   const renderRow = (task: Task) => {
-    const overdue = isOverdue(task, nowMs)
+    const overdue = isTaskOverdue(task, nowMs)
     const completed = task.status === "completed"
     const missed = task.status === "missed"
-    const date = deadlineLabel(task.deadline)
+    const date = formatDeadlineShort(task.deadline)
     const visibleTags = task.tags.filter((tag) => !NOISE_TAGS.has(tag))
 
     return (
-      <li
+      <TaskRow
         key={task.id}
         className="group flex items-start gap-2.5 rounded-md px-2 py-2 transition-colors hover:bg-muted/30"
-      >
-        {missed ? (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                type="button"
-                onClick={() => void handleRestore(task)}
-                aria-label="Restore to todo"
-                className="mt-px flex h-4 w-4 shrink-0 items-center justify-center rounded-sm text-muted-foreground/70 transition-colors hover:text-foreground"
-              >
-                <RotateCcw className="h-3.5 w-3.5" />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent side="top" className="text-[11px]">Restore to todo</TooltipContent>
-          </Tooltip>
-        ) : (
-          <button
-            type="button"
-            onClick={() => void handleToggleComplete(task)}
-            aria-label={completed ? "Mark todo" : "Mark complete"}
-            className={`mt-px flex h-4 w-4 shrink-0 items-center justify-center rounded-[5px] border transition-colors ${
-              completed
-                ? "border-copper bg-copper text-primary-foreground"
-                : "border-rule-strong hover:border-copper"
-            }`}
-          >
-            {completed ? <Check className="h-3 w-3" strokeWidth={3} /> : null}
-          </button>
-        )}
-        <div className="min-w-0 flex-1">
-          <p
-            className={`line-clamp-2 text-[13px] leading-snug ${
-              completed ? "text-muted-foreground line-through" : missed ? "text-muted-foreground" : "text-foreground"
-            }`}
-          >
-            {task.title}
-          </p>
-          {date || visibleTags.length > 0 || overdue || missed ? (
+        leading={
+          missed ? (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  onClick={() => void handleRestore(task)}
+                  aria-label="Restore to todo"
+                  className="mt-px flex h-4 w-4 shrink-0 items-center justify-center rounded-sm text-muted-foreground/70 transition-colors hover:text-foreground"
+                >
+                  <RotateCcw className="h-3.5 w-3.5" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="top" className="text-[11px]">Restore to todo</TooltipContent>
+            </Tooltip>
+          ) : (
+            <TaskCheckbox
+              checked={completed}
+              onToggle={() => void handleToggleComplete(task)}
+              className="mt-px rounded-[5px]"
+              uncheckedClassName="border-rule-strong hover:border-copper"
+            />
+          )
+        }
+        title={task.title}
+        titleClassName={
+          completed ? "text-muted-foreground line-through" : missed ? "text-muted-foreground" : "text-foreground"
+        }
+        meta={
+          date || visibleTags.length > 0 || overdue || missed ? (
             <div className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[11px] text-muted-foreground">
               {overdue ? (
                 <span className="num inline-flex items-center gap-1 font-medium uppercase tracking-wide text-destructive">
@@ -291,9 +268,9 @@ export function TaskPane({
                 </span>
               ) : null}
             </div>
-          ) : null}
-        </div>
-        <div className="flex shrink-0 items-center opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+          ) : null
+        }
+        actions={
           <Tooltip>
             <TooltipTrigger asChild>
               <button
@@ -307,8 +284,8 @@ export function TaskPane({
             </TooltipTrigger>
             <TooltipContent side="top" className="text-[11px]">Delete</TooltipContent>
           </Tooltip>
-        </div>
-      </li>
+        }
+      />
     )
   }
 

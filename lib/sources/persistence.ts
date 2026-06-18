@@ -107,7 +107,13 @@ function candidatePayloadLink(candidate: SourceCandidate): { externalId: string 
   const externalId = typeof candidate.payload?.externalId === "string" ? candidate.payload.externalId : null
   const source = candidate.payload?.externalSource
   const lastSyncedFrom =
-    source === "notion" || source === "caldav" || source === "apple_reminders" ? source : undefined
+    source === "notion" ||
+    source === "caldav" ||
+    source === "apple_reminders" ||
+    source === "gmail" ||
+    source === "canvas"
+      ? source
+      : undefined
   return { externalId, lastSyncedFrom }
 }
 
@@ -293,12 +299,33 @@ export async function updateSourceFileStatus(input: {
   return mapSourceFileRowToSummary(data)
 }
 
+// Candidate payload: external id (per-item link, e.g. a Notion page) + origin (so
+// the approved task gets last_synced_from). A per-candidate externalSource wins
+// over the batch-level one passed by the importer.
+function candidateInsertPayload(
+  candidate: ExtractedSourceCandidate,
+  batchSource: TaskSyncOrigin | undefined,
+): Record<string, unknown> {
+  const payload: Record<string, unknown> = {}
+  if (candidate.externalId) {
+    payload.externalId = candidate.externalId
+  }
+  const source = candidate.externalSource ?? batchSource
+  if (source) {
+    payload.externalSource = source
+  }
+  return payload
+}
+
 export async function insertSourceCandidates(input: {
   adminClient: AdminClient
   userId: string
   sourceSnapshotId: string
   sourceFileId?: string | null
   candidates: ExtractedSourceCandidate[]
+  // Stamps task provenance (last_synced_from) for sources that don't carry a
+  // per-item external id — e.g. Gmail, Canvas. Per-candidate externalSource wins.
+  externalSource?: TaskSyncOrigin
 }): Promise<SourceCandidate[]> {
   if (input.candidates.length === 0) {
     return []
@@ -365,11 +392,10 @@ export async function insertSourceCandidates(input: {
         priority: candidate.priority,
         confidence: candidate.confidence,
         evidence: normalizeNullableText(candidate.evidence),
-        // Keep the upstream link (Notion page id + origin) so the approved task
-        // can carry external_task_id / last_synced_from for two-way sync.
-        payload: candidate.externalId
-          ? { externalId: candidate.externalId, externalSource: candidate.externalSource ?? null }
-          : {},
+        // Keep the upstream link (external id) + origin so the approved task can
+        // carry external_task_id / last_synced_from. externalSource also tags
+        // id-less sources (Gmail, Canvas) for provenance grouping.
+        payload: candidateInsertPayload(candidate, input.externalSource),
         status: "pending",
       })),
     )
@@ -427,6 +453,7 @@ export async function insertAndAutoApproveSourceCandidates(input: {
   sourceSnapshotId: string
   sourceFileId?: string | null
   candidates: ExtractedSourceCandidate[]
+  externalSource?: TaskSyncOrigin
 }): Promise<SourceCandidate[]> {
   const inserted = await insertSourceCandidates(input)
 

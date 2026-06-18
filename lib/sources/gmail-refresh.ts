@@ -284,6 +284,7 @@ export async function refreshGmailForUser(userId: string): Promise<SourceIntakeR
     userId,
     sourceSnapshotId: sourceSnapshot.id,
     candidates: extraction.candidates,
+    externalSource: "gmail",
   })
 
   return {

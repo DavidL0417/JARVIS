@@ -131,6 +131,7 @@ export async function POST(request: Request) {
             userId: tokenRecord.user_id,
             sourceSnapshotId: snapshot.id,
             candidates: result.extractedCandidates,
+            externalSource: "canvas",
           })
       candidateCount = candidates.length
     }
