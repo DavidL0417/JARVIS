@@ -13,7 +13,9 @@ import type { ExtractedSourceCandidate } from "@/lib/sources/extraction"
 import type { Priority } from "@/types"
 import type { SourceIntakeResponse } from "@/schemas/sources"
 
-const MAX_NOTION_DATABASE_PAGES = 200
+// Safety ceiling on a full pull (open + completed rows). High enough to cover a
+// real Tasks DB in one sync so the pull stays `complete` (see queryNotionDatabase).
+const MAX_NOTION_DATABASE_PAGES = 1000
 
 function normalizeText(value: string | null | undefined) {
   const trimmed = value?.replace(/\s+/g, " ").trim()
@@ -199,9 +201,17 @@ function renderPageProperties(page: NotionPageResult) {
     .join("; ")
 }
 
-async function queryNotionDatabase(accessToken: string, databaseId: string) {
+// Pull the whole Tasks DB (open AND completed rows). `complete` is true only when
+// we exhausted the cursor rather than hitting the page cap — completion + deletion
+// reconciliation rely on a COMPLETE pull, since "page absent from the pull" must
+// mean "gone from Notion", not "beyond the cap".
+async function queryNotionDatabase(
+  accessToken: string,
+  databaseId: string,
+): Promise<{ pages: NotionPageResult[]; complete: boolean }> {
   const pages: NotionPageResult[] = []
   let cursor: string | null = null
+  let complete = true
 
   do {
     const payload: NotionDatabaseQueryResponse = await fetchNotionJson<NotionDatabaseQueryResponse>(
@@ -210,7 +220,7 @@ async function queryNotionDatabase(accessToken: string, databaseId: string) {
       {
         method: "POST",
         body: JSON.stringify({
-          page_size: 50,
+          page_size: 100,
           start_cursor: cursor ?? undefined,
           sorts: [
             {
@@ -223,10 +233,19 @@ async function queryNotionDatabase(accessToken: string, databaseId: string) {
     )
 
     pages.push(...(payload.results || []))
-    cursor = payload.has_more && pages.length < MAX_NOTION_DATABASE_PAGES ? payload.next_cursor ?? null : null
+    if (payload.has_more) {
+      if (pages.length >= MAX_NOTION_DATABASE_PAGES) {
+        complete = false
+        cursor = null
+      } else {
+        cursor = payload.next_cursor ?? null
+      }
+    } else {
+      cursor = null
+    }
   } while (cursor)
 
-  return pages
+  return { pages, complete }
 }
 
 function pagesToCandidates(pages: NotionPageResult[], databaseName: string | null): ExtractedSourceCandidate[] {
@@ -294,16 +313,18 @@ function buildSummary(candidates: ExtractedSourceCandidate[], pages: NotionPageR
   return `${label} import found ${candidates.length} open task${candidates.length === 1 ? "" : "s"}: ${dueCount} with due dates, ${noDateCount} needing dates.`
 }
 
-// Notion is the source of truth for completion. On each sync: a page that is
-// completed or archived in Notion marks its linked JARVIS task done (matched by
-// the Notion page id stored in external_task_id), and any still-pending Notion
-// candidate whose page is no longer an open row is dismissed so the backlog
-// drains instead of growing every refresh.
+// Notion is the source of truth for completion AND existence. On each sync: a page
+// completed/archived in Notion marks its linked JARVIS task done; a page that is
+// gone entirely (deleted/archived out of the DB) has its open task removed — but
+// only when the pull was COMPLETE, so a capped pull never mistakes "beyond the
+// cap" for "deleted". Still-pending Notion candidates whose page is no longer open
+// are dismissed so the backlog drains.
 async function applyNotionCompletionSync(
   adminClient: ReturnType<typeof createSupabaseAdminClient>,
   userId: string,
   pages: NotionPageResult[],
-): Promise<{ completedTaskCount: number; prunedCandidateCount: number }> {
+  complete: boolean,
+): Promise<{ completedTaskCount: number; prunedCandidateCount: number; removedTaskCount: number }> {
   const nowIso = new Date().toISOString()
   const completedPageIds = pages
     .filter((page) => page.id && (isCompletedPage(page) || page.archived))
@@ -311,6 +332,7 @@ async function applyNotionCompletionSync(
   const openPageIds = new Set(
     pages.filter((page) => page.id && !isCompletedPage(page) && !page.archived).map((page) => page.id as string),
   )
+  const allPageIds = new Set(pages.filter((page) => page.id).map((page) => page.id as string))
 
   let completedTaskCount = 0
   if (completedPageIds.length > 0) {
@@ -322,6 +344,30 @@ async function applyNotionCompletionSync(
       .neq("status", "completed")
       .select("id")
     completedTaskCount = (doneRows ?? []).length
+  }
+
+  // Remove open tasks whose Notion page no longer exists (deleted/archived out of
+  // the DB). Guarded by a complete pull so a truncated sync can't wrongly delete.
+  // Completed tasks are kept as history; only un-finished orphans are cleared.
+  let removedTaskCount = 0
+  if (complete) {
+    const { data: notionTasks } = await adminClient
+      .from("tasks")
+      .select("id, external_task_id")
+      .eq("user_id", userId)
+      .eq("last_synced_from", "notion")
+      .neq("status", "completed")
+    const goneIds = (notionTasks ?? [])
+      .filter((row) => {
+        const ext = row.external_task_id as string | null
+        return typeof ext === "string" && !allPageIds.has(ext)
+      })
+      .map((row) => row.id as string)
+    if (goneIds.length > 0) {
+      await adminClient.from("schedule_events").delete().eq("user_id", userId).in("task_id", goneIds)
+      await adminClient.from("tasks").delete().eq("user_id", userId).in("id", goneIds)
+      removedTaskCount = goneIds.length
+    }
   }
 
   // Dismiss pending candidates whose Notion page is no longer an open row. Scoped
@@ -344,7 +390,7 @@ async function applyNotionCompletionSync(
     prunedCandidateCount = staleIds.length
   }
 
-  return { completedTaskCount, prunedCandidateCount }
+  return { completedTaskCount, prunedCandidateCount, removedTaskCount }
 }
 
 /**
@@ -454,12 +500,12 @@ export async function refreshNotionForUser(userId: string): Promise<SourceIntake
   }
 
   const databaseName = normalizeText(integration?.selected_source_name)
-  const pages = await queryNotionDatabase(token.access_token, databaseId)
+  const { pages, complete } = await queryNotionDatabase(token.access_token, databaseId)
   // 1:1 mirror: reconcile completion/removal first, then upsert the open rows as
   // tasks keyed by Notion page id. No candidate/approve step — the Notion Tasks DB
   // is authoritative, so every open row IS a task (dated or not, never deduped by
   // content).
-  const completionSync = await applyNotionCompletionSync(adminClient, userId, pages)
+  const completionSync = await applyNotionCompletionSync(adminClient, userId, pages, complete)
   const mirror = await mirrorOpenNotionPagesToTasks(adminClient, userId, pages)
   const extractedCandidates = pagesToCandidates(pages, databaseName)
   const summary = buildSummary(extractedCandidates, pages, databaseName)
@@ -474,11 +520,13 @@ export async function refreshNotionForUser(userId: string): Promise<SourceIntake
       databaseId,
       databaseName,
       rowCount: pages.length,
+      pullComplete: complete,
       openRowCount: extractedCandidates.length,
       tasksCreated: mirror.created,
       tasksUpdated: mirror.updated,
       completedTaskCount: completionSync.completedTaskCount,
       prunedCandidateCount: completionSync.prunedCandidateCount,
+      removedTaskCount: completionSync.removedTaskCount,
     },
   })
 
