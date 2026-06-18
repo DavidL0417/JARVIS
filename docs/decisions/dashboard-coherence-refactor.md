@@ -28,7 +28,24 @@ working piecemeal.
   `source-review` tag → Imported badge + inline Confirm/Reject in the TaskManager). Plan
   Basis relocated out of the rail to a collapsed disclosure in the schedule column. Right
   rail is now two panels: "Needs you" + tasks-only TaskManager. Migration applied to prod.
-- **Workstream 2 — undated tasks / inferred deadlines:** not started (the remaining slice).
+- **Workstream 2 — undated tasks / inferred deadlines: shipped.** New columns on `tasks`
+  (`inferred_deadline`, `inferred_deadline_reason`, `inferred_deadline_dismissed`).
+  `lib/assistant/infer-deadlines.ts` asks Claude for a suggested by-when only when a concrete
+  dated anchor (trip/event/dependency) makes one follow, with reasoning — no anchor → silent;
+  it caches the suggestion on the task and never writes `deadline`. Runs inside `buildDailyPlan`
+  (best-effort, never breaks planning) and via a new `CRON_SECRET`-gated
+  `/api/cron/infer-deadlines` (registered in `vercel.json`). The rail surfaces suggestions as a
+  new "Needs you" item type (Set deadline / Keep undated) via `buildNeedsYou`, with a "Review all
+  deadlines →" link to a `DeadlinesReviewDrawer` (per-row + batch, plus the undated tasks JARVIS
+  is still watching). Decisions resolve through a dedicated `POST /api/tasks/[id]/inferred-deadline`
+  (accept → promote to `deadline`; dismiss → keep undated), leaving the protected public task
+  schema untouched. Migration applied to prod. **Deferred:** the task-manager entry point to the
+  Deadlines drawer (rail entry shipped); treating inferred urgency as a soft planner weight (v1
+  is suggestions only, per the scope guard).
+
+**The coherence refactor is complete** — all three workstreams shipped. Remaining items live in
+the "Related, still to scope" section below (active sync verification, intent audit of other
+surface elements).
 
 ## Goal
 

@@ -86,6 +86,9 @@ export const taskSchema = z.object({
   planId: z.string().uuid().nullable(),
   externalTaskId: z.string().min(1).nullable(),
   lastSyncedFrom: z.enum(["local", "caldav", "apple_reminders"]),
+  inferredDeadline: z.string().datetime({ offset: true }).nullable(),
+  inferredDeadlineReason: z.string().min(1).nullable(),
+  inferredDeadlineDismissed: z.boolean(),
 })
 
 export const userCalendarSchema = z.object({

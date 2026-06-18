@@ -25,6 +25,9 @@ function task(overrides: Partial<Task> & { id: string }): Task {
     planId: null,
     externalTaskId: null,
     lastSyncedFrom: "local",
+    inferredDeadline: null,
+    inferredDeadlineReason: null,
+    inferredDeadlineDismissed: false,
     ...overrides,
   }
 }
@@ -190,5 +193,78 @@ describe("buildNeedsYou", () => {
     })
 
     expect(items.map((item) => item.severity)).toEqual(["high", "medium", "low"])
+  })
+})
+
+describe("buildNeedsYou — inferred-deadline suggestions", () => {
+  it("surfaces a suggestion for an undated task with a cached inference", () => {
+    const { suggestions } = buildNeedsYou({
+      riskItems: [],
+      tasks: [
+        task({
+          id: "t1",
+          title: "Service the car",
+          deadline: null,
+          inferredDeadline: "2026-08-01T00:00:00.000Z",
+          inferredDeadlineReason: "You're away on a road trip Aug 5–20.",
+        }),
+      ],
+      decisions: [],
+      now: NOW,
+    })
+
+    expect(suggestions).toHaveLength(1)
+    expect(suggestions[0]).toMatchObject({ taskId: "t1", suggestedDeadline: "2026-08-01T00:00:00.000Z" })
+  })
+
+  it("does not suggest when the task already has an explicit deadline (explicit wins)", () => {
+    const { suggestions } = buildNeedsYou({
+      riskItems: [],
+      tasks: [
+        task({
+          id: "t1",
+          deadline: "2026-07-01T00:00:00.000Z",
+          inferredDeadline: "2026-08-01T00:00:00.000Z",
+          inferredDeadlineReason: "anchor",
+        }),
+      ],
+      decisions: [],
+      now: NOW,
+    })
+
+    expect(suggestions).toHaveLength(0)
+  })
+
+  it("does not suggest when the operator kept it undated (dismissed)", () => {
+    const { suggestions } = buildNeedsYou({
+      riskItems: [],
+      tasks: [
+        task({
+          id: "t1",
+          deadline: null,
+          inferredDeadline: "2026-08-01T00:00:00.000Z",
+          inferredDeadlineReason: "anchor",
+          inferredDeadlineDismissed: true,
+        }),
+      ],
+      decisions: [],
+      now: NOW,
+    })
+
+    expect(suggestions).toHaveLength(0)
+  })
+
+  it("orders suggestions by soonest suggested date", () => {
+    const { suggestions } = buildNeedsYou({
+      riskItems: [],
+      tasks: [
+        task({ id: "later", deadline: null, inferredDeadline: "2026-09-01T00:00:00.000Z", inferredDeadlineReason: "a" }),
+        task({ id: "sooner", deadline: null, inferredDeadline: "2026-07-01T00:00:00.000Z", inferredDeadlineReason: "b" }),
+      ],
+      decisions: [],
+      now: NOW,
+    })
+
+    expect(suggestions.map((suggestion) => suggestion.taskId)).toEqual(["sooner", "later"])
   })
 })

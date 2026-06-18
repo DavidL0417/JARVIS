@@ -29,6 +29,9 @@ function buildTaskInsert(input: CreateTaskRequest, userId: string) {
     planId: input.planId ?? null,
     externalTaskId: null,
     lastSyncedFrom: "local",
+    inferredDeadline: null,
+    inferredDeadlineReason: null,
+    inferredDeadlineDismissed: false,
   }
 
   return mapTaskToInsert(task)

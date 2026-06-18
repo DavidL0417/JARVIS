@@ -54,7 +54,7 @@ export const USER_PROFILE_SELECT = "id, email, name, avatar_url, created_at, upd
 export const PREFERENCES_SELECT =
   "id, user_id, timezone, sleep_pattern, peak_energy_window, procrastination_pattern, workday_start, workday_end, default_task_duration_minutes, break_duration_minutes, preferred_focus_block_minutes, preferred_checkin_mode, calendar_id, planner_horizon_days, created_at, updated_at"
 export const TASK_SELECT =
-  "id, user_id, title, description, deadline, duration_minutes, priority, status, scheduled_for, created_at, updated_at, is_immutable, all_day, calendar_id, tags, source_snapshot_id, source_candidate_id, plan_id, external_task_id, last_synced_from"
+  "id, user_id, title, description, deadline, duration_minutes, priority, status, scheduled_for, created_at, updated_at, is_immutable, all_day, calendar_id, tags, source_snapshot_id, source_candidate_id, plan_id, external_task_id, last_synced_from, inferred_deadline, inferred_deadline_reason, inferred_deadline_dismissed"
 export const SCHEDULE_EVENT_SELECT =
   "id, user_id, task_id, title, starts_at, ends_at, source, priority, status, location, external_event_id, gcal_event_id, last_synced_from, created_at, updated_at, is_immutable, is_checked_in, all_day, calendar_id, plan_id"
 export const USER_CALENDAR_SELECT =
@@ -243,6 +243,9 @@ export function mapTaskRowToTask(row: TaskRow): Task {
     planId: row.plan_id,
     externalTaskId: row.external_task_id,
     lastSyncedFrom: normalizeTaskSyncOrigin(row.last_synced_from),
+    inferredDeadline: normalizeDateTime(row.inferred_deadline),
+    inferredDeadlineReason: normalizeNullableText(row.inferred_deadline_reason),
+    inferredDeadlineDismissed: row.inferred_deadline_dismissed ?? false,
   }
 }
 

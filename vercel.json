@@ -8,6 +8,10 @@
     {
       "path": "/api/cron/memory-consolidate",
       "schedule": "0 9 * * *"
+    },
+    {
+      "path": "/api/cron/infer-deadlines",
+      "schedule": "30 10 * * *"
     }
   ]
 }

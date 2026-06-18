@@ -41,6 +41,9 @@ function makeContext(command: string): SchedulePreparationContext {
         planId: null,
         externalTaskId: null,
         lastSyncedFrom: "local",
+        inferredDeadline: null,
+        inferredDeadlineReason: null,
+        inferredDeadlineDismissed: false,
       },
     ],
     preferences: {
@@ -105,6 +108,9 @@ describe("planner prompt payload", () => {
       planId: null,
       externalTaskId: null,
       lastSyncedFrom: "local",
+      inferredDeadline: null,
+      inferredDeadlineReason: null,
+      inferredDeadlineDismissed: false,
     })
 
     vi.useFakeTimers()
@@ -145,6 +151,9 @@ describe("planner prompt payload", () => {
         planId: null,
         externalTaskId: null,
         lastSyncedFrom: "local",
+        inferredDeadline: null,
+        inferredDeadlineReason: null,
+        inferredDeadlineDismissed: false,
       },
       {
         id: mlmTaskId,
@@ -165,6 +174,9 @@ describe("planner prompt payload", () => {
         planId: null,
         externalTaskId: null,
         lastSyncedFrom: "local",
+        inferredDeadline: null,
+        inferredDeadlineReason: null,
+        inferredDeadlineDismissed: false,
       },
     ]
 

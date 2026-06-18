@@ -107,6 +107,9 @@ export interface TaskRow {
   plan_id: string | null
   external_task_id: string | null
   last_synced_from: TaskSyncOrigin
+  inferred_deadline: string | null
+  inferred_deadline_reason: string | null
+  inferred_deadline_dismissed: boolean
 }
 
 export interface ScheduleEventRow {
@@ -315,12 +318,18 @@ export type TaskInsertRow = Omit<
   | "plan_id"
   | "external_task_id"
   | "last_synced_from"
+  | "inferred_deadline"
+  | "inferred_deadline_reason"
+  | "inferred_deadline_dismissed"
 > & {
   source_snapshot_id?: string | null
   source_candidate_id?: string | null
   plan_id?: string | null
   external_task_id?: string | null
   last_synced_from?: TaskSyncOrigin
+  inferred_deadline?: string | null
+  inferred_deadline_reason?: string | null
+  inferred_deadline_dismissed?: boolean
 }
 export type TaskUpdateRow = Partial<Omit<TaskInsertRow, "user_id">>
 export type ScheduleEventInsertRow = Omit<ScheduleEventRow, "id" | "created_at" | "updated_at" | "plan_id"> & {
@@ -391,6 +400,11 @@ export interface Task {
   planId: string | null
   externalTaskId: string | null
   lastSyncedFrom: TaskSyncOrigin
+  // Workstream 2: a proposed by-when for an undated task, with its reasoning.
+  // Never written to `deadline` without approval; dismissed = "Keep undated".
+  inferredDeadline: string | null
+  inferredDeadlineReason: string | null
+  inferredDeadlineDismissed: boolean
 }
 
 export interface ScheduleEvent {

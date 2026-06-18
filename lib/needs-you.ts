@@ -29,6 +29,15 @@ export interface ArchiveEntry {
   subjectKey: string | null
 }
 
+// An undated task JARVIS proposes a by-when for (Workstream 2). Surfaced as its
+// own "Needs you" item type — Set deadline / Keep undated — never written silently.
+export interface SuggestedDeadlineItem {
+  taskId: string
+  title: string
+  suggestedDeadline: string
+  reason: string
+}
+
 const SEVERITY_RANK: Record<DailyPlanRiskItem["severity"], number> = {
   high: 0,
   medium: 1,
@@ -61,7 +70,7 @@ export function buildNeedsYou(input: {
   tasks: Task[]
   decisions: RiskDecision[]
   now?: number
-}): { items: NeedsYouItem[]; archive: ArchiveEntry[] } {
+}): { items: NeedsYouItem[]; suggestions: SuggestedDeadlineItem[]; archive: ArchiveEntry[] } {
   const now = input.now ?? Date.now()
   const taskById = new Map(input.tasks.map((task) => [task.id, task]))
   const decisionByKey = new Map(
@@ -155,5 +164,30 @@ export function buildNeedsYou(input: {
     })
   }
 
-  return { items, archive }
+  // Inferred-deadline suggestions: open, still-undated tasks JARVIS proposed a
+  // by-when for and the operator hasn't resolved. Explicit deadlines win, so a
+  // task that gained a real deadline drops out automatically.
+  const suggestions: SuggestedDeadlineItem[] = []
+
+  for (const task of input.tasks) {
+    if (task.status === "completed" || task.status === "missed") {
+      continue
+    }
+    if (task.deadline || !task.inferredDeadline || task.inferredDeadlineDismissed) {
+      continue
+    }
+
+    suggestions.push({
+      taskId: task.id,
+      title: task.title,
+      suggestedDeadline: task.inferredDeadline,
+      reason: task.inferredDeadlineReason ?? "JARVIS inferred this from your calendar and context.",
+    })
+  }
+
+  suggestions.sort(
+    (left, right) => new Date(left.suggestedDeadline).getTime() - new Date(right.suggestedDeadline).getTime(),
+  )
+
+  return { items, suggestions, archive }
 }
