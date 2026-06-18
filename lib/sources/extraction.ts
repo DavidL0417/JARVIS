@@ -61,6 +61,7 @@ const SOURCE_EXTRACTION_PROMPT = [
   "Use ISO 8601 timestamps with timezone offsets for dueAt when the source gives enough information. Assume America/Chicago only when the source gives a date without a timezone.",
   "Use priority high only for imminent, graded, blocking, or explicitly important items.",
   "Return task/deadline/event candidates only when they need scheduler action. Return note candidates for useful context that should inform the secretary but should not become a task.",
+  "Distinguish the three actionable kinds carefully, because they route differently: use 'event' ONLY for a fixed-time commitment that happens AT a specific time and is not work to complete — a class, lecture, recital, jury, meeting, exam sitting, appointment, office hours (these become calendar events). Use 'deadline' for something DUE BY a date with no fixed work time (an assignment due date). Use 'task' for work the user must do that needs a block found for it. When unsure between event and task, prefer task.",
   "When an EXISTING COMMITMENTS list is provided, do NOT emit candidates that duplicate any entry — including reworded, partial, or differently-scoped descriptions of the same real-world item (a sign-up email, a reminder email, and a calendar event about one recital are ONE commitment). Only emit a candidate for a listed item when the source changes it (new due date, time, or location) and say what changed in evidence.",
   "Return at most 12 candidates. Keep the summary under 900 characters and each evidence field under 180 characters.",
 ].join("\n")

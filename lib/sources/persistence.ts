@@ -15,6 +15,7 @@ import { listScheduleEventRowsInWindow } from "@/lib/supabase/schedule-events"
 import { TASKS_CALENDAR_ID } from "@/lib/task-calendar-constants"
 import type {
   MemoryItemRow,
+  ScheduleEventInsertRow,
   SourceCandidate,
   SourceCandidateKind,
   SourceCandidateRow,
@@ -116,6 +117,46 @@ function candidateToTaskInsert(candidate: SourceCandidate, userId: string): Task
     source_candidate_id: candidate.id,
     plan_id: null,
   }
+}
+
+// An event-kind candidate with a concrete time becomes a real calendar event,
+// not a task. It lands provisional (is_checked_in=false) but immutable — the
+// planner treats it as a fixed commitment immediately; confirm only clears the
+// "JARVIS added this" marker. source="imported" keeps it off the task-block
+// churn and the Google/CalDAV mirror reconcilers.
+function candidateToScheduleEventInsert(candidate: SourceCandidate, userId: string): ScheduleEventInsertRow {
+  const startIso = candidate.dueAt as string
+  const start = new Date(startIso)
+  const isDateOnly = /T00:00:00\.000Z$/.test(startIso)
+  const isMultiDay = (candidate.durationMinutes ?? 0) >= 1440
+  const allDay = isMultiDay || isDateOnly
+  const durationMinutes = candidate.durationMinutes ?? (allDay ? 1440 : 60)
+  const end = new Date(start.getTime() + durationMinutes * 60_000)
+
+  return {
+    user_id: userId,
+    task_id: null,
+    title: candidate.title,
+    starts_at: startIso,
+    ends_at: end.toISOString(),
+    source: "imported",
+    priority: candidate.priority,
+    status: "scheduled",
+    location: null,
+    external_event_id: null,
+    gcal_event_id: null,
+    last_synced_from: "local",
+    is_immutable: true,
+    is_checked_in: false,
+    all_day: allDay,
+    calendar_id: TASKS_CALENDAR_ID,
+  }
+}
+
+// Event-kind candidates route to the calendar only when they carry a concrete
+// time. A timeless "event" falls back to the task path (a plain todo).
+function isImportedEventCandidate(candidate: SourceCandidate) {
+  return candidate.kind === "event" && Boolean(candidate.dueAt)
 }
 
 function candidateToMemoryInsert(candidate: SourceCandidate, userId: string): Omit<MemoryItemRow, "id" | "created_at" | "updated_at" | "supersedes_id" | "expires_at"> {
@@ -434,6 +475,9 @@ export async function undoSourceCandidateApproval(input: {
   const taskIds = candidates
     .map((candidate) => candidate.approvedTaskId)
     .filter((taskId): taskId is string => Boolean(taskId))
+  const eventIds = candidates
+    .map((candidate) => candidate.approvedEventId)
+    .filter((eventId): eventId is string => Boolean(eventId))
 
   if (taskIds.length > 0) {
     const { error: eventDeleteError } = await input.adminClient
@@ -457,12 +501,26 @@ export async function undoSourceCandidateApproval(input: {
     }
   }
 
+  // Imported event-kind candidates created a calendar event, not a task.
+  if (eventIds.length > 0) {
+    const { error: importedEventDeleteError } = await input.adminClient
+      .from("schedule_events")
+      .delete()
+      .eq("user_id", input.userId)
+      .in("id", eventIds)
+
+    if (importedEventDeleteError) {
+      throw new Error(importedEventDeleteError.message)
+    }
+  }
+
   const now = new Date().toISOString()
   const { data: updatedRows, error: updateError } = await input.adminClient
     .from("source_candidates")
     .update({
       status: "dismissed",
       approved_task_id: null,
+      approved_event_id: null,
       updated_at: now,
     })
     .eq("user_id", input.userId)
@@ -498,7 +556,10 @@ export async function approveSourceCandidates(input: {
   }
 
   const candidates = (candidateRows || []).map(mapSourceCandidateRowToCandidate)
-  const taskCandidates = candidates.filter((candidate) => isTaskCandidate(candidate.kind))
+  const eventCandidates = candidates.filter(isImportedEventCandidate)
+  const taskCandidates = candidates.filter(
+    (candidate) => isTaskCandidate(candidate.kind) && !isImportedEventCandidate(candidate),
+  )
   const memoryCandidates = candidates.filter((candidate) => !isTaskCandidate(candidate.kind))
   const tasks: Task[] = []
   const now = new Date().toISOString()
@@ -522,6 +583,32 @@ export async function approveSourceCandidates(input: {
       .update({
         status: "approved",
         approved_task_id: task.id,
+        updated_at: now,
+      })
+      .eq("id", candidate.id)
+      .eq("user_id", input.userId)
+
+    if (updateError) {
+      throw new Error(updateError.message)
+    }
+  }
+
+  for (const candidate of eventCandidates) {
+    const { data, error } = await input.adminClient
+      .from("schedule_events")
+      .insert(candidateToScheduleEventInsert(candidate, input.userId))
+      .select("id")
+      .single<{ id: string }>()
+
+    if (error || !data) {
+      throw new Error(error?.message ?? `Failed to approve event candidate ${candidate.id}.`)
+    }
+
+    const { error: updateError } = await input.adminClient
+      .from("source_candidates")
+      .update({
+        status: "approved",
+        approved_event_id: data.id,
         updated_at: now,
       })
       .eq("id", candidate.id)

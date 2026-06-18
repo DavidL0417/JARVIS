@@ -12,6 +12,7 @@ import {
   ContextMenu,
   ContextMenuCheckboxItem,
   ContextMenuContent,
+  ContextMenuItem,
   ContextMenuLabel,
   ContextMenuRadioGroup,
   ContextMenuRadioItem,
@@ -22,6 +23,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import {
   CalendarDays,
   CalendarPlus,
+  Check,
   ChevronLeft,
   ChevronRight,
   KeyRound,
@@ -70,6 +72,10 @@ export interface CalendarEvent {
   renderVariant?: "default" | "task-due"
   detail?: string
   dueTimeLabel?: string
+  // An imported event JARVIS added that the operator hasn't confirmed yet.
+  // Rendered with a copper dashed outline + a confirm checkmark; still a concrete
+  // commitment for planning. (schedule_events.source === "imported" && !isCheckedIn)
+  isProvisional?: boolean
 }
 
 const fallbackHues: Record<CalendarEvent["color"], number> = {
@@ -177,6 +183,7 @@ function mapScheduleEventsToCalendarEvents(
       startHour: start.getHours() + start.getMinutes() / 60,
       duration: Math.max((end.getTime() - start.getTime()) / 3_600_000, 0.25),
       canEdit: true,
+      isProvisional: event.source === "imported" && !event.isCheckedIn,
     }
 
     if (event.allDay) {
@@ -793,7 +800,9 @@ export function ScheduleView({
         ? "Due reminder"
         : event.source === "task"
           ? "Task block"
-          : "Calendar event"
+          : event.isProvisional
+            ? "Imported · confirm"
+            : "Calendar event"
     const readOnlyNote =
       event.renderVariant === "task-due"
         ? "Reminder of a task deadline. Manage it from the task queue."
@@ -811,6 +820,18 @@ export function ScheduleView({
           <ContextMenuLabel className="truncate px-2 pb-1 pt-0 text-[13px] font-medium text-foreground">
             {event.title}
           </ContextMenuLabel>
+          {event.isProvisional ? (
+            <>
+              <ContextMenuSeparator />
+              <ContextMenuItem
+                onSelect={() => void handleEventSettingsChange(event, { isCheckedIn: true })}
+                className="gap-2 text-[13px] text-copper"
+              >
+                <Check className="h-3.5 w-3.5" aria-hidden="true" />
+                Confirm import
+              </ContextMenuItem>
+            </>
+          ) : null}
           {event.canEdit ? (
             <>
               <ContextMenuSeparator />
@@ -1239,6 +1260,9 @@ export function ScheduleView({
                             gridRowStart: lane + 1,
                             fontWeight: "calc(var(--app-weight) + 100)",
                             ...getAllDayPillStyle(event),
+                            ...(event.isProvisional
+                              ? { outline: "1.5px dashed var(--copper)", outlineOffset: "-1.5px" }
+                              : {}),
                           }}
                           className="mx-1 overflow-hidden rounded-sm px-1.5 py-0.5 text-[10px] leading-tight"
                         >
@@ -1343,8 +1367,24 @@ export function ScheduleView({
                                 width: `calc(${layout.widthPct}% - 2px)`,
                                 zIndex: layout.zIndex,
                                 ...(calendars ? getEventColorStyle(event) : fallbackEventStyle(event.color)),
+                                ...(event.isProvisional
+                                  ? { outline: "1.5px dashed var(--copper)", outlineOffset: "-1.5px" }
+                                  : {}),
                               }}
                             >
+                              {event.isProvisional ? (
+                                <button
+                                  type="button"
+                                  onClick={(clickEvent) => {
+                                    clickEvent.stopPropagation()
+                                    void handleEventSettingsChange(event, { isCheckedIn: true })
+                                  }}
+                                  aria-label={`Confirm ${event.title}`}
+                                  className="absolute right-0.5 top-0.5 z-[1] flex h-4 w-4 items-center justify-center rounded-sm bg-copper text-primary-foreground hover:brightness-110"
+                                >
+                                  <Check className="h-2.5 w-2.5" strokeWidth={3} aria-hidden="true" />
+                                </button>
+                              ) : null}
                               <p
                                 className="text-[12px] leading-[14px]"
                                 style={{

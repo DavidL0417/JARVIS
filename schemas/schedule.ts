@@ -68,10 +68,18 @@ export const scheduleEventUpdateRequestSchema = z
   .object({
     priority: prioritySchema.optional(),
     isImmutable: z.boolean().optional(),
+    // Confirm a provisional imported event ("JARVIS added this"). The route
+    // already marks any edited event checked-in, so this lets the operator
+    // confirm without changing anything else.
+    isCheckedIn: z.boolean().optional(),
   })
-  .refine((value) => value.priority !== undefined || value.isImmutable !== undefined, {
-    message: "At least one event setting must be provided.",
-  })
+  .refine(
+    (value) =>
+      value.priority !== undefined || value.isImmutable !== undefined || value.isCheckedIn !== undefined,
+    {
+      message: "At least one event setting must be provided.",
+    },
+  )
 
 export const scheduleEventUpdateResponseSchema = z.object({
   success: z.literal(true),
