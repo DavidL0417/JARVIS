@@ -79,6 +79,7 @@ describe("production response schemas", () => {
         sourceFiles: [],
         sourceCandidates: [],
         dailyPlan: null,
+        riskDecisions: [],
       }),
     ).toMatchObject({
       stats: {
@@ -176,6 +177,7 @@ describe("production response schemas", () => {
         sourceFiles: [],
         sourceCandidates: [],
         dailyPlan: null,
+        riskDecisions: [],
       }),
     ).toMatchObject({
       integrations: [

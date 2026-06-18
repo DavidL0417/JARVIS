@@ -12,6 +12,8 @@ export interface ReentryRecap {
   changed: boolean
 }
 
+const AUTO_MISS_AFTER_MS = 7 * 24 * 60 * 60 * 1000
+
 const EMPTY_RECAP: ReentryRecap = {
   gapDays: 0,
   unconfirmedCount: 0,
@@ -62,6 +64,34 @@ export async function reconcileStaleSchedule(
 ): Promise<ReentryRecap> {
   const nowIso = now.toISOString()
 
+  // Auto-timeout: overdue work the operator never engaged with ages out to
+  // `missed` after 7 days. This is the safety net that ends the "Needs you"
+  // pile-up — deriveRiskItems suppresses missed tasks, and the Archive surfaces
+  // them reversibly. Keyed off the deadline (a null deadline never matches, so
+  // undated tasks are never auto-missed). Runs on every load + pre-build, ahead
+  // of the stale-block guard so it fires even when no blocks went stale.
+  const autoMissCutoffIso = new Date(now.getTime() - AUTO_MISS_AFTER_MS).toISOString()
+  const { data: autoMissedRows } = await adminClient
+    .from("tasks")
+    .update({ status: "missed", scheduled_for: null, updated_at: nowIso })
+    .eq("user_id", userId)
+    .in("status", ["todo", "scheduled"])
+    .lt("deadline", autoMissCutoffIso)
+    .select("id")
+  const autoMissedTaskIds = (autoMissedRows ?? []).map((row) => row.id as string)
+  const autoMissedCount = autoMissedTaskIds.length
+
+  // A missed task keeps no future block — drop its task-source events so the
+  // grid and planner don't treat aged-out work as still placed.
+  if (autoMissedCount > 0) {
+    await adminClient
+      .from("schedule_events")
+      .delete()
+      .eq("user_id", userId)
+      .eq("source", "task")
+      .in("task_id", autoMissedTaskIds)
+  }
+
   // Cheap guard: is there anything stale at all?
   const { count: staleCount } = await adminClient
     .from("schedule_events")
@@ -79,7 +109,7 @@ export async function reconcileStaleSchedule(
     .eq("is_immutable", false)
     .lt("scheduled_for", nowIso)
 
-  if ((staleCount ?? 0) === 0 && (staleTaskCount ?? 0) === 0) {
+  if ((staleCount ?? 0) === 0 && (staleTaskCount ?? 0) === 0 && autoMissedCount === 0) {
     return EMPTY_RECAP
   }
 
@@ -141,15 +171,25 @@ export async function reconcileStaleSchedule(
     }
   }
 
-  const changed = unconfirmedCount > 0 || tasksReturnedToTodo > 0
+  const changed = unconfirmedCount > 0 || tasksReturnedToTodo > 0 || autoMissedCount > 0
 
   if (changed) {
+    const summaryParts = [
+      `${unconfirmedCount} block${unconfirmedCount === 1 ? "" : "s"} marked unconfirmed`,
+      `${tasksReturnedToTodo} task${tasksReturnedToTodo === 1 ? "" : "s"} returned to the queue`,
+    ]
+    if (autoMissedCount > 0) {
+      summaryParts.push(
+        `${autoMissedCount} long-overdue task${autoMissedCount === 1 ? "" : "s"} aged out to missed`,
+      )
+    }
+
     await recordAutomationRun({
       userId,
       kind: "reconciliation",
       status: "completed",
-      summary: `Reconciled stale schedule: ${unconfirmedCount} block${unconfirmedCount === 1 ? "" : "s"} marked unconfirmed, ${tasksReturnedToTodo} task${tasksReturnedToTodo === 1 ? "" : "s"} returned to the queue.`,
-      payload: { unconfirmedCount, tasksReturnedToTodo, gapDays },
+      summary: `Reconciled stale schedule: ${summaryParts.join(", ")}.`,
+      payload: { unconfirmedCount, tasksReturnedToTodo, autoMissedCount, gapDays },
       adminClient,
     })
   }

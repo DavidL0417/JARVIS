@@ -6,11 +6,13 @@ import {
   mapDailyPlanRowToDailyPlan,
   mapMemoryItemRowToSummary,
   mapScheduleEventRowToScheduleEvent,
+  mapRiskDecisionRowToRiskDecision,
   mapSourceCandidateRowToCandidate,
   mapSourceFileRowToSummary,
   mapSourceSnapshotRowToSummary,
   mapTaskRowToTask,
   mapUserIntegrationRowToUserIntegration,
+  RISK_DECISION_SELECT,
   SOURCE_CANDIDATE_SELECT,
   SOURCE_FILE_SELECT,
   MEMORY_ITEM_SELECT,
@@ -52,6 +54,7 @@ import type {
   ScheduleEventRow,
   SourceCandidateRow,
   SourceFileRow,
+  RiskDecisionRow,
   SourceSnapshotRow,
   SourceSnapshotSummary,
   Task,
@@ -631,6 +634,7 @@ export async function GET() {
       connectorSettings,
       appleRemindersConnected,
       dailyPlanResult,
+      riskDecisionResult,
     ] = await Promise.all([
       adminClient
         .from("tasks")
@@ -686,6 +690,10 @@ export async function GET() {
         .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle<DailyPlanRow>(),
+      adminClient
+        .from("risk_decisions")
+        .select(RISK_DECISION_SELECT)
+        .eq("user_id", user.id),
     ])
 
     if (
@@ -697,7 +705,8 @@ export async function GET() {
       sourceFileResult.error ||
       sourceCandidateResult.error ||
       integrationResult.error ||
-      dailyPlanResult.error
+      dailyPlanResult.error ||
+      riskDecisionResult.error
     ) {
       throw new Error(
         tasksResult.error?.message ||
@@ -709,6 +718,7 @@ export async function GET() {
           sourceCandidateResult.error?.message ||
           integrationResult.error?.message ||
           dailyPlanResult.error?.message ||
+          riskDecisionResult.error?.message ||
           "Failed to load dashboard data from Supabase.",
       )
     }
@@ -741,6 +751,9 @@ export async function GET() {
       connectorSettings,
     })
     const dailyPlan = dailyPlanResult.data ? mapDailyPlanRowToDailyPlan(dailyPlanResult.data) : null
+    const riskDecisions = (riskDecisionResult.data || []).map((row) =>
+      mapRiskDecisionRowToRiskDecision(row as RiskDecisionRow),
+    )
     const scheduledTaskIds = new Set(
       (eventsResult.data || [])
         .map((event) => (event as { task_id: string | null }).task_id)
@@ -787,6 +800,7 @@ export async function GET() {
       sourceCandidates,
       dailyPlan,
       reentry,
+      riskDecisions,
       isImessageOperator: isImessageOperator(user.id),
       isRaycastOperator: isRaycastOperator(user.id),
     }

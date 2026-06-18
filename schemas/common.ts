@@ -1,5 +1,9 @@
 import { z } from "zod"
 
+import { RISK_TYPES, type RiskType } from "@/lib/risk-types"
+
+export const riskTypeSchema = z.enum([...RISK_TYPES] as [RiskType, ...RiskType[]])
+
 export const prioritySchema = z.enum(["low", "medium", "high"])
 export const taskStatusSchema = z.enum(["todo", "scheduled", "completed", "missed"])
 export const scheduleEventStatusSchema = z.enum(["todo", "scheduled", "completed", "missed", "unconfirmed"])
@@ -245,8 +249,21 @@ export const dailyPlanRiskItemSchema = z.object({
   title: z.string().min(1),
   detail: z.string().min(1),
   severity: z.enum(["low", "medium", "high"]),
+  riskType: riskTypeSchema,
+  subjectKey: z.string().min(1),
   taskId: z.string().uuid().nullable().optional(),
   eventId: z.string().uuid().nullable().optional(),
+})
+
+export const riskDecisionSchema = z.object({
+  id: z.string().uuid(),
+  riskType: riskTypeSchema,
+  subjectKey: z.string().min(1),
+  taskId: z.string().uuid().nullable(),
+  dismissedUntil: z.string().datetime({ offset: true }).nullable(),
+  archivedAt: z.string().datetime({ offset: true }).nullable(),
+  createdAt: z.string().datetime({ offset: true }),
+  updatedAt: z.string().datetime({ offset: true }),
 })
 
 export const sourceCoverageItemSchema = z.object({

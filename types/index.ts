@@ -1,3 +1,5 @@
+import type { RiskType } from "@/lib/risk-types"
+
 export type Priority = "low" | "medium" | "high"
 export type TaskStatus = "todo" | "scheduled" | "completed" | "missed"
 export type ScheduleEventStatus = TaskStatus | "unconfirmed"
@@ -537,8 +539,36 @@ export interface DailyPlanRiskItem {
   title: string
   detail: string
   severity: "low" | "medium" | "high"
+  // Stable taxonomy + identity so the "Needs you" rail can park a decision
+  // about this risk that survives plan rebuilds. subjectKey is the task id for
+  // task-scoped risks, or the affected day / week for aggregate risks.
+  riskType: RiskType
+  subjectKey: string
   taskId?: string | null
   eventId?: string | null
+}
+
+export interface RiskDecisionRow {
+  id: string
+  user_id: string
+  risk_type: RiskType
+  subject_key: string
+  task_id: string | null
+  dismissed_until: string | null
+  archived_at: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface RiskDecision {
+  id: string
+  riskType: RiskType
+  subjectKey: string
+  taskId: string | null
+  dismissedUntil: string | null
+  archivedAt: string | null
+  createdAt: string
+  updatedAt: string
 }
 
 export interface SourceCoverageItem {
@@ -704,6 +734,10 @@ export interface DashboardResponse {
   sourceCandidates: SourceCandidate[]
   dailyPlan: DailyPlan | null
   reentry: DashboardReentry | null
+  // The operator's active decisions about derived risks. The "Needs you" rail
+  // applies these at read time to hide snoozed/dismissed items and to back the
+  // Archive drawer, without re-running the planner.
+  riskDecisions: RiskDecision[]
   isImessageOperator?: boolean
   isRaycastOperator?: boolean
 }

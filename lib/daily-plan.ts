@@ -217,6 +217,8 @@ function deriveRiskItems(input: {
         title: "Overdue work",
         detail: `${task.title} is past its deadline.`,
         severity: "high",
+        riskType: "overdue",
+        subjectKey: task.id,
         taskId: task.id,
       })
       continue
@@ -232,6 +234,8 @@ function deriveRiskItems(input: {
         title: "Deadline without block",
         detail: `${task.title} is ${duePhrase(task)} and still needs a block.`,
         severity: task.priority === "high" ? "high" : "medium",
+        riskType: "deadline_no_block",
+        subjectKey: task.id,
         taskId: task.id,
       })
     }
@@ -245,6 +249,8 @@ function deriveRiskItems(input: {
         title: "Planner could not fit task",
         detail: `${task.title} was left unscheduled by the planner.`,
         severity: task.priority === "high" ? "high" : "medium",
+        riskType: "unschedulable",
+        subjectKey: task.id,
         taskId: task.id,
       })
     }
@@ -263,6 +269,8 @@ function deriveRiskItems(input: {
         title: "Overloaded day",
         detail: `${day} has ${Math.round(minutes / 60)} hours already placed.`,
         severity: "medium",
+        riskType: "overloaded_day",
+        subjectKey: day,
       })
     }
   }
@@ -272,6 +280,8 @@ function deriveRiskItems(input: {
       title: "Source refresh failed",
       detail: summary,
       severity: "high",
+      riskType: "source_failed",
+      subjectKey: summary,
     })
   }
 
@@ -300,6 +310,8 @@ function deriveRiskItems(input: {
         title: "Compression ahead",
         detail: `Week of ${weekStart} has ~${Math.round(hours)}h of work due against ~${WEEK_CAPACITY_HOURS}h of typical weekly capacity.`,
         severity: hours > WEEK_CAPACITY_HOURS ? "high" : "medium",
+        riskType: "compression",
+        subjectKey: weekStart,
       })
     }
   }

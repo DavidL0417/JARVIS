@@ -1,3 +1,4 @@
+import { inferRiskTypeFromTitle, isRiskType } from "@/lib/risk-types"
 import { TASKS_CALENDAR_ID } from "@/lib/task-calendar-constants"
 import type {
   CalendarSource,
@@ -22,6 +23,8 @@ import type {
   ScheduleEventInsertRow,
   ScheduleEventRow,
   ScheduleEventSource,
+  RiskDecision,
+  RiskDecisionRow,
   SourceSnapshotRow,
   SourceSnapshotSummary,
   SourceCandidate,
@@ -68,6 +71,8 @@ export const SOURCE_CANDIDATE_SELECT =
   "id, user_id, source_snapshot_id, source_file_id, kind, title, description, course, due_at, duration_minutes, priority, confidence, evidence, payload, status, approved_task_id, created_at, updated_at"
 export const DAILY_PLAN_SELECT =
   "id, user_id, horizon_start, horizon_end, status, summary, now_item, next_items, risk_items, tradeoffs, source_coverage, command, model, error_message, created_at, updated_at"
+export const RISK_DECISION_SELECT =
+  "id, user_id, risk_type, subject_key, task_id, dismissed_until, archived_at, created_at, updated_at"
 export const ASSISTANT_TOOL_RUN_SELECT =
   "id, user_id, thread_id, message_id, tool_name, status, summary, payload, requires_approval, approved_at, executed_at, cancelled_at, error_message, created_at"
 
@@ -187,6 +192,35 @@ function normalizeTimeValue(value: string | null | undefined, fallback: string) 
 
 function normalizeJsonArray<T>(value: unknown, fallback: T[] = []): T[] {
   return Array.isArray(value) ? (value as T[]) : fallback
+}
+
+/**
+ * Risk items persisted before the "Needs you" rail refactor lack a riskType /
+ * subjectKey. Backfill both so the read model is total — the lifecycle table
+ * keys off subjectKey, and a missing one would make the item unparkable. Legacy
+ * rows are overwritten on the next plan build; this only has to survive until then.
+ */
+function normalizeRiskItems(value: unknown): DailyPlanRiskItem[] {
+  return normalizeJsonArray<Record<string, unknown>>(value).map((raw) => {
+    const title = typeof raw.title === "string" ? raw.title : ""
+    const riskType = isRiskType(raw.riskType) ? raw.riskType : inferRiskTypeFromTitle(title)
+    const taskId = typeof raw.taskId === "string" ? raw.taskId : null
+    const detail = typeof raw.detail === "string" ? raw.detail : ""
+    const subjectKey =
+      typeof raw.subjectKey === "string" && raw.subjectKey.length > 0
+        ? raw.subjectKey
+        : taskId ?? `${riskType}:${detail}`
+
+    return {
+      title,
+      detail,
+      severity: (raw.severity as DailyPlanRiskItem["severity"]) ?? "medium",
+      riskType,
+      subjectKey,
+      taskId,
+      eventId: typeof raw.eventId === "string" ? raw.eventId : null,
+    }
+  })
 }
 
 export function mapTaskRowToTask(row: TaskRow): Task {
@@ -589,12 +623,25 @@ export function mapDailyPlanRowToDailyPlan(row: DailyPlanRow): DailyPlan {
     summary: row.summary,
     nowItem: row.now_item as DailyPlanNowItem | null,
     nextItems: normalizeJsonArray<DailyPlanListItem>(row.next_items),
-    riskItems: normalizeJsonArray<DailyPlanRiskItem>(row.risk_items),
+    riskItems: normalizeRiskItems(row.risk_items),
     tradeoffs: normalizeJsonArray<string>(row.tradeoffs),
     sourceCoverage: normalizeJsonArray<SourceCoverageItem>(row.source_coverage),
     command: normalizeNullableText(row.command),
     model: normalizeNullableText(row.model),
     errorMessage: normalizeNullableText(row.error_message),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  }
+}
+
+export function mapRiskDecisionRowToRiskDecision(row: RiskDecisionRow): RiskDecision {
+  return {
+    id: row.id,
+    riskType: row.risk_type,
+    subjectKey: row.subject_key,
+    taskId: normalizeNullableText(row.task_id),
+    dismissedUntil: normalizeDateTime(row.dismissed_until),
+    archivedAt: normalizeDateTime(row.archived_at),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }
