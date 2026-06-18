@@ -119,15 +119,44 @@ function defaultCollapsed(groupBy: GroupBy, key: string): boolean {
   return groupBy === "status" && (key === "Completed" || key === "Missed")
 }
 
-function compareForList(left: Task, right: Task): number {
-  const byDeadline = compareByDeadline(left, right)
-  if (byDeadline !== 0) return byDeadline
-  return left.title.localeCompare(right.title)
+type SortBy = "due" | "priority" | "title"
+
+const SORT_OPTIONS: { id: SortBy; label: string }[] = [
+  { id: "due", label: "Due date" },
+  { id: "priority", label: "Priority" },
+  { id: "title", label: "Name" },
+]
+
+const PRIORITY_RANK: Record<string, number> = { high: 0, medium: 1, low: 2 }
+
+// Finished work sinks below active work in every sort, so missed/completed items
+// never crowd the top of a group (that was the "why is missed at the front?" bug).
+function activityRank(task: Task): number {
+  if (task.status === "completed") return 1
+  if (task.status === "missed") return 2
+  return 0
+}
+
+function makeComparator(sortBy: SortBy): (left: Task, right: Task) => number {
+  return (left, right) => {
+    const rank = activityRank(left) - activityRank(right)
+    if (rank !== 0) return rank
+    if (sortBy === "priority") {
+      const byPriority = (PRIORITY_RANK[left.priority] ?? 1) - (PRIORITY_RANK[right.priority] ?? 1)
+      if (byPriority !== 0) return byPriority
+    } else if (sortBy === "title") {
+      return left.title.localeCompare(right.title)
+    }
+    const byDeadline = compareByDeadline(left, right)
+    if (byDeadline !== 0) return byDeadline
+    return left.title.localeCompare(right.title)
+  }
 }
 
 type Group = { key: string; tasks: Task[] }
 
-function buildGroups(tasks: Task[], groupBy: GroupBy, nowMs: number): Group[] {
+function buildGroups(tasks: Task[], groupBy: GroupBy, nowMs: number, sortBy: SortBy): Group[] {
+  const comparator = makeComparator(sortBy)
   const map = new Map<string, Task[]>()
 
   if (groupBy === "tag") {
@@ -143,7 +172,7 @@ function buildGroups(tasks: Task[], groupBy: GroupBy, nowMs: number): Group[] {
       .filter(([key]) => key !== "Untagged")
       .sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0]))
     if (map.has("Untagged")) entries.push(["Untagged", map.get("Untagged") as Task[]])
-    return entries.map(([key, groupTasks]) => ({ key, tasks: groupTasks.slice().sort(compareForList) }))
+    return entries.map(([key, groupTasks]) => ({ key, tasks: groupTasks.slice().sort(comparator) }))
   }
 
   const labelOf = groupBy === "status" ? (t: Task) => statusLabel(t, nowMs) : taskSourceLabel
@@ -153,7 +182,35 @@ function buildGroups(tasks: Task[], groupBy: GroupBy, nowMs: number): Group[] {
     ...order.filter((label) => map.has(label)),
     ...[...map.keys()].filter((label) => !order.includes(label)).sort(),
   ]
-  return ordered.map((key) => ({ key, tasks: (map.get(key) as Task[]).slice().sort(compareForList) }))
+  return ordered.map((key) => ({ key, tasks: (map.get(key) as Task[]).slice().sort(comparator) }))
+}
+
+function Segmented<T extends string>({
+  options,
+  value,
+  onChange,
+}: {
+  options: { id: T; label: string }[]
+  value: T
+  onChange: (value: T) => void
+}) {
+  return (
+    <div className="inline-flex w-fit gap-0.5 rounded-md border border-rule bg-muted/20 p-0.5">
+      {options.map((option) => (
+        <button
+          key={option.id}
+          type="button"
+          aria-pressed={value === option.id}
+          onClick={() => onChange(option.id)}
+          className={`rounded-[5px] px-2.5 py-1 text-[11.5px] font-medium transition-colors ${
+            value === option.id ? "bg-copper-soft text-copper" : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          {option.label}
+        </button>
+      ))}
+    </div>
+  )
 }
 
 export function TaskPane({
@@ -171,6 +228,7 @@ export function TaskPane({
 }) {
   const [query, setQuery] = useState("")
   const [groupBy, setGroupBy] = useState<GroupBy>("source")
+  const [sortBy, setSortBy] = useState<SortBy>("due")
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
 
   // Stable enough for status/overdue grouping; recompute only when the task set
@@ -178,10 +236,12 @@ export function TaskPane({
   const nowMs = useMemo(() => Date.now(), [tasks])
   const isSearching = query.trim().length > 0
 
-  const groups = useMemo(() => buildGroups(tasks, groupBy, nowMs), [tasks, groupBy, nowMs])
-  // Pre-sort by deadline so equal-relevance search ties stay deadline-ordered
-  // (matches the rail search surface).
-  const results = useMemo(() => searchTasks([...tasks].sort(compareForList), query), [tasks, query])
+  const groups = useMemo(() => buildGroups(tasks, groupBy, nowMs, sortBy), [tasks, groupBy, nowMs, sortBy])
+  // Pre-sort so equal-relevance search ties fall back to the chosen ordering.
+  const results = useMemo(
+    () => searchTasks([...tasks].sort(makeComparator(sortBy)), query),
+    [tasks, query, sortBy],
+  )
 
   // Collapse state is namespaced per view so a tag named "Completed" doesn't inherit
   // the Status view's collapse, and views don't cross-contaminate.
@@ -243,32 +303,30 @@ export function TaskPane({
         titleClassName={
           completed ? "text-muted-foreground line-through" : missed ? "text-muted-foreground" : "text-foreground"
         }
-        meta={
-          date || visibleTags.length > 0 || overdue || missed ? (
-            <div className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[11px] text-muted-foreground">
-              {overdue ? (
-                <span className="num inline-flex items-center gap-1 font-medium uppercase tracking-wide text-destructive">
-                  <AlertCircle className="h-3 w-3" /> Overdue
-                </span>
-              ) : null}
-              {missed ? (
-                <span className="num inline-flex items-center gap-1 font-medium uppercase tracking-wide text-muted-foreground/80">
-                  <CircleSlash className="h-3 w-3" /> Missed
-                </span>
-              ) : null}
-              {date ? (
-                <span className="num inline-flex items-center gap-1">
-                  <CalendarClock className="h-3 w-3 text-muted-foreground/70" /> {date}
-                </span>
-              ) : null}
-              {visibleTags.length > 0 ? (
-                <span className="inline-flex min-w-0 items-center gap-1">
-                  <Tag className="h-3 w-3 shrink-0 text-muted-foreground/70" />
-                  <span className="truncate">{visibleTags.join(" · ")}</span>
-                </span>
-              ) : null}
-            </div>
-          ) : null
+        titleAside={
+          <div className="mt-0.5 flex shrink-0 items-center gap-2.5 text-[11px] text-muted-foreground">
+            {overdue ? (
+              <span className="num inline-flex items-center gap-1 font-medium uppercase tracking-wide text-destructive">
+                <AlertCircle className="h-3 w-3" /> Overdue
+              </span>
+            ) : null}
+            {missed ? (
+              <span className="num inline-flex items-center gap-1 font-medium uppercase tracking-wide text-muted-foreground/80">
+                <CircleSlash className="h-3 w-3" /> Missed
+              </span>
+            ) : null}
+            {date ? (
+              <span className="num inline-flex items-center gap-1 whitespace-nowrap">
+                <CalendarClock className="h-3 w-3 text-muted-foreground/70" /> {date}
+              </span>
+            ) : null}
+            {visibleTags.length > 0 ? (
+              <span className="inline-flex min-w-0 max-w-[14rem] items-center gap-1">
+                <Tag className="h-3 w-3 shrink-0 text-muted-foreground/70" />
+                <span className="truncate">{visibleTags.join(" · ")}</span>
+              </span>
+            ) : null}
+          </div>
         }
         actions={
           <Tooltip>
@@ -331,24 +389,14 @@ export function TaskPane({
           </div>
         ) : (
           <>
-            <div className="flex items-center gap-2.5">
-              <span className="eyebrow">Group by</span>
-              <div className="inline-flex w-fit gap-0.5 rounded-md border border-rule bg-muted/20 p-0.5">
-                {GROUP_OPTIONS.map((option) => (
-                  <button
-                    key={option.id}
-                    type="button"
-                    aria-pressed={groupBy === option.id}
-                    onClick={() => setGroupBy(option.id)}
-                    className={`rounded-[5px] px-2.5 py-1 text-[11.5px] font-medium transition-colors ${
-                      groupBy === option.id
-                        ? "bg-copper-soft text-copper"
-                        : "text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    {option.label}
-                  </button>
-                ))}
+            <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+              <div className="flex items-center gap-2.5">
+                <span className="eyebrow">Group by</span>
+                <Segmented options={GROUP_OPTIONS} value={groupBy} onChange={setGroupBy} />
+              </div>
+              <div className="flex items-center gap-2.5">
+                <span className="eyebrow">Sort</span>
+                <Segmented options={SORT_OPTIONS} value={sortBy} onChange={setSortBy} />
               </div>
             </div>
 
