@@ -6,7 +6,7 @@ product
 
 ## Product Purpose
 
-A secretary-second-brain scheduler. Single user, daily companion. JARVIS combines tasks, calendar, preferences, source snapshots, and durable memory into one operational view, then proposes plans with explicit tradeoffs the user can approve or revise. It is not a marketing surface, not a multi-tenant SaaS dashboard, not a coordination tool for teams. The first screen is the product, not a landing page.
+A secretary-second-brain scheduler for students. Optimized first for a single power-user operator (the prototypical student), delivered multi-tenant so any student can run their own private instance. JARVIS combines tasks, calendar, preferences, source snapshots, and durable memory into one operational view, then proposes plans with explicit tradeoffs the user can approve or revise. It is **not** a team coordination tool and **not** a marketing-heavy, onboarding-driven SaaS — the product is the operational surface, optimized for an expert user, with multi-tenancy and per-user data isolation as a hard requirement rather than a growth surface. The wedge is academic: Canvas + Gmail → an auto-planned week. The first screen is the product, not a landing page.
 
 ## Users
 
@@ -25,6 +25,17 @@ Spare. Precise. Honest about limits. The tone of a competent assistant who sends
 - **Density is positive.** Operator wants everything visible. Whitespace where it earns rhythm, not where it pads.
 - **Stable dimensions.** Controls reserve their space; refresh and async actions never reflow the layout.
 - **Approval before destruction.** Destructive assistant actions and external calendar writes require explicit confirmation.
+
+## Multi-tenancy & Market
+
+The product is B2C for students, with David as user zero. "Optimize for the operator" and "ship to other students" are the same instruction: build for the prototypical power-user student, then make the scaffolding per-user.
+
+- **Wedge.** Academic planning: Canvas + Gmail → an auto-planned week. Students are the market; Canvas is the integration moat.
+- **No operator special-casing as a pattern.** Operator-only features (Raycast intake, operator-only status cards, hardcoded operator-id checks) must be gated behind a role/flag or generalized to every account. Per-user, not per-David.
+- **Multi-tenant isolation is a hard requirement.** Every table is RLS-scoped; OAuth tokens stay per-user in `app_private`. A leak exposes another student's grades, email, and calendar, so an RLS audit precedes onboarding any real second user.
+- **Canvas OAuth is the productionization path.** The personal-access-token flow is a single-client pilot; broad use moves to Canvas OAuth with per-user token storage.
+- **Per-user LLM cost is acknowledged, not yet solved.** Each user runs Claude planning + OpenAI extraction; pricing/rate-limits/tiering are deferred, not designed.
+- **New-user first-run is "good enough," not a focus.** No onboarding or marketing build-out right now. The default surface stays optimized for the expert operator; novices are served by the same dense, schedule-first product, not a separate guided mode.
 
 ## Anti-References
 

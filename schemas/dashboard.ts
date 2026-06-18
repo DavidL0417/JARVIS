@@ -4,6 +4,7 @@ import {
   memoryEntrySummarySchema,
   dailyPlanSchema,
   preferredCheckInModeSchema,
+  riskDecisionSchema,
   scheduleEventSchema,
   sourceConnectorSchema,
   sourceCandidateSchema,
@@ -50,6 +51,7 @@ export const dashboardResponseSchema = z.object({
   sourceCandidates: z.array(sourceCandidateSchema),
   dailyPlan: dailyPlanSchema.nullable(),
   reentry: dashboardReentrySchema.nullable().optional(),
+  riskDecisions: z.array(riskDecisionSchema),
   // Only true for the operator account — gates the hidden iMessage console pane.
   isImessageOperator: z.boolean().optional(),
   // Only true for the operator account — gates the hidden Raycast status pane.

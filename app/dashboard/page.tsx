@@ -31,7 +31,7 @@ import { ContextRailPanel } from "@/components/dashboard/context-rail-panel"
 import { DailyCommandStrip } from "@/components/dashboard/daily-command-strip"
 import { RailSheet } from "@/components/dashboard/rail-sheet"
 import { MemoryWorkbench } from "@/components/dashboard/memory-workbench/memory-workbench"
-import { ReentryRecap } from "@/components/dashboard/reentry-recap"
+import { NeedsYouPanel } from "@/components/dashboard/needs-you-panel"
 import { SettingsPanel } from "@/components/dashboard/settings-panel"
 import { SecretaryOverlay } from "@/components/dashboard/secretary-overlay"
 import { SourceSetupPanel } from "@/components/dashboard/source-setup-panel"
@@ -44,6 +44,7 @@ import {
   isClaudePlannerModelKey,
   type ClaudePlannerModelKey,
 } from "@/lib/ai/claude-models"
+import type { RiskType } from "@/lib/risk-types"
 import { cn } from "@/lib/utils"
 import type {
   CalendarListResponse,
@@ -423,6 +424,41 @@ export default function DashboardPage() {
     })
   }
 
+  async function handleRiskDecision(input: {
+    riskType: RiskType
+    subjectKey: string
+    taskId: string | null
+    action: "snooze" | "dismiss"
+  }) {
+    setTaskErrorMessage("")
+
+    try {
+      await fetchJson<{ success: true }>("/api/risks/decisions", "Failed to update this item.", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(input),
+      })
+      await loadDashboard(true)
+    } catch (error) {
+      setTaskErrorMessage(error instanceof Error ? error.message : "Failed to update this item.")
+    }
+  }
+
+  async function handleClearRiskDecision(input: { riskType: RiskType; subjectKey: string }) {
+    setTaskErrorMessage("")
+
+    try {
+      await fetchJson<{ success: true }>("/api/risks/decisions", "Failed to restore this item.", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(input),
+      })
+      await loadDashboard(true)
+    } catch (error) {
+      setTaskErrorMessage(error instanceof Error ? error.message : "Failed to restore this item.")
+    }
+  }
+
   async function handleUndoAutoImport(candidateId: string) {
     try {
       await fetchJson<{ success: true }>("/api/sources/candidates/undo", "Failed to undo auto-import.", {
@@ -552,7 +588,21 @@ export default function DashboardPage() {
           </div>
 
           <div className="rail-scroll flex min-h-0 min-w-0 flex-col gap-5 overflow-y-auto pb-2 pt-6 xl:pb-2 xl:pl-6 xl:pr-1 xl:pt-0 [&>*:last-child]:border-b-0 [&>*:last-child]:pb-0">
-            <ReentryRecap reentry={dashboardData.reentry} />
+            <NeedsYouPanel
+              dailyPlan={dashboardData.dailyPlan}
+              tasks={dashboardData.tasks}
+              riskDecisions={dashboardData.riskDecisions}
+              reentry={dashboardData.reentry}
+              isPlanning={isScheduling}
+              handlers={{
+                onReplan: (command) => handleDailyPlan(command),
+                onRebuild: () => handleDailyPlan(),
+                onCompleteTask: (taskId) => handleUpdateTask(taskId, { status: "completed" }),
+                onRestoreTask: (taskId) => handleUpdateTask(taskId, { status: "todo" }),
+                onDecide: handleRiskDecision,
+                onClearDecision: handleClearRiskDecision,
+              }}
+            />
             <ContextRailPanel
               dailyPlan={dashboardData.dailyPlan}
               sources={dashboardData.sources}

@@ -1,9 +1,9 @@
 "use client"
 
-import { AlertTriangle, CheckCircle2, CircleDashed, Loader2, RefreshCw, ShieldAlert } from "lucide-react"
+import { AlertTriangle, CheckCircle2, CircleDashed, Loader2, RefreshCw } from "lucide-react"
 
 import { RailSection } from "@/components/dashboard/rail-section"
-import type { DailyPlan, DailyPlanRiskItem, SourceSnapshotSummary } from "@/types"
+import type { DailyPlan, SourceSnapshotSummary } from "@/types"
 
 const OPTIONAL_SOURCE_LABELS = new Set(["notion", "gmail", "files"])
 const STALE_PLAN_THRESHOLD_MS = 6 * 60 * 60 * 1000
@@ -48,34 +48,6 @@ function latestSourcePerKind(sources: SourceSnapshotSummary[]) {
   return latest
 }
 
-function riskTone(severity: "low" | "medium" | "high") {
-  if (severity === "high") {
-    return "text-destructive"
-  }
-
-  if (severity === "medium") {
-    return "text-copper"
-  }
-
-  return "text-muted-foreground"
-}
-
-function dedupeRisks(risks: DailyPlanRiskItem[]) {
-  const seen = new Set<string>()
-  const out: DailyPlanRiskItem[] = []
-
-  for (const risk of risks) {
-    const key = `${risk.title}::${risk.detail}`
-    if (seen.has(key)) {
-      continue
-    }
-    seen.add(key)
-    out.push(risk)
-  }
-
-  return out
-}
-
 function relativeBuiltAt(iso: string, now: number) {
   const built = new Date(iso).getTime()
   if (!Number.isFinite(built)) return null
@@ -106,7 +78,6 @@ export function ContextRailPanel({
 }) {
   const now = Date.now()
   const sourceCoverage = (dailyPlan?.sourceCoverage ?? []).filter(shouldShowCoverageItem)
-  const risks = dedupeRisks(dailyPlan?.riskItems ?? [])
   const recentSources = latestSourcePerKind(sources).slice(0, 4)
   const basisCount = sourceCoverage.length || recentSources.length
   const builtLabel = dailyPlan?.createdAt ? relativeBuiltAt(dailyPlan.createdAt, now) : null
@@ -193,27 +164,6 @@ export function ContextRailPanel({
             </div>
           ) : (
             <p className="text-[12px] leading-5 text-muted-foreground">No plan basis recorded.</p>
-          )}
-        </div>
-      </RailSection>
-
-      <RailSection title="Risk Radar" icon={ShieldAlert} count={risks.length}>
-        <div className={`flex flex-col gap-2 transition-opacity ${dimContent ? "opacity-60" : ""}`}>
-          {risks.length > 0 ? (
-            risks.slice(0, 5).map((risk, index) => (
-              <div key={`${risk.title}-${index}`} className="grid grid-cols-[1rem_minmax(0,1fr)] gap-2">
-                <ShieldAlert className={`mt-0.5 h-3.5 w-3.5 ${risk.severity === "high" ? "text-destructive" : "text-copper"}`} aria-hidden="true" />
-                <div className="min-w-0">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="line-clamp-1 text-[12px] font-medium text-foreground">{risk.title}</span>
-                    <span className={`num text-[10px] uppercase ${riskTone(risk.severity)}`}>{risk.severity}</span>
-                  </div>
-                  <p className="mt-0.5 line-clamp-2 text-[12px] leading-5 text-muted-foreground">{risk.detail}</p>
-                </div>
-              </div>
-            ))
-          ) : (
-            <p className="text-[12px] leading-5 text-muted-foreground">No plan risks recorded.</p>
           )}
         </div>
       </RailSection>
