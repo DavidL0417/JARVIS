@@ -9,16 +9,16 @@ import {
   ChevronRight,
   Pencil,
   Plus,
-  Sparkles,
-  Tag,
+  Search,
   Trash2,
-  Undo2,
   X,
 } from "lucide-react"
 
 import { Input } from "@/components/ui/input"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { RailSection } from "@/components/dashboard/rail-section"
+import { TASKS_CALENDAR_ID } from "@/lib/task-calendar-constants"
+import { searchTasks } from "@/lib/task-search"
 import type { Calendar } from "./calendars-sidebar"
 import type { CreateTaskRequest, ScheduleEvent, Task, UpdateTaskRequest } from "@/types"
 
@@ -35,15 +35,12 @@ interface TaskManagerProps {
   onCreateTask: (input: CreateTaskRequest) => Promise<void> | void
   onUpdateTask: (taskId: string, input: UpdateTaskRequest) => Promise<void> | void
   onDeleteTask: (taskId: string) => Promise<void> | void
-  // Reject a freshly imported task: undo the source candidate (delete the task +
-  // dismiss the candidate so it does not re-import). Falls back to a plain delete.
-  onRejectImport?: (task: Task) => Promise<void> | void
 }
 
-// A freshly imported, not-yet-confirmed task wears this tag (set at approval in
-// lib/sources/persistence.ts). It is the task analogue of an event's provisional
-// is_checked_in=false state; confirming strips it.
-const SOURCE_REVIEW_TAG = "source-review"
+// Tags that carry no signal in the row: the kind tag duplicates the deadline/
+// scheduled state the row already shows, and "source-review" is a retired
+// provisional marker. Hidden from display, never stripped from the data.
+const NOISE_TAGS = new Set(["source-review", "task", "deadline", "event"])
 
 type TaskDraft = {
   title: string
@@ -104,12 +101,10 @@ function formatDeadlineShort(value: string | null) {
   })
 }
 
+// Overdue = a live task with a deadline in the past. Missed tasks are aged out
+// to the Archive and never reach this list, so they are not "overdue" here.
 function isTaskOverdue(task: Task, nowMs: number) {
-  if (task.status === "missed") {
-    return true
-  }
-
-  if (task.status === "completed" || !task.deadline) {
+  if (task.status === "completed" || task.status === "missed" || !task.deadline) {
     return false
   }
 
@@ -150,9 +145,10 @@ export function TaskManager({
   onCreateTask,
   onUpdateTask,
   onDeleteTask,
-  onRejectImport,
 }: TaskManagerProps) {
   const [showCompleted, setShowCompleted] = useState(false)
+  const [showScheduled, setShowScheduled] = useState(false)
+  const [query, setQuery] = useState("")
   const [createOpen, setCreateOpen] = useState(false)
   const [createDraft, setCreateDraft] = useState<TaskDraft>(EMPTY_DRAFT)
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null)
@@ -169,7 +165,7 @@ export function TaskManager({
       ),
     [scheduleEvents],
   )
-  const defaultCalendarId = mode === "calendar" && calendar && calendar.id !== "cal-tasks" ? calendar.id : ""
+  const defaultCalendarId = mode === "calendar" && calendar && calendar.id !== TASKS_CALENDAR_ID ? calendar.id : ""
 
   const filteredTasks = useMemo(() => {
     if (mode === "all") {
@@ -180,7 +176,7 @@ export function TaskManager({
       return []
     }
 
-    if (calendar.id === "cal-tasks") {
+    if (calendar.id === TASKS_CALENDAR_ID) {
       return tasks
     }
 
@@ -192,15 +188,27 @@ export function TaskManager({
     [filteredTasks, taskIndex],
   )
 
-  const activeTasks = sortedTasks.filter((task) => task.status !== "completed")
+  // Missed work lives in the "Needs you" Archive, not here — surfacing it as
+  // "overdue" was the pile-up the refactor was meant to clear.
+  const liveTasks = sortedTasks.filter((task) => task.status !== "completed" && task.status !== "missed")
   const completedTasks = sortedTasks.filter((task) => task.status === "completed")
-  const overdueTasks = activeTasks.filter((task) => isTaskOverdue(task, nowMs))
-  const unscheduledTasks = activeTasks.filter(
-    (task) => !hasScheduledBlock(task, scheduledTaskIds) && !isTaskOverdue(task, nowMs),
+
+  // Open work that needs a decision: anything unscheduled, plus anything overdue
+  // (overdue floats up even if it carries a stale block).
+  const actionableTasks = liveTasks.filter(
+    (task) => !hasScheduledBlock(task, scheduledTaskIds) || isTaskOverdue(task, nowMs),
   )
-  const scheduledTasks = activeTasks.filter(
+  // Already placed on the calendar grid — folded away by default so the rail
+  // stops duplicating the schedule.
+  const scheduledTasks = liveTasks.filter(
     (task) => hasScheduledBlock(task, scheduledTaskIds) && !isTaskOverdue(task, nowMs),
   )
+
+  // Instant client-side lookup across every task (any status), matched on title +
+  // tags. Pure in-memory substring filter so it narrows on each keystroke with no
+  // network round-trip. When active, it replaces the sectioned view.
+  const searchResults = useMemo(() => searchTasks(sortedTasks, query), [query, sortedTasks])
+  const isSearching = query.trim().length > 0
 
   const headerTitle = mode === "all" ? "Tasks" : calendar ? calendar.name : "Tasks"
 
@@ -285,36 +293,21 @@ export function TaskManager({
     await onDeleteTask(task.id)
   }
 
-  // Confirm a freshly imported task: strip the provisional tag, keeping the rest.
-  const handleConfirmImport = async (task: Task) => {
-    onClearError?.()
-    await onUpdateTask(task.id, { tags: task.tags.filter((tag) => tag !== SOURCE_REVIEW_TAG) })
-  }
-
-  const handleRejectImport = async (task: Task) => {
-    onClearError?.()
-    if (onRejectImport) {
-      await onRejectImport(task)
-      return
-    }
-    await onDeleteTask(task.id)
-  }
-
   const renderTaskRow = (task: Task, index: number) => {
     const isEditing = editingTaskId === task.id
     const isScheduledTask = hasScheduledBlock(task, scheduledTaskIds)
     const overdue = isTaskOverdue(task, nowMs)
-    const isProvisional = task.tags.includes(SOURCE_REVIEW_TAG)
-    const visibleTags = task.tags.filter((tag) => tag !== SOURCE_REVIEW_TAG)
-    const calendarColor = calendars.find((c) => c.id === task.calendarId)?.color
     const deadlineLabel = formatDeadlineShort(task.deadline)
+    const calendarName =
+      task.calendarId && task.calendarId !== TASKS_CALENDAR_ID
+        ? calendars.find((c) => c.id === task.calendarId)?.name
+        : null
+    const calendarColor = calendarName ? calendars.find((c) => c.id === task.calendarId)?.color : null
+    const meta = [calendarName, ...task.tags.filter((tag) => !NOISE_TAGS.has(tag))].filter(Boolean) as string[]
 
     if (isEditing) {
       return (
-        <li
-          key={task.id}
-          className="rounded-sm bg-muted/20 px-2.5 py-2.5"
-        >
+        <li key={task.id} className="rounded-sm bg-muted/20 px-2.5 py-2.5">
           <div className="flex flex-col gap-2">
             <Input
               value={editDraft.title}
@@ -374,13 +367,9 @@ export function TaskManager({
     return (
       <li
         key={task.id}
-        className={`group flex items-baseline gap-3 rounded-sm px-2.5 py-2.5 transition-colors ${
-          isProvisional
-            ? "border-l-2 border-copper bg-copper-soft/15 hover:bg-copper-soft/25"
-            : "bg-muted/15 hover:bg-muted/25"
-        }`}
+        className="group flex items-start gap-2.5 rounded-sm px-2 py-[7px] transition-colors hover:bg-muted/20"
       >
-        <span className="num w-6 shrink-0 text-[11px] font-medium uppercase text-muted-foreground">
+        <span className="num mt-0.5 w-4 shrink-0 text-[10.5px] font-medium tabular-nums text-muted-foreground">
           {String(index + 1).padStart(2, "0")}
         </span>
         <button
@@ -396,85 +385,39 @@ export function TaskManager({
           {task.status === "completed" ? <Check className="h-3 w-3" strokeWidth={3} /> : null}
         </button>
         <div className="min-w-0 flex-1">
-          <p
-            className={`text-[14px] leading-[1.4] ${
-              task.status === "completed"
-                ? "text-muted-foreground line-through"
-                : "text-foreground"
-            }`}
-          >
-            {task.title}
-          </p>
-          <div className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-[11.5px] text-muted-foreground">
+          <div className="flex items-start justify-between gap-2.5">
+            <p
+              className={`line-clamp-2 text-[13px] leading-snug ${
+                task.status === "completed" ? "text-muted-foreground line-through" : "text-foreground"
+              }`}
+            >
+              {task.title}
+            </p>
             {overdue ? (
-              <span className="num inline-flex items-center gap-1 font-medium uppercase text-destructive">
-                <AlertCircle className="h-3 w-3" /> Overdue
+              <span className="num mt-px inline-flex shrink-0 items-center gap-1 text-[11px] font-medium uppercase text-destructive">
+                <AlertCircle className="h-3 w-3" />
+                {deadlineLabel ?? "Overdue"}
               </span>
-            ) : null}
-            {isProvisional ? (
-              <span className="num inline-flex items-center gap-1 font-medium uppercase copper">
-                <Sparkles className="h-3 w-3" /> Imported
-              </span>
-            ) : null}
-            {isScheduledTask && !overdue && task.status !== "completed" ? (
-              <span className="num inline-flex items-center gap-1 font-medium uppercase copper">
-                Scheduled
-              </span>
-            ) : null}
-            {deadlineLabel ? (
-              <span className="num inline-flex items-center gap-1">
+            ) : deadlineLabel ? (
+              <span className="num mt-px inline-flex shrink-0 items-center gap-1 text-[11px] text-muted-foreground">
                 <CalendarClock className="h-3 w-3" />
                 {deadlineLabel}
               </span>
             ) : null}
-            {calendarColor ? (
-              <span className="inline-flex items-center gap-1">
+          </div>
+          {meta.length > 0 ? (
+            <p className="mt-0.5 flex items-center gap-1.5 truncate text-[11px] text-muted-foreground">
+              {calendarColor ? (
                 <span
-                  className="h-2 w-2 rounded-full"
+                  className="h-2 w-2 shrink-0 rounded-full"
                   style={{ backgroundColor: calendarColor }}
                   aria-hidden="true"
                 />
-                {calendars.find((c) => c.id === task.calendarId)?.name}
-              </span>
-            ) : null}
-            {visibleTags.length > 0 ? (
-              <span className="inline-flex items-center gap-1">
-                <Tag className="h-3 w-3" />
-                {visibleTags.join(", ")}
-              </span>
-            ) : null}
-          </div>
+              ) : null}
+              <span className="truncate">{meta.join(" · ")}</span>
+            </p>
+          ) : null}
         </div>
-        {isProvisional ? (
-          <div className="flex shrink-0 items-center gap-0.5">
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button
-                  type="button"
-                  onClick={() => void handleConfirmImport(task)}
-                  aria-label="Confirm import"
-                  className="flex h-7 w-7 items-center justify-center rounded-sm text-copper hover:bg-copper-soft"
-                >
-                  <Check className="h-3.5 w-3.5" strokeWidth={2.5} />
-                </button>
-              </TooltipTrigger>
-              <TooltipContent side="top" className="text-[11px]">Confirm — JARVIS added this</TooltipContent>
-            </Tooltip>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button
-                  type="button"
-                  onClick={() => void handleRejectImport(task)}
-                  aria-label="Reject import"
-                  className="flex h-7 w-7 items-center justify-center rounded-sm text-muted-foreground hover:bg-accent hover:text-destructive"
-                >
-                  <Undo2 className="h-3.5 w-3.5" />
-                </button>
-              </TooltipTrigger>
-              <TooltipContent side="top" className="text-[11px]">Reject — remove it</TooltipContent>
-            </Tooltip>
-          </div>
-        ) : null}
         <div className="flex shrink-0 items-center opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
           <Tooltip>
             <TooltipTrigger asChild>
@@ -518,16 +461,10 @@ export function TaskManager({
     )
   }
 
-  const sections: { id: string; title: string; tasks: Task[] }[] = [
-    { id: "overdue", title: "Overdue", tasks: overdueTasks },
-    { id: "todo", title: "Todo", tasks: unscheduledTasks },
-    { id: "scheduled", title: "Scheduled", tasks: scheduledTasks },
-  ]
-
   return (
     <RailSection
       title={headerTitle}
-      count={activeTasks.length}
+      count={actionableTasks.length}
       action={
         <Tooltip>
           <TooltipTrigger asChild>
@@ -552,7 +489,7 @@ export function TaskManager({
       ) : null}
 
       {createOpen ? (
-        <div className="mb-5 flex flex-col gap-2 rounded-sm bg-muted/20 px-3 py-3">
+        <div className="mb-4 flex flex-col gap-2 rounded-sm bg-muted/20 px-3 py-3">
           <Input
             placeholder="New task"
             value={createDraft.title}
@@ -623,26 +560,76 @@ export function TaskManager({
         </div>
       ) : null}
 
-      <div className="flex flex-col gap-7">
-        {sections.map((section) => (
-          <div key={section.id}>
-            <div className="mb-2 flex items-baseline gap-2">
-              <h3 className="eyebrow">{section.title}</h3>
-              <span className="num text-[11px] font-medium uppercase text-muted-foreground">
-                {section.tasks.length}
-              </span>
-            </div>
-            {section.tasks.length === 0 ? (
-              <p className="text-[12.5px] text-muted-foreground">
-                {section.id === "overdue" ? "Nothing overdue." : section.id === "todo" ? "Inbox empty." : "Nothing scheduled."}
-              </p>
-            ) : (
-              <ul className="flex flex-col gap-1.5">
-                {section.tasks.map((task, index) => renderTaskRow(task, index))}
-              </ul>
-            )}
+      <div className="relative mb-3">
+        <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+        <input
+          type="text"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="Search all tasks"
+          aria-label="Search all tasks"
+          className="h-8 w-full rounded-sm border border-rule bg-transparent pl-7 pr-7 text-[12.5px] text-foreground placeholder:text-muted-foreground focus:border-rule-strong focus:outline-none"
+        />
+        {query ? (
+          <button
+            type="button"
+            onClick={() => setQuery("")}
+            aria-label="Clear search"
+            className="absolute right-1.5 top-1/2 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-sm text-muted-foreground hover:bg-accent hover:text-foreground"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        ) : null}
+      </div>
+
+      {isSearching ? (
+        <div>
+          <div className="mb-2 flex items-baseline gap-2">
+            <h3 className="eyebrow">Results</h3>
+            <span className="num text-[11px] font-medium uppercase text-muted-foreground">{searchResults.length}</span>
           </div>
-        ))}
+          {searchResults.length === 0 ? (
+            <p className="text-[12.5px] text-muted-foreground">No tasks match “{query.trim()}”.</p>
+          ) : (
+            <ul className="flex flex-col gap-0.5">
+              {searchResults.map((task, index) => renderTaskRow(task, index))}
+            </ul>
+          )}
+        </div>
+      ) : (
+      <div className="flex flex-col gap-4">
+        {actionableTasks.length === 0 ? (
+          <p className="text-[12.5px] text-muted-foreground">
+            {liveTasks.length === 0 ? "No open tasks." : "Nothing open. Everything is scheduled."}
+          </p>
+        ) : (
+          <ul className="flex flex-col gap-0.5">
+            {actionableTasks.map((task, index) => renderTaskRow(task, index))}
+          </ul>
+        )}
+
+        {scheduledTasks.length > 0 ? (
+          <div>
+            <button
+              type="button"
+              onClick={() => setShowScheduled((current) => !current)}
+              className="flex items-center gap-2 py-1 text-left text-muted-foreground transition-colors hover:text-foreground"
+              aria-expanded={showScheduled}
+            >
+              <h3 className="eyebrow">Scheduled</h3>
+              <span className="num text-[11px] font-medium uppercase">{scheduledTasks.length}</span>
+              {showScheduled ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+              {!showScheduled ? (
+                <span className="text-[11px] normal-case text-muted-foreground/70">on your calendar</span>
+              ) : null}
+            </button>
+            {showScheduled ? (
+              <ul className="mt-1 flex flex-col gap-0.5">
+                {scheduledTasks.map((task, index) => renderTaskRow(task, index))}
+              </ul>
+            ) : null}
+          </div>
+        ) : null}
 
         <div>
           <button
@@ -652,26 +639,21 @@ export function TaskManager({
             aria-expanded={showCompleted}
           >
             <h3 className="eyebrow group-hover:text-foreground">Completed</h3>
-            <span className="num text-[11px] font-medium uppercase">
-              {completedTasks.length}
-            </span>
-            {showCompleted ? (
-              <ChevronDown className="h-3.5 w-3.5" />
-            ) : (
-              <ChevronRight className="h-3.5 w-3.5" />
-            )}
+            <span className="num text-[11px] font-medium uppercase">{completedTasks.length}</span>
+            {showCompleted ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
           </button>
           {showCompleted ? (
             completedTasks.length === 0 ? (
-              <p className="mt-2 text-[12.5px] text-muted-foreground">
-                Nothing closed yet.
-              </p>
+              <p className="mt-2 text-[12.5px] text-muted-foreground">Nothing closed yet.</p>
             ) : (
-              <ul className="mt-2 flex flex-col gap-1.5">{completedTasks.map((task, index) => renderTaskRow(task, index))}</ul>
+              <ul className="mt-2 flex flex-col gap-0.5">
+                {completedTasks.map((task, index) => renderTaskRow(task, index))}
+              </ul>
             )
           ) : null}
         </div>
       </div>
+      )}
     </RailSection>
   )
 }
