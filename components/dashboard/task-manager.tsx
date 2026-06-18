@@ -17,7 +17,9 @@ import {
 import { Input } from "@/components/ui/input"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { RailSection } from "@/components/dashboard/rail-section"
+import { TaskRow, TaskCheckbox } from "@/components/dashboard/task-row"
 import { TASKS_CALENDAR_ID } from "@/lib/task-calendar-constants"
+import { NOISE_TAGS, compareByDeadline, formatDeadlineShort, isTaskOverdue } from "@/lib/task-display"
 import { searchTasks } from "@/lib/task-search"
 import type { Calendar } from "./calendars-sidebar"
 import type { CreateTaskRequest, ScheduleEvent, Task, UpdateTaskRequest } from "@/types"
@@ -36,11 +38,6 @@ interface TaskManagerProps {
   onUpdateTask: (taskId: string, input: UpdateTaskRequest) => Promise<void> | void
   onDeleteTask: (taskId: string) => Promise<void> | void
 }
-
-// Tags that carry no signal in the row: the kind tag duplicates the deadline/
-// scheduled state the row already shows, and "source-review" is a retired
-// provisional marker. Hidden from display, never stripped from the data.
-const NOISE_TAGS = new Set(["source-review", "task", "deadline", "event"])
 
 type TaskDraft = {
   title: string
@@ -82,45 +79,15 @@ function toIsoDateTime(value: string) {
   return value ? new Date(value).toISOString() : null
 }
 
-function formatDeadlineShort(value: string | null) {
-  if (!value) {
-    return null
-  }
-
-  const date = new Date(value)
-
-  if (Number.isNaN(date.getTime())) {
-    return null
-  }
-
-  return date.toLocaleString([], {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  })
-}
-
-// Overdue = a live task with a deadline in the past. Missed tasks are aged out
-// to the Archive and never reach this list, so they are not "overdue" here.
-function isTaskOverdue(task: Task, nowMs: number) {
-  if (task.status === "completed" || task.status === "missed" || !task.deadline) {
-    return false
-  }
-
-  return new Date(task.deadline).getTime() < nowMs
-}
-
 function hasScheduledBlock(task: Task, scheduledTaskIds: Set<string>) {
   return task.status === "scheduled" || Boolean(task.scheduledFor) || scheduledTaskIds.has(task.id)
 }
 
 function compareTasks(left: Task, right: Task, taskIndex: Map<string, number>) {
-  const leftDeadlineMs = left.deadline ? new Date(left.deadline).getTime() : Number.POSITIVE_INFINITY
-  const rightDeadlineMs = right.deadline ? new Date(right.deadline).getTime() : Number.POSITIVE_INFINITY
+  const byDeadline = compareByDeadline(left, right)
 
-  if (leftDeadlineMs !== rightDeadlineMs) {
-    return leftDeadlineMs - rightDeadlineMs
+  if (byDeadline !== 0) {
+    return byDeadline
   }
 
   const priorityWeight = { high: 0, medium: 1, low: 2 }
@@ -365,47 +332,39 @@ export function TaskManager({
     }
 
     return (
-      <li
+      <TaskRow
         key={task.id}
-        className="group flex items-start gap-2.5 rounded-sm px-2 py-[7px] transition-colors hover:bg-muted/20"
-      >
-        <span className="num mt-0.5 w-4 shrink-0 text-[10.5px] font-medium tabular-nums text-muted-foreground">
-          {String(index + 1).padStart(2, "0")}
-        </span>
-        <button
-          type="button"
-          onClick={() => void handleToggleComplete(task)}
-          aria-label={task.status === "completed" ? "Mark todo" : "Mark complete"}
-          className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border transition-colors ${
-            task.status === "completed"
-              ? "border-copper bg-copper text-primary-foreground"
-              : "border-rule-strong hover:border-foreground"
-          }`}
-        >
-          {task.status === "completed" ? <Check className="h-3 w-3" strokeWidth={3} /> : null}
-        </button>
-        <div className="min-w-0 flex-1">
-          <div className="flex items-start justify-between gap-2.5">
-            <p
-              className={`line-clamp-2 text-[13px] leading-snug ${
-                task.status === "completed" ? "text-muted-foreground line-through" : "text-foreground"
-              }`}
-            >
-              {task.title}
-            </p>
-            {overdue ? (
-              <span className="num mt-px inline-flex shrink-0 items-center gap-1 text-[11px] font-medium uppercase text-destructive">
-                <AlertCircle className="h-3 w-3" />
-                {deadlineLabel ?? "Overdue"}
-              </span>
-            ) : deadlineLabel ? (
-              <span className="num mt-px inline-flex shrink-0 items-center gap-1 text-[11px] text-muted-foreground">
-                <CalendarClock className="h-3 w-3" />
-                {deadlineLabel}
-              </span>
-            ) : null}
-          </div>
-          {meta.length > 0 ? (
+        leading={
+          <>
+            <span className="num mt-0.5 w-4 shrink-0 text-[10.5px] font-medium tabular-nums text-muted-foreground">
+              {String(index + 1).padStart(2, "0")}
+            </span>
+            <TaskCheckbox
+              checked={task.status === "completed"}
+              onToggle={() => void handleToggleComplete(task)}
+              className="mt-0.5 rounded-sm"
+            />
+          </>
+        }
+        title={task.title}
+        titleClassName={
+          task.status === "completed" ? "text-muted-foreground line-through" : "text-foreground"
+        }
+        titleAside={
+          overdue ? (
+            <span className="num mt-px inline-flex shrink-0 items-center gap-1 text-[11px] font-medium uppercase text-destructive">
+              <AlertCircle className="h-3 w-3" />
+              {deadlineLabel ?? "Overdue"}
+            </span>
+          ) : deadlineLabel ? (
+            <span className="num mt-px inline-flex shrink-0 items-center gap-1 text-[11px] text-muted-foreground">
+              <CalendarClock className="h-3 w-3" />
+              {deadlineLabel}
+            </span>
+          ) : null
+        }
+        meta={
+          meta.length > 0 ? (
             <p className="mt-0.5 flex items-center gap-1.5 truncate text-[11px] text-muted-foreground">
               {calendarColor ? (
                 <span
@@ -416,39 +375,41 @@ export function TaskManager({
               ) : null}
               <span className="truncate">{meta.join(" · ")}</span>
             </p>
-          ) : null}
-        </div>
-        <div className="flex shrink-0 items-center opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                type="button"
-                onClick={() => handleStartEditing(task)}
-                aria-label="Edit"
-                className="flex h-7 w-7 items-center justify-center rounded-sm text-muted-foreground hover:bg-accent hover:text-foreground"
-              >
-                <Pencil className="h-3.5 w-3.5" />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent side="top" className="text-[11px]">Edit</TooltipContent>
-          </Tooltip>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                type="button"
-                onClick={() => void handleRemoveTask(task)}
-                aria-label={isScheduledTask ? "Unschedule" : "Delete"}
-                className="flex h-7 w-7 items-center justify-center rounded-sm text-muted-foreground hover:bg-accent hover:text-destructive"
-              >
-                {isScheduledTask ? <X className="h-3.5 w-3.5" /> : <Trash2 className="h-3.5 w-3.5" />}
-              </button>
-            </TooltipTrigger>
-            <TooltipContent side="top" className="text-[11px]">
-              {isScheduledTask ? "Unschedule" : "Delete"}
-            </TooltipContent>
-          </Tooltip>
-        </div>
-      </li>
+          ) : null
+        }
+        actions={
+          <>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  onClick={() => handleStartEditing(task)}
+                  aria-label="Edit"
+                  className="flex h-7 w-7 items-center justify-center rounded-sm text-muted-foreground hover:bg-accent hover:text-foreground"
+                >
+                  <Pencil className="h-3.5 w-3.5" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="top" className="text-[11px]">Edit</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  onClick={() => void handleRemoveTask(task)}
+                  aria-label={isScheduledTask ? "Unschedule" : "Delete"}
+                  className="flex h-7 w-7 items-center justify-center rounded-sm text-muted-foreground hover:bg-accent hover:text-destructive"
+                >
+                  {isScheduledTask ? <X className="h-3.5 w-3.5" /> : <Trash2 className="h-3.5 w-3.5" />}
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="top" className="text-[11px]">
+                {isScheduledTask ? "Unschedule" : "Delete"}
+              </TooltipContent>
+            </Tooltip>
+          </>
+        }
+      />
     )
   }
 
