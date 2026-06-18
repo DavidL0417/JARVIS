@@ -228,6 +228,42 @@ From four panels to two:
 Plan Basis moves above the calendar; ReentryRecap folds into "Needs you"; AutoImportDigest
 is deleted.
 
+### Implementation plan (2026-06-17)
+
+Grounded in the code: there is **no import→calendar path today** (`candidateToTaskInsert`,
+`lib/sources/persistence.ts`, turns event-kind candidates into tasks with `scheduled_for`
+on `cal-tasks`), the **provisional yellow-border/checkmark UI does not exist** (`is_checked_in`
+is in the data layer + APIs but `schedule-view.tsx` renders nothing from it), and there is
+**no term model** anywhere. Resolved defaults: imported events attach to the existing
+`cal-tasks` calendar tagged `source="imported"` (no calendar-provisioning subsystem in v1);
+unconfirmed imported events block the planner immediately (confirm only catches misfires);
+Plan Basis is scoped to the active plan/horizon, not "per term."
+
+- **Slice A — route by kind (backbone).** Migration: add `approved_event_id` to
+  `source_candidates`; add `'imported'` to the `schedule_events.source` check constraint so
+  imported events are excluded from Google/CalDAV mirror reconciliation and never overwritten
+  by sync. New `candidateToScheduleEventInsert()`; in both `approveSourceCandidates` and
+  `insertAndAutoApproveSourceCandidates`, branch `kind === "event"` → insert a `schedule_events`
+  row (`source: "imported"`, `is_checked_in: false`, `is_immutable: true`, `calendar_id:
+  cal-tasks`) and set `approved_event_id`. `task`/`deadline` keep the task path. Extend
+  `undoSourceCandidateApproval` to delete by `approved_event_id`. Verify dedup
+  (`loadExistingCommitments`) catches event-kind against existing events. Tighten the
+  extraction prompt to distinguish event vs deadline vs task. TaskManager becomes tasks-only
+  with no change to the component — routing drains it upstream.
+- **Slice B — provisional events on the grid.** Render `source === "imported" && !isCheckedIn`
+  with the amber border + a confirm checkmark; confirm PATCHes `is_checked_in` via
+  `/api/events/[id]`. Ensure imported events are passed as hard events to the planner even
+  when unconfirmed.
+- **Slice C — delete AutoImportDigest.** Remove the panel + wiring; its provenance/undo job
+  moves in-place: events confirm/reject on the grid, freshly imported tasks get a provisional
+  marker + confirm/reject inline in the TaskManager. The `/undo` endpoint stays as "reject."
+- **Slice D — relocate Plan Basis.** Move the Plan Basis section out of `ContextRailPanel` to
+  a collapsed disclosure in the schedule header ("Plan basis · N sources · built Xm ago",
+  semantic color only when stale/failed), scoped to the active plan.
+
+Build order A → B → C → D (C's event half depends on B). One migration. Right rail ends at
+two panels: "Needs you" + tasks-only TaskManager.
+
 ## Check-in and the daily digest
 
 What exists today is reactive, not proactive: a check-in is block confirmation plus

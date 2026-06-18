@@ -8,7 +8,7 @@ export const prioritySchema = z.enum(["low", "medium", "high"])
 export const taskStatusSchema = z.enum(["todo", "scheduled", "completed", "missed"])
 export const scheduleEventStatusSchema = z.enum(["todo", "scheduled", "completed", "missed", "unconfirmed"])
 export const preferredCheckInModeSchema = z.enum(["silent", "quiet", "gentle", "active"])
-export const scheduleEventSourceSchema = z.enum(["task", "calendar", "focus"])
+export const scheduleEventSourceSchema = z.enum(["task", "calendar", "focus", "imported"])
 export const checkInMoodSchema = z.enum(["good", "okay", "stuck"])
 export const checkInOutcomeSchema = z.enum(["completed", "missed", "partial"])
 export const checkInEnergySchema = z.enum(["low", "medium", "high"])
@@ -225,6 +225,7 @@ export const sourceCandidateSchema = z.object({
   payload: z.record(z.unknown()),
   status: sourceCandidateStatusSchema,
   approvedTaskId: z.string().uuid().nullable(),
+  approvedEventId: z.string().uuid().nullable(),
   createdAt: z.string().datetime({ offset: true }),
   updatedAt: z.string().datetime({ offset: true }),
 })

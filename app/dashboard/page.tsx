@@ -26,12 +26,11 @@ import {
   toSidebarCalendar,
   type Calendar,
 } from "@/components/dashboard/calendars-sidebar"
-import { AutoImportDigest } from "@/components/dashboard/auto-import-digest"
-import { ContextRailPanel } from "@/components/dashboard/context-rail-panel"
 import { DailyCommandStrip } from "@/components/dashboard/daily-command-strip"
 import { RailSheet } from "@/components/dashboard/rail-sheet"
 import { MemoryWorkbench } from "@/components/dashboard/memory-workbench/memory-workbench"
 import { NeedsYouPanel } from "@/components/dashboard/needs-you-panel"
+import { PlanBasisDisclosure } from "@/components/dashboard/plan-basis-disclosure"
 import { SettingsPanel } from "@/components/dashboard/settings-panel"
 import { SecretaryOverlay } from "@/components/dashboard/secretary-overlay"
 import { SourceSetupPanel } from "@/components/dashboard/source-setup-panel"
@@ -558,19 +557,29 @@ export default function DashboardPage() {
       <div className="mx-auto flex min-h-0 w-full max-w-[1920px] flex-1 flex-col">
         <div className="grid min-h-0 flex-1 grid-cols-1 gap-0 xl:grid-cols-[minmax(0,1fr)_380px] xl:divide-x xl:divide-rule">
           <div className="grid min-h-[560px] min-w-0 grid-cols-1 gap-4 xl:min-h-0 xl:grid-cols-[280px_minmax(0,1fr)] xl:gap-6 xl:pr-6">
-            <DailyCommandStrip
-              dailyPlan={dashboardData.dailyPlan}
-              isPlanning={isScheduling}
-              plannerStatus={plannerStatus}
-              plannerSummary={plannerSummary}
-              plannerModel={plannerModel}
-              onPlannerModelChange={setPlannerModel}
-              placement="side"
-              onBuild={() => void handleDailyPlan()}
-              onReplan={async (command) => {
-                await handleDailyPlan(command)
-              }}
-            />
+            <div className="flex min-w-0 flex-col gap-4">
+              <DailyCommandStrip
+                dailyPlan={dashboardData.dailyPlan}
+                isPlanning={isScheduling}
+                plannerStatus={plannerStatus}
+                plannerSummary={plannerSummary}
+                plannerModel={plannerModel}
+                onPlannerModelChange={setPlannerModel}
+                placement="side"
+                onBuild={() => void handleDailyPlan()}
+                onReplan={async (command) => {
+                  await handleDailyPlan(command)
+                }}
+              />
+              <PlanBasisDisclosure
+                dailyPlan={dashboardData.dailyPlan}
+                sources={dashboardData.sources}
+                planStatus={plannerStatus}
+                planError={plannerStatus === "Error" ? plannerSummary : ""}
+                onRetry={() => void handleDailyPlan()}
+                isRetrying={isScheduling}
+              />
+            </div>
             <div className="min-h-0 min-w-0 flex-1">
               <ScheduleView
                 calendars={calendars}
@@ -603,18 +612,6 @@ export default function DashboardPage() {
                 onClearDecision: handleClearRiskDecision,
               }}
             />
-            <ContextRailPanel
-              dailyPlan={dashboardData.dailyPlan}
-              sources={dashboardData.sources}
-              planStatus={plannerStatus}
-              planError={plannerStatus === "Error" ? plannerSummary : ""}
-              onRetry={() => void handleDailyPlan()}
-              isRetrying={isScheduling}
-            />
-            <AutoImportDigest
-              candidates={dashboardData.sourceCandidates}
-              onUndo={handleUndoAutoImport}
-            />
             <TaskManager
               mode="all"
               calendars={calendars}
@@ -625,6 +622,11 @@ export default function DashboardPage() {
               onCreateTask={handleCreateTask}
               onUpdateTask={handleUpdateTask}
               onDeleteTask={handleDeleteTask}
+              onRejectImport={(task) =>
+                task.sourceCandidateId
+                  ? handleUndoAutoImport(task.sourceCandidateId)
+                  : handleDeleteTask(task.id)
+              }
             />
           </div>
         </div>

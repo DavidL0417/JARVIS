@@ -68,7 +68,7 @@ export const SOURCE_SNAPSHOT_SELECT =
 export const SOURCE_FILE_SELECT =
   "id, user_id, source, source_ref, file_name, mime_type, storage_path, size_bytes, status, error_message, created_at, updated_at"
 export const SOURCE_CANDIDATE_SELECT =
-  "id, user_id, source_snapshot_id, source_file_id, kind, title, description, course, due_at, duration_minutes, priority, confidence, evidence, payload, status, approved_task_id, created_at, updated_at"
+  "id, user_id, source_snapshot_id, source_file_id, kind, title, description, course, due_at, duration_minutes, priority, confidence, evidence, payload, status, approved_task_id, approved_event_id, created_at, updated_at"
 export const DAILY_PLAN_SELECT =
   "id, user_id, horizon_start, horizon_end, status, summary, now_item, next_items, risk_items, tradeoffs, source_coverage, command, model, error_message, created_at, updated_at"
 export const RISK_DECISION_SELECT =
@@ -121,7 +121,7 @@ function normalizePriority(value: Priority | string | null | undefined): Priorit
 }
 
 function normalizeEventSource(value: ScheduleEventSource | string | null | undefined): ScheduleEventSource {
-  if (value === "calendar" || value === "focus") {
+  if (value === "calendar" || value === "focus" || value === "imported") {
     return value
   }
 
@@ -608,6 +608,7 @@ export function mapSourceCandidateRowToCandidate(row: SourceCandidateRow): Sourc
     payload: row.payload ?? {},
     status: row.status,
     approvedTaskId: row.approved_task_id,
+    approvedEventId: row.approved_event_id,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }

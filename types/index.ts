@@ -4,7 +4,7 @@ export type Priority = "low" | "medium" | "high"
 export type TaskStatus = "todo" | "scheduled" | "completed" | "missed"
 export type ScheduleEventStatus = TaskStatus | "unconfirmed"
 export type PreferredCheckInMode = "silent" | "quiet" | "gentle" | "active"
-export type ScheduleEventSource = "task" | "calendar" | "focus"
+export type ScheduleEventSource = "task" | "calendar" | "focus" | "imported"
 export type CheckInMood = "good" | "okay" | "stuck"
 export type CheckInOutcome = "completed" | "missed" | "partial"
 export type CheckInEnergy = "low" | "medium" | "high"
@@ -249,6 +249,7 @@ export interface SourceCandidateRow {
   payload: Record<string, unknown>
   status: SourceCandidateStatus
   approved_task_id: string | null
+  approved_event_id: string | null
   created_at: string
   updated_at: string
 }
@@ -515,6 +516,7 @@ export interface SourceCandidate {
   payload: Record<string, unknown>
   status: SourceCandidateStatus
   approvedTaskId: string | null
+  approvedEventId: string | null
   createdAt: string
   updatedAt: string
 }
@@ -941,6 +943,7 @@ export interface ScheduleResponse {
 export interface ScheduleEventUpdateRequest {
   priority?: Priority
   isImmutable?: boolean
+  isCheckedIn?: boolean
 }
 
 export interface ScheduleEventUpdateResponse {

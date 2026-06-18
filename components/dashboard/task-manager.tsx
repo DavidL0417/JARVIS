@@ -9,8 +9,10 @@ import {
   ChevronRight,
   Pencil,
   Plus,
+  Sparkles,
   Tag,
   Trash2,
+  Undo2,
   X,
 } from "lucide-react"
 
@@ -33,7 +35,15 @@ interface TaskManagerProps {
   onCreateTask: (input: CreateTaskRequest) => Promise<void> | void
   onUpdateTask: (taskId: string, input: UpdateTaskRequest) => Promise<void> | void
   onDeleteTask: (taskId: string) => Promise<void> | void
+  // Reject a freshly imported task: undo the source candidate (delete the task +
+  // dismiss the candidate so it does not re-import). Falls back to a plain delete.
+  onRejectImport?: (task: Task) => Promise<void> | void
 }
+
+// A freshly imported, not-yet-confirmed task wears this tag (set at approval in
+// lib/sources/persistence.ts). It is the task analogue of an event's provisional
+// is_checked_in=false state; confirming strips it.
+const SOURCE_REVIEW_TAG = "source-review"
 
 type TaskDraft = {
   title: string
@@ -140,6 +150,7 @@ export function TaskManager({
   onCreateTask,
   onUpdateTask,
   onDeleteTask,
+  onRejectImport,
 }: TaskManagerProps) {
   const [showCompleted, setShowCompleted] = useState(false)
   const [createOpen, setCreateOpen] = useState(false)
@@ -274,10 +285,27 @@ export function TaskManager({
     await onDeleteTask(task.id)
   }
 
+  // Confirm a freshly imported task: strip the provisional tag, keeping the rest.
+  const handleConfirmImport = async (task: Task) => {
+    onClearError?.()
+    await onUpdateTask(task.id, { tags: task.tags.filter((tag) => tag !== SOURCE_REVIEW_TAG) })
+  }
+
+  const handleRejectImport = async (task: Task) => {
+    onClearError?.()
+    if (onRejectImport) {
+      await onRejectImport(task)
+      return
+    }
+    await onDeleteTask(task.id)
+  }
+
   const renderTaskRow = (task: Task, index: number) => {
     const isEditing = editingTaskId === task.id
     const isScheduledTask = hasScheduledBlock(task, scheduledTaskIds)
     const overdue = isTaskOverdue(task, nowMs)
+    const isProvisional = task.tags.includes(SOURCE_REVIEW_TAG)
+    const visibleTags = task.tags.filter((tag) => tag !== SOURCE_REVIEW_TAG)
     const calendarColor = calendars.find((c) => c.id === task.calendarId)?.color
     const deadlineLabel = formatDeadlineShort(task.deadline)
 
@@ -346,7 +374,11 @@ export function TaskManager({
     return (
       <li
         key={task.id}
-        className="group flex items-baseline gap-3 rounded-sm bg-muted/15 px-2.5 py-2.5 transition-colors hover:bg-muted/25"
+        className={`group flex items-baseline gap-3 rounded-sm px-2.5 py-2.5 transition-colors ${
+          isProvisional
+            ? "border-l-2 border-copper bg-copper-soft/15 hover:bg-copper-soft/25"
+            : "bg-muted/15 hover:bg-muted/25"
+        }`}
       >
         <span className="num w-6 shrink-0 text-[11px] font-medium uppercase text-muted-foreground">
           {String(index + 1).padStart(2, "0")}
@@ -379,6 +411,11 @@ export function TaskManager({
                 <AlertCircle className="h-3 w-3" /> Overdue
               </span>
             ) : null}
+            {isProvisional ? (
+              <span className="num inline-flex items-center gap-1 font-medium uppercase copper">
+                <Sparkles className="h-3 w-3" /> Imported
+              </span>
+            ) : null}
             {isScheduledTask && !overdue && task.status !== "completed" ? (
               <span className="num inline-flex items-center gap-1 font-medium uppercase copper">
                 Scheduled
@@ -400,14 +437,44 @@ export function TaskManager({
                 {calendars.find((c) => c.id === task.calendarId)?.name}
               </span>
             ) : null}
-            {task.tags.length > 0 ? (
+            {visibleTags.length > 0 ? (
               <span className="inline-flex items-center gap-1">
                 <Tag className="h-3 w-3" />
-                {task.tags.join(", ")}
+                {visibleTags.join(", ")}
               </span>
             ) : null}
           </div>
         </div>
+        {isProvisional ? (
+          <div className="flex shrink-0 items-center gap-0.5">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  onClick={() => void handleConfirmImport(task)}
+                  aria-label="Confirm import"
+                  className="flex h-7 w-7 items-center justify-center rounded-sm text-copper hover:bg-copper-soft"
+                >
+                  <Check className="h-3.5 w-3.5" strokeWidth={2.5} />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="top" className="text-[11px]">Confirm — JARVIS added this</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  onClick={() => void handleRejectImport(task)}
+                  aria-label="Reject import"
+                  className="flex h-7 w-7 items-center justify-center rounded-sm text-muted-foreground hover:bg-accent hover:text-destructive"
+                >
+                  <Undo2 className="h-3.5 w-3.5" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="top" className="text-[11px]">Reject — remove it</TooltipContent>
+            </Tooltip>
+          </div>
+        ) : null}
         <div className="flex shrink-0 items-center opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
           <Tooltip>
             <TooltipTrigger asChild>
