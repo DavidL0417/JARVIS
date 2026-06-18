@@ -26,10 +26,13 @@ interface TaskRowProps {
   actions?: ReactNode
   // Overrides the <li> classes when a call site needs different row styling.
   className?: string
+  // A mutation (delete/unschedule) is in flight: dim the row and swallow input
+  // so the click reads as acknowledged until the row is removed or restored.
+  pending?: boolean
 }
 
 export function TaskRow(props: TaskRowProps) {
-  const { leading, title, titleClassName = "text-foreground", meta, actions, className } = props
+  const { leading, title, titleClassName = "text-foreground", meta, actions, className, pending } = props
   // Presence of the prop — not its runtime value — opts into the split title row,
   // so a deadline-less task keeps the same wrapper as one with a pill.
   const hasAside = "titleAside" in props
@@ -37,7 +40,10 @@ export function TaskRow(props: TaskRowProps) {
   const titleEl = <p className={`line-clamp-2 text-[13px] leading-snug ${titleClassName}`}>{title}</p>
 
   return (
-    <li className={className ?? DEFAULT_ROW_CLASS}>
+    <li
+      className={`${className ?? DEFAULT_ROW_CLASS}${pending ? " pointer-events-none opacity-50" : ""}`}
+      aria-busy={pending || undefined}
+    >
       {leading}
       <div className="min-w-0 flex-1">
         {hasAside ? (

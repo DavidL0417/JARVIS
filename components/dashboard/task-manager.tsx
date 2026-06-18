@@ -120,6 +120,9 @@ export function TaskManager({
   const [createDraft, setCreateDraft] = useState<TaskDraft>(EMPTY_DRAFT)
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null)
   const [editDraft, setEditDraft] = useState<TaskDraft>(EMPTY_DRAFT)
+  // Rows with a delete/unschedule in flight, so the click reads as acknowledged
+  // across the mutation + dashboard-reload round-trip.
+  const [removingIds, setRemovingIds] = useState<Set<string>>(new Set())
 
   const nowMs = Date.now()
   const taskIndex = useMemo(() => new Map(tasks.map((task, index) => [task.id, index])), [tasks])
@@ -246,18 +249,30 @@ export function TaskManager({
   }
 
   const handleRemoveTask = async (task: Task) => {
+    if (removingIds.has(task.id)) return
     onClearError?.()
     const isScheduledTask = task.status === "scheduled" || Boolean(task.scheduledFor)
 
-    if (isScheduledTask) {
-      await onUpdateTask(task.id, {
-        status: task.status === "completed" ? "completed" : "todo",
-        scheduledFor: null,
-      })
-      return
-    }
+    setRemovingIds((current) => new Set(current).add(task.id))
+    try {
+      if (isScheduledTask) {
+        await onUpdateTask(task.id, {
+          status: task.status === "completed" ? "completed" : "todo",
+          scheduledFor: null,
+        })
+        return
+      }
 
-    await onDeleteTask(task.id)
+      await onDeleteTask(task.id)
+    } finally {
+      // On success the row is gone (deleted) or moved out of this list
+      // (unscheduled); on failure it stays and un-dims for the inline error.
+      setRemovingIds((current) => {
+        const next = new Set(current)
+        next.delete(task.id)
+        return next
+      })
+    }
   }
 
   const renderTaskRow = (task: Task, index: number) => {
@@ -334,6 +349,7 @@ export function TaskManager({
     return (
       <TaskRow
         key={task.id}
+        pending={removingIds.has(task.id)}
         leading={
           <>
             <span className="num mt-0.5 w-4 shrink-0 text-[10.5px] font-medium tabular-nums text-muted-foreground">
