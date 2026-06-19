@@ -145,9 +145,11 @@ export async function claimNextCommand(
   if (!data) {
     return null
   }
-  // The RPC returns the composite row; tolerate either a single object or a 1-array.
+  // The RPC returns SETOF (an array): [] when the queue is empty, one row when a
+  // command is claimed. Tolerate a bare object too, and guard on a real id — a
+  // composite-NULL can serialize as an all-null object, which is NOT a command.
   const row = (Array.isArray(data) ? data[0] : data) as CommandRow | undefined
-  return row ? mapClaimedCommand(row) : null
+  return row && row.id ? mapClaimedCommand(row) : null
 }
 
 // Report a claimed command done/failed. Guarded on status='claimed' so a stale or
