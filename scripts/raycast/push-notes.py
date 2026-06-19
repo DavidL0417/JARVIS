@@ -265,17 +265,25 @@ import re  # noqa: E402 - kept next to the regexes that use it.
 ITEM_RE = re.compile(r"^(?P<indent>\s*)-\s+(?:(?P<box>\[[ xX]\])\s+)?(?P<text>.+?)\s*$")
 HEADING_RE = re.compile(r"^(?P<marks>#{1,6})\s+(?P<title>.+?)\s*$")
 
-# Mirrors the Claude - Scheduler note-board protocol (its memory/claude-note-board-
-# protocol.md + STATUS_ICONS): every assistant-authored line begins with a status
-# icon; David's own lines never do. Any line whose text starts with one of these is
-# tagged `authored="agent"` so the server never counts Scheduler's (or, later,
-# JARVIS's) board chatter as David's own scratchpad. Kept to the known icon set on
-# purpose — a blanket "any leading emoji" rule would misread David's own emoji lines.
-AGENT_ICONS = ("🛑", "⚠️", "⚠", "✅", "📝", "🤖", "🆕")
+# Mirrors the Claude - Scheduler note-board protocol's CANONICAL status-icon set
+# (its STATUS_ICONS + AGENT_LINE_RE in scripts/claude_note_board.py): every
+# assistant-authored line begins with one of these five icons — 🛑 act-now,
+# ⚠️ heads-up, ✅ done, 📝 note, 🤖 board-meta — and David's own lines never do.
+# Such lines are tagged `authored="agent"` so the server never counts Scheduler's
+# (or, later, JARVIS's) board chatter as David's own scratchpad.
+#
+# Exactly the 5 the Scheduler owns, no others: the Scheduler is the single source
+# of truth for this set, so the JARVIS side must never unilaterally widen it (see
+# the boundary doc in the Claude - Scheduler repo: memory/jarvis-note-boundary.md).
+# The warning icon is matched by its base codepoint (U+26A0) with an OPTIONAL
+# trailing variation selector (U+FE0F), so "⚠️" written with or without the
+# selector both count — identical to the Scheduler's matcher. A blanket "any
+# leading emoji" rule is deliberately NOT used: it would misread David's own emoji.
+AGENT_LINE_RE = re.compile(r"^(?:🛑|⚠|✅|📝|🤖)️?")
 
 
 def line_author(text: str) -> str:
-    return "agent" if text.startswith(AGENT_ICONS) else "user"
+    return "agent" if AGENT_LINE_RE.match(text) else "user"
 
 
 def extract_items(notes: list[RaycastNote]) -> list[dict[str, Any]]:
