@@ -248,18 +248,17 @@ def build_capture(note: Any, items: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
-def cmd_capture(config: Config, dry_run: bool, force: bool) -> int:
-    reader = load_reader()
+def capture_once(config: Config, reader: Any, force: bool = False) -> dict[str, Any]:
+    """Read the JARVIS note, diff vs last-sent, POST to /capture if changed (or
+    forced). Returns a summary dict. Non-destructive (read-only on Raycast)."""
     note, items = read_jarvis_note(reader)
     if note is None:
-        print(json.dumps({"error": f"JARVIS note {JARVIS_NOTE_ID} not found"}))
-        return 1
+        return {"error": f"JARVIS note {JARVIS_NOTE_ID} not found"}
 
     capture = build_capture(note, items)
     state = read_state(config.state_file)
     unchanged = state.get("last_hash") == capture["contentHash"]
     capture["unchanged"] = unchanged
-
     summary = {
         "note": note.title,
         "items": len(items),
@@ -268,21 +267,100 @@ def cmd_capture(config: Config, dry_run: bool, force: bool) -> int:
         "unchanged": unchanged,
     }
 
-    if dry_run:
-        print(json.dumps({"dryRun": True, **summary}, indent=2, ensure_ascii=False))
-        return 0
-
     if unchanged and not force:
-        print(json.dumps({"skipped": "unchanged", **summary}))
-        return 0
+        return {"skipped": "unchanged", **summary}
 
     config.require_network()
     result = http_post(config.app_url.rstrip("/") + CAPTURE_PATH, config.secret, capture, timeout=30)
     state["last_hash"] = capture["contentHash"]
     state["last_capture_at"] = int(time.time())
     write_state(config.state_file, state)
-    print(json.dumps({"posted": True, **summary, "result": result}, ensure_ascii=False))
-    return 0
+    return {"posted": True, **summary, "result": result}
+
+
+def cmd_capture(config: Config, dry_run: bool, force: bool) -> int:
+    reader = load_reader()
+    if dry_run:
+        note, items = read_jarvis_note(reader)
+        if note is None:
+            print(json.dumps({"error": f"JARVIS note {JARVIS_NOTE_ID} not found"}))
+            return 1
+        capture = build_capture(note, items)
+        state = read_state(config.state_file)
+        print(json.dumps({
+            "dryRun": True,
+            "note": note.title,
+            "items": len(items),
+            "ackedTokens": capture["ackedTokens"],
+            "contentHash": capture["contentHash"][:12],
+            "unchanged": state.get("last_hash") == capture["contentHash"],
+        }, indent=2, ensure_ascii=False))
+        return 0
+
+    out = capture_once(config, reader, force=force)
+    print(json.dumps(out, ensure_ascii=False))
+    return 1 if "error" in out else 0
+
+
+# --------------------------------------------------------------------------- #
+# WATCH (ambient capture) — you → JARVIS with no trigger
+# --------------------------------------------------------------------------- #
+def cmd_watch(config: Config, debounce: float) -> int:
+    """Ambient capture: kqueue-watch the Raycast WAL file (every note edit lands
+    there), sleep in the kernel at zero CPU until a write wakes us, then capture
+    once after `debounce` seconds of quiet (so we read after David stops typing,
+    not mid-keystroke). Spurious wakeups from OTHER notes are idle-skipped by the
+    content-hash diff. No polling."""
+    import select  # stdlib; macOS kqueue
+
+    config.require_network()
+    reader = load_reader()
+    wal = Path(str(reader.DEFAULT_DB) + "-wal")
+    o_evtonly = getattr(os, "O_EVTONLY", 0x8000)
+    gone_flags = select.KQ_NOTE_DELETE | select.KQ_NOTE_RENAME | getattr(select, "KQ_NOTE_REVOKE", 0)
+    write_flags = select.KQ_NOTE_WRITE | select.KQ_NOTE_EXTEND | gone_flags
+
+    print(json.dumps({"watch": "started", "wal": str(wal), "debounce_s": debounce}), flush=True)
+
+    def capture_now() -> None:
+        try:
+            out = capture_once(config, reader)
+            if out.get("posted"):
+                print(json.dumps({"ambient_capture": out.get("contentHash"), "items": out.get("items"), "acked": out.get("ackedTokens")}), flush=True)
+        except Exception as exc:  # noqa: BLE001 - keep watching across a transient failure
+            print(json.dumps({"watch_capture_error": str(exc)}), file=sys.stderr, flush=True)
+
+    while True:  # outer loop re-arms the watch if the WAL is rotated/checkpoint-deleted
+        try:
+            fd = os.open(str(wal), o_evtonly)
+        except FileNotFoundError:
+            time.sleep(5)
+            continue
+        kq = select.kqueue()
+        kev = select.kevent(
+            fd,
+            filter=select.KQ_FILTER_VNODE,
+            flags=select.KQ_EV_ADD | select.KQ_EV_CLEAR,
+            fflags=write_flags,
+        )
+        pending = False
+        try:
+            while True:
+                # Block forever for the first write; then wait only `debounce` for quiet.
+                events = kq.control([kev], 1, debounce if pending else None)
+                if events:
+                    if events[0].fflags & gone_flags:
+                        capture_now()
+                        break  # re-arm on a fresh WAL fd
+                    pending = True
+                elif pending:  # timed out with no new write = quiet → capture
+                    capture_now()
+                    pending = False
+        finally:
+            try:
+                kq.close()
+            finally:
+                os.close(fd)
 
 
 # --------------------------------------------------------------------------- #
@@ -468,6 +546,9 @@ def main() -> int:
     p_serve.add_argument("--once", action="store_true", help="Handle one poll cycle then exit.")
     p_serve.add_argument("--wait-seconds", type=int, default=25, help="Long-poll hold (server clamps).")
 
+    p_watch = sub.add_parser("watch", help="Ambient capture: kqueue-watch the note, auto-capture on quiet (you → JARVIS).")
+    p_watch.add_argument("--debounce", type=float, default=10.0, help="Seconds of quiet after an edit before capturing.")
+
     args = parser.parse_args()
     config = Config(args)
 
@@ -477,6 +558,8 @@ def main() -> int:
         return cmd_capture(config, dry_run=args.dry_run, force=args.force)
     if args.command == "serve":
         return cmd_serve(config, allow_writes=args.allow_writes, once=args.once, wait_seconds=args.wait_seconds)
+    if args.command == "watch":
+        return cmd_watch(config, debounce=args.debounce)
     parser.error(f"unknown command {args.command}")
     return 2
 
