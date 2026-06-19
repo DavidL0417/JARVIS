@@ -265,6 +265,18 @@ import re  # noqa: E402 - kept next to the regexes that use it.
 ITEM_RE = re.compile(r"^(?P<indent>\s*)-\s+(?:(?P<box>\[[ xX]\])\s+)?(?P<text>.+?)\s*$")
 HEADING_RE = re.compile(r"^(?P<marks>#{1,6})\s+(?P<title>.+?)\s*$")
 
+# Mirrors the Claude - Scheduler note-board protocol (its memory/claude-note-board-
+# protocol.md + STATUS_ICONS): every assistant-authored line begins with a status
+# icon; David's own lines never do. Any line whose text starts with one of these is
+# tagged `authored="agent"` so the server never counts Scheduler's (or, later,
+# JARVIS's) board chatter as David's own scratchpad. Kept to the known icon set on
+# purpose — a blanket "any leading emoji" rule would misread David's own emoji lines.
+AGENT_ICONS = ("🛑", "⚠️", "⚠", "✅", "📝", "🤖", "🆕")
+
+
+def line_author(text: str) -> str:
+    return "agent" if text.startswith(AGENT_ICONS) else "user"
+
 
 def extract_items(notes: list[RaycastNote]) -> list[dict[str, Any]]:
     items: list[dict[str, Any]] = []
@@ -291,6 +303,7 @@ def extract_items(notes: list[RaycastNote]) -> list[dict[str, Any]]:
                     "text": text,
                     "noteTitle": note.title or None,
                     "section": " > ".join(heading_stack) or None,
+                    "authored": line_author(text),
                 }
             )
     return items
@@ -346,8 +359,10 @@ def main() -> int:
         notes = fetch_notes(db_copy, passphrase)
 
     payload = build_payload(notes)
-    open_tasks = sum(1 for item in payload["items"] if item["kind"] == "task" and item["checked"] is not True)
-    bullets = sum(1 for item in payload["items"] if item["kind"] == "bullet")
+    user_items = [item for item in payload["items"] if item.get("authored") != "agent"]
+    open_tasks = sum(1 for item in user_items if item["kind"] == "task" and item["checked"] is not True)
+    bullets = sum(1 for item in user_items if item["kind"] == "bullet")
+    agent_lines = sum(1 for item in payload["items"] if item.get("authored") == "agent")
 
     if args.dry_run:
         print(
@@ -355,8 +370,9 @@ def main() -> int:
                 {
                     "notes": len(payload["notes"]),
                     "items": len(payload["items"]),
-                    "openTasks": open_tasks,
-                    "bullets": bullets,
+                    "openTasks": open_tasks,  # David's only
+                    "bullets": bullets,  # David's only
+                    "agentLines": agent_lines,  # Scheduler/JARVIS board lines (context)
                     "note_titles": [note["title"] or "(untitled)" for note in payload["notes"]],
                 },
                 indent=2,

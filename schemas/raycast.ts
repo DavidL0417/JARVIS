@@ -29,6 +29,10 @@ export const raycastItemSchema = z.object({
   noteTitle: z.string().max(2000).nullish(),
   // Heading path within the note ("For this week: > Course reg"), or null.
   section: z.string().max(2000).nullish(),
+  // Provenance: "user" = David's own line; "agent" = a line authored by an
+  // assistant on the note board (Scheduler today, JARVIS later), detected by the
+  // leading status icon. Defaults to "user" so older readers stay compatible.
+  authored: z.enum(["user", "agent"]).default("user"),
 })
 
 export const raycastIngestRequestSchema = z.object({

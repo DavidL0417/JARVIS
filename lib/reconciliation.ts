@@ -1,5 +1,6 @@
 import { createSupabaseAdminClient } from "@/lib/supabase/server"
 import { recordAutomationRun } from "@/lib/automation-runs"
+import { getAutomationSettings, isAutomationPaused } from "@/lib/supabase/automation-settings"
 
 type AdminClient = ReturnType<typeof createSupabaseAdminClient>
 
@@ -62,6 +63,16 @@ export async function reconcileStaleSchedule(
   userId: string,
   now: Date = new Date(),
 ): Promise<ReentryRecap> {
+  // Respect the pause switch. This runs on every dashboard load and at plan-build
+  // start, and its writes are destructive (auto-miss + schedule_event deletion), so
+  // "pause automation" must freeze it too — otherwise a paused user still loses
+  // tasks/blocks just by opening the app. The dashboard still renders: the caller
+  // simply gets an empty recap and reads current state unmodified.
+  const settings = await getAutomationSettings(userId, adminClient)
+  if (isAutomationPaused(settings, now)) {
+    return EMPTY_RECAP
+  }
+
   const nowIso = now.toISOString()
 
   // Auto-timeout: overdue work the operator never engaged with ages out to

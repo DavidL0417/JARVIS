@@ -12,6 +12,12 @@ type AdminClient = Awaited<ReturnType<typeof requireAuthenticatedUser>>["adminCl
 const REMINDER_TAG = "apple-reminders"
 const EXTERNAL_ID_PREFIX = "apple-reminders"
 
+// Destructive-reconcile guard (see ingestAppleReminders): never delete the whole
+// mirror off a glitchy snapshot. Only guard a drastic drop once the mirror is large
+// enough that a >50% loss is implausible from normal completion.
+const REMINDER_UNDERCOUNT_MIN = 8
+const REMINDER_UNDERCOUNT_RATIO = 0.5
+
 // One incomplete reminder as sent by the Apple Shortcut ("Find Reminders" output).
 export interface IncomingReminder {
   title: string
@@ -261,6 +267,37 @@ export async function ingestAppleReminders(
   // deleted on the phone. Remove it (and any planner-created schedule blocks, since
   // the task FK is on-delete-set-null and would otherwise leave a grid ghost).
   const staleIds = existing.filter((row) => !liveIds.has(row.external_task_id)).map((row) => row.id)
+
+  // GUARD: the reconcile is destructive — it deletes every mirrored task absent from
+  // the payload. A glitchy Shortcut run (EventKit hiccup, a "Find Reminders" filter
+  // that resolved to one list, a permissions blip) can POST an empty or partial
+  // snapshot; without this guard a single bad run wipes the whole mirror + its
+  // planner blocks. Refuse to delete on an empty payload, and skip the delete on a
+  // drastic drop, recording a `partial` snapshot instead of destroying the mirror.
+  const emptyPayload = liveIds.size === 0
+  const drasticDrop =
+    existing.length >= REMINDER_UNDERCOUNT_MIN && liveIds.size < existing.length * REMINDER_UNDERCOUNT_RATIO
+  if (staleIds.length > 0 && (emptyPayload || drasticDrop)) {
+    const reason = emptyPayload
+      ? "empty payload"
+      : `incoming ${liveIds.size} < ${Math.round(REMINDER_UNDERCOUNT_RATIO * 100)}% of ${existing.length} mirrored`
+    await insertSourceSnapshot({
+      adminClient,
+      userId,
+      source: "apple_reminders",
+      freshness: "partial",
+      summary: `Apple Reminders sync skipped removal of ${staleIds.length} task(s) — ${reason}. Mirror left intact to avoid data loss.`,
+      payload: {
+        received: reminders.length,
+        upserted: incoming.length,
+        removed: 0,
+        skippedRemoval: staleIds.length,
+        reason,
+      },
+    })
+    return { received: reminders.length, upserted: incoming.length, removed: 0 }
+  }
+
   if (staleIds.length > 0) {
     const { error: scheduleError } = await adminClient
       .from("schedule_events")

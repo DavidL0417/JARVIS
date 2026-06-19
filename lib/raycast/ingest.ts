@@ -14,9 +14,12 @@ const ITEM_TEXT_CHAR_LIMIT = 140
 
 export interface RaycastIngestResult {
   notes: number
+  // Counts below are David's own lines only; assistant board lines are excluded.
   openTasks: number
   doneTasks: number
   bullets: number
+  // Assistant-authored board lines (Scheduler/JARVIS), kept as context, not David's.
+  agentLines: number
   // true when the content is byte-identical to the last snapshot (idle-skip):
   // nothing was written.
   skipped: boolean
@@ -56,6 +59,13 @@ function isOpenTask(item: RaycastItemPayload): boolean {
   return item.kind === "task" && item.checked !== true
 }
 
+// David's own lines vs assistant-authored board lines (Scheduler today, JARVIS
+// later). The reader tags each item by its leading status icon; here we count and
+// digest only David's, so a Scheduler check-in never reads as David's scratchpad.
+function isUserAuthored(item: RaycastItemPayload): boolean {
+  return item.authored !== "agent"
+}
+
 function truncate(text: string, limit: number): string {
   const clean = text.replace(/\s+/g, " ").trim()
   return clean.length > limit ? `${clean.slice(0, limit - 1)}…` : clean
@@ -74,9 +84,11 @@ export function buildRaycastDigest(
   notes: RaycastNotePayload[],
   items: RaycastItemPayload[],
 ): string {
-  const openTasks = items.filter(isOpenTask)
-  const doneTasks = items.filter((item) => item.kind === "task" && item.checked === true)
-  const bullets = items.filter((item) => item.kind === "bullet")
+  const userItems = items.filter(isUserAuthored)
+  const agentItems = items.filter((item) => !isUserAuthored(item))
+  const openTasks = userItems.filter(isOpenTask)
+  const doneTasks = userItems.filter((item) => item.kind === "task" && item.checked === true)
+  const bullets = userItems.filter((item) => item.kind === "bullet")
 
   if (notes.length === 0) {
     return "Raycast intake received no active notes."
@@ -92,6 +104,9 @@ export function buildRaycastDigest(
     pinned.length > 0 ? ` (pinned: ${pinned.join(", ")})` : "",
     `. ${openTasks.length} open scratchpad task${openTasks.length === 1 ? "" : "s"}`,
     `, ${doneTasks.length} done, ${bullets.length} bullet${bullets.length === 1 ? "" : "s"}.`,
+    agentItems.length > 0
+      ? ` (${agentItems.length} assistant line${agentItems.length === 1 ? "" : "s"} on the board kept as context, not David's.)`
+      : "",
   ].join("")
 
   if (openTasks.length === 0) {
@@ -128,9 +143,11 @@ export async function ingestRaycastSnapshot(
   const notes = dedupeNotesById(input.notes)
   const items = filterItems(input.items)
 
-  const openTasks = items.filter(isOpenTask).length
-  const doneTasks = items.filter((item) => item.kind === "task" && item.checked === true).length
-  const bullets = items.filter((item) => item.kind === "bullet").length
+  const userItems = items.filter(isUserAuthored)
+  const openTasks = userItems.filter(isOpenTask).length
+  const doneTasks = userItems.filter((item) => item.kind === "task" && item.checked === true).length
+  const bullets = userItems.filter((item) => item.kind === "bullet").length
+  const agentLines = items.length - userItems.length
 
   const contentHash = hashSourceContent(buildRaycastContentText(notes))
   const previousHash = await getLatestContentHash(adminClient, userId, "raycast")
@@ -139,7 +156,7 @@ export async function ingestRaycastSnapshot(
   // represents this exact state; a duplicate would only crowd the recent-sources
   // window. (No archive step to keep current, unlike iMessage.)
   if (previousHash && previousHash === contentHash) {
-    return { notes: notes.length, openTasks, doneTasks, bullets, skipped: true, snapshotId: null }
+    return { notes: notes.length, openTasks, doneTasks, bullets, agentLines, skipped: true, snapshotId: null }
   }
 
   const snapshot = await insertSourceSnapshot({
@@ -168,9 +185,10 @@ export async function ingestRaycastSnapshot(
         text: item.text,
         noteTitle: item.noteTitle ?? null,
         section: item.section ?? null,
+        authored: item.authored,
       })),
     },
   })
 
-  return { notes: notes.length, openTasks, doneTasks, bullets, skipped: false, snapshotId: snapshot.id }
+  return { notes: notes.length, openTasks, doneTasks, bullets, agentLines, skipped: false, snapshotId: snapshot.id }
 }
