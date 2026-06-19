@@ -22,6 +22,8 @@ function makeTask(overrides: Partial<Task> & { title: string }): Task {
     allDay: false,
     calendarId: "cal-tasks",
     tags: [],
+    course: null,
+    category: null,
     sourceSnapshotId: null,
     sourceCandidateId: null,
     planId: null,

@@ -161,6 +161,20 @@ function itemToCandidate(item: CanvasPlannerItem, baseUrl: string): CanvasTaskCa
   }
 }
 
+// Canvas plannable types ("discussion_topic", "quiz") → human category labels
+// ("Discussion Topic", "Quiz") so they read like the Notion Category chips.
+function humanizePlannableType(plannableType: string | null | undefined): string | null {
+  if (!plannableType) {
+    return null
+  }
+  const label = plannableType
+    .split("_")
+    .map((part) => (part ? part[0].toUpperCase() + part.slice(1) : part))
+    .join(" ")
+    .trim()
+  return label || null
+}
+
 function taskFieldsForCandidate(candidate: CanvasTaskCandidate, userId: string, sourceSnapshotId: string, sourceCandidateId: string) {
   return {
     user_id: userId,
@@ -174,10 +188,15 @@ function taskFieldsForCandidate(candidate: CanvasTaskCandidate, userId: string, 
     is_immutable: false,
     all_day: false,
     calendar_id: TASKS_CALENDAR_ID,
-    tags: Array.from(new Set(["canvas", candidate.payload.canvas.plannableType, candidate.course].filter((tag): tag is string => Boolean(tag)))),
+    // course + plannable type now live in their own columns; tags keeps only the
+    // "canvas" source marker (taskSourceLabel's fallback, hidden from display).
+    tags: ["canvas"],
+    course: candidate.course ?? null,
+    category: humanizePlannableType(candidate.payload.canvas.plannableType),
     source_snapshot_id: sourceSnapshotId,
     source_candidate_id: sourceCandidateId,
     plan_id: null,
+    last_synced_from: "canvas" as const,
   }
 }
 

@@ -3,6 +3,7 @@ import { z } from "zod"
 
 import { mapTaskRowToTask, mapTaskToUpdate, TASK_SELECT } from "@/lib/data/mappers"
 import { markCanvasTaskComplete } from "@/lib/sources/canvas-completion"
+import { archiveNotionPageForTask, syncNotionTaskCompletion, syncNotionTaskFields } from "@/lib/sources/notion-completion"
 import {
   isAuthenticationRequiredError,
   requireAuthenticatedUser,
@@ -89,6 +90,23 @@ export async function PATCH(
           })
         : null
 
+    // Notion two-way write-back: reflect completion / reopen on the linked Notion
+    // page. Side effect only (the externalWrite response contract is Canvas-shaped)
+    // and best-effort, so a Notion hiccup never fails the task update.
+    if (parsedBody.data.status === "completed" || parsedBody.data.status === "todo") {
+      await syncNotionTaskCompletion({
+        adminClient,
+        userId: user.id,
+        task: data,
+        completed: parsedBody.data.status === "completed",
+      }).catch(() => null)
+    }
+
+    // Push title/deadline edits to the linked Notion page (best-effort side effect).
+    if (parsedBody.data.title !== undefined || parsedBody.data.deadline !== undefined) {
+      await syncNotionTaskFields({ adminClient, userId: user.id, task: data }).catch(() => null)
+    }
+
     const responsePayload: TaskMutationResponse = {
       success: true,
       task: mapTaskRowToTask(data),
@@ -151,8 +169,8 @@ export async function DELETE(
       .delete()
       .eq("id", parsedTaskId.data)
       .eq("user_id", user.id)
-      .select("id")
-      .maybeSingle<{ id: string }>()
+      .select("id, title, external_task_id, last_synced_from")
+      .maybeSingle<Pick<TaskRow, "id" | "title" | "external_task_id" | "last_synced_from">>()
 
     if (error) {
       throw new Error(error.message)
@@ -161,6 +179,10 @@ export async function DELETE(
     if (!data) {
       return NextResponse.json({ error: "Task not found." }, { status: 404 })
     }
+
+    // Notion two-way write-back: deleting a Notion-linked task archives its Notion
+    // page so Notion stays in sync. Best-effort side effect.
+    await archiveNotionPageForTask({ adminClient, userId: user.id, task: data }).catch(() => null)
 
     const responsePayload: DeleteTaskResponse = {
       success: true,

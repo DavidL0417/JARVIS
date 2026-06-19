@@ -35,6 +35,7 @@ import { SettingsPanel } from "@/components/dashboard/settings-panel"
 import { SecretaryOverlay } from "@/components/dashboard/secretary-overlay"
 import { SourceSetupPanel } from "@/components/dashboard/source-setup-panel"
 import { TaskManager } from "@/components/dashboard/task-manager"
+import { TaskPane } from "@/components/dashboard/task-pane"
 import { Button } from "@/components/ui/button"
 import { Kbd } from "@/components/ui/kbd"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
@@ -253,6 +254,7 @@ export default function DashboardPage() {
   const [viewState, setViewState] = useState<DashboardViewState>({ status: "loading" })
   const [calendars, setCalendars] = useState<Calendar[]>([])
   const [calendarsSidebarOpen, setCalendarsSidebarOpen] = useState(false)
+  const [taskPaneOpen, setTaskPaneOpen] = useState(false)
   const [sourcesSheetOpen, setSourcesSheetOpen] = useState(false)
   const [memorySheetOpen, setMemorySheetOpen] = useState(false)
   const [settingsSheetOpen, setSettingsSheetOpen] = useState(false)
@@ -473,19 +475,6 @@ export default function DashboardPage() {
     }
   }
 
-  async function handleUndoAutoImport(candidateId: string) {
-    try {
-      await fetchJson<{ success: true }>("/api/sources/candidates/undo", "Failed to undo auto-import.", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ candidateIds: [candidateId] }),
-      })
-      await loadDashboard(true)
-    } catch (error) {
-      setTaskErrorMessage(error instanceof Error ? error.message : "Failed to undo auto-import.")
-    }
-  }
-
   function buildHardEventsForPlanning(taskIds: string[]) {
     const selectedTaskIds = new Set(taskIds)
 
@@ -622,7 +611,19 @@ export default function DashboardPage() {
                 onReplan: (command) => handleDailyPlan(command),
                 onRebuild: () => handleDailyPlan(),
                 onCompleteTask: (taskId) => handleUpdateTask(taskId, { status: "completed" }),
-                onRestoreTask: (taskId) => handleUpdateTask(taskId, { status: "todo" }),
+                onRestoreTask: (taskId) => {
+                  // A long-dead deadline would just trip the 7-day auto-miss sweep
+                  // and send the task straight back to the Archive. Restoring means
+                  // "I still want this", so drop the stale deadline and bring it back
+                  // as an undated todo (re-deadline it, or let inference suggest one).
+                  const task = dashboardData.tasks.find((item) => item.id === taskId)
+                  const sevenDaysAgoMs = Date.now() - 7 * 24 * 60 * 60 * 1000
+                  const deadlineStale = task?.deadline ? new Date(task.deadline).getTime() < sevenDaysAgoMs : false
+                  return handleUpdateTask(taskId, {
+                    status: "todo",
+                    ...(deadlineStale ? { deadline: null } : {}),
+                  })
+                },
                 onDecide: handleRiskDecision,
                 onClearDecision: handleClearRiskDecision,
                 onAcceptDeadline: (taskId) => handleInferredDeadline(taskId, "accept"),
@@ -639,11 +640,6 @@ export default function DashboardPage() {
               onCreateTask={handleCreateTask}
               onUpdateTask={handleUpdateTask}
               onDeleteTask={handleDeleteTask}
-              onRejectImport={(task) =>
-                task.sourceCandidateId
-                  ? handleUndoAutoImport(task.sourceCandidateId)
-                  : handleDeleteTask(task.id)
-              }
             />
           </div>
         </div>
@@ -659,6 +655,12 @@ export default function DashboardPage() {
       <main className="h-screen overflow-hidden bg-background text-foreground">
         <div className="flex h-full">
           <aside className="hidden w-14 shrink-0 flex-col items-center gap-1.5 border-r border-rule py-4 md:flex">
+            <RailButton
+              label={stats?.tasks ? `Tasks · ${stats.tasks}` : "Tasks"}
+              icon={ListTodo}
+              onClick={() => setTaskPaneOpen(true)}
+              active={taskPaneOpen}
+            />
             <RailButton
               label="Calendars"
               icon={PanelLeft}
@@ -791,6 +793,14 @@ export default function DashboardPage() {
           onClose={() => setCalendarsSidebarOpen(false)}
           calendars={calendars}
           onCalendarsChange={setCalendars}
+        />
+
+        <TaskPane
+          isOpen={taskPaneOpen}
+          onClose={() => setTaskPaneOpen(false)}
+          tasks={dashboard?.tasks ?? []}
+          onUpdateTask={handleUpdateTask}
+          onDeleteTask={handleDeleteTask}
         />
 
         <RailSheet

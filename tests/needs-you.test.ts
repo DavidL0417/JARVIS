@@ -20,6 +20,8 @@ function task(overrides: Partial<Task> & { id: string }): Task {
     allDay: false,
     calendarId: null,
     tags: [],
+    course: null,
+    category: null,
     sourceSnapshotId: null,
     sourceCandidateId: null,
     planId: null,

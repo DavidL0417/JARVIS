@@ -4,7 +4,7 @@ import Anthropic from "@anthropic-ai/sdk"
 
 import { runClaudeStructuredExtraction } from "@/lib/ai/claude-extraction"
 import type { CommitmentRef } from "@/lib/dedupe"
-import type { Priority, SourceCandidateKind, SourceKind } from "@/types"
+import type { Priority, SourceCandidateKind, SourceKind, TaskSyncOrigin } from "@/types"
 
 const MAX_TEXT_SOURCE_CHARS = 60_000
 const SOURCE_EXTRACTION_OUTPUT_TOKENS = 8000
@@ -44,6 +44,12 @@ export type ExtractedSourceCandidate = {
   confidence: number | null
   evidence: string | null
   allDay: boolean
+  // Provenance link back to the upstream record (e.g. a Notion page id) and the
+  // origin label. Set by structured importers like Notion; left undefined by the
+  // free-text LLM extractor. Threaded into the candidate payload, then onto the
+  // task as external_task_id / last_synced_from so two-way sync can match rows.
+  externalId?: string | null
+  externalSource?: TaskSyncOrigin
 }
 
 export type SourceExtractionResult = {

@@ -28,6 +28,7 @@ import type {
   Task,
   TaskInsertRow,
   TaskRow,
+  TaskSyncOrigin,
 } from "@/types"
 import type { ExtractedSourceCandidate } from "@/lib/sources/extraction"
 
@@ -48,11 +49,13 @@ function candidateDescription(candidate: SourceCandidate) {
     .join("\n\n") || null
 }
 
+// Imported tasks arrive confirmed (no provisional "source-review" gate). A bulk
+// Canvas import would otherwise turn the whole task rail into a confirm/reject
+// queue; trust the importer and let the normal delete handle mistakes.
 function candidateTags(candidate: SourceCandidate) {
   return Array.from(
     new Set(
       [
-        "source-review",
         candidate.kind,
         candidate.course?.trim() || null,
       ].filter((tag): tag is string => Boolean(tag)),
@@ -96,10 +99,29 @@ function candidateKey(input: {
   ].join("|")
 }
 
+// A structured importer (e.g. Notion) stashes the upstream record id + origin in
+// the candidate payload. Carrying it onto the task as external_task_id /
+// last_synced_from is what lets a later sync match this task back to its source
+// row (so a Notion completion can complete the task, and vice versa).
+function candidatePayloadLink(candidate: SourceCandidate): { externalId: string | null; lastSyncedFrom?: TaskSyncOrigin } {
+  const externalId = typeof candidate.payload?.externalId === "string" ? candidate.payload.externalId : null
+  const source = candidate.payload?.externalSource
+  const lastSyncedFrom =
+    source === "notion" ||
+    source === "caldav" ||
+    source === "apple_reminders" ||
+    source === "gmail" ||
+    source === "canvas"
+      ? source
+      : undefined
+  return { externalId, lastSyncedFrom }
+}
+
 function candidateToTaskInsert(candidate: SourceCandidate, userId: string): TaskInsertRow {
   const isMultiDay = (candidate.durationMinutes ?? 0) >= 1440
   const isDateOnlyDeadline = candidate.kind === "deadline" && Boolean(candidate.dueAt && /T00:00:00\.000Z$/.test(candidate.dueAt))
   const allDay = isMultiDay || isDateOnlyDeadline
+  const { externalId, lastSyncedFrom } = candidatePayloadLink(candidate)
   return {
     user_id: userId,
     title: candidate.title,
@@ -116,6 +138,8 @@ function candidateToTaskInsert(candidate: SourceCandidate, userId: string): Task
     source_snapshot_id: candidate.sourceSnapshotId,
     source_candidate_id: candidate.id,
     plan_id: null,
+    external_task_id: externalId,
+    ...(lastSyncedFrom ? { last_synced_from: lastSyncedFrom } : {}),
   }
 }
 
@@ -275,12 +299,33 @@ export async function updateSourceFileStatus(input: {
   return mapSourceFileRowToSummary(data)
 }
 
+// Candidate payload: external id (per-item link, e.g. a Notion page) + origin (so
+// the approved task gets last_synced_from). A per-candidate externalSource wins
+// over the batch-level one passed by the importer.
+function candidateInsertPayload(
+  candidate: ExtractedSourceCandidate,
+  batchSource: TaskSyncOrigin | undefined,
+): Record<string, unknown> {
+  const payload: Record<string, unknown> = {}
+  if (candidate.externalId) {
+    payload.externalId = candidate.externalId
+  }
+  const source = candidate.externalSource ?? batchSource
+  if (source) {
+    payload.externalSource = source
+  }
+  return payload
+}
+
 export async function insertSourceCandidates(input: {
   adminClient: AdminClient
   userId: string
   sourceSnapshotId: string
   sourceFileId?: string | null
   candidates: ExtractedSourceCandidate[]
+  // Stamps task provenance (last_synced_from) for sources that don't carry a
+  // per-item external id — e.g. Gmail, Canvas. Per-candidate externalSource wins.
+  externalSource?: TaskSyncOrigin
 }): Promise<SourceCandidate[]> {
   if (input.candidates.length === 0) {
     return []
@@ -347,7 +392,10 @@ export async function insertSourceCandidates(input: {
         priority: candidate.priority,
         confidence: candidate.confidence,
         evidence: normalizeNullableText(candidate.evidence),
-        payload: {},
+        // Keep the upstream link (external id) + origin so the approved task can
+        // carry external_task_id / last_synced_from. externalSource also tags
+        // id-less sources (Gmail, Canvas) for provenance grouping.
+        payload: candidateInsertPayload(candidate, input.externalSource),
         status: "pending",
       })),
     )
@@ -405,6 +453,7 @@ export async function insertAndAutoApproveSourceCandidates(input: {
   sourceSnapshotId: string
   sourceFileId?: string | null
   candidates: ExtractedSourceCandidate[]
+  externalSource?: TaskSyncOrigin
 }): Promise<SourceCandidate[]> {
   const inserted = await insertSourceCandidates(input)
 

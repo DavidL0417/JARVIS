@@ -166,6 +166,7 @@ export async function POST(request: Request) {
           userId: tokenRecord.user_id,
           sourceSnapshotId: sourceSnapshot.id,
           candidates: extraction.extractedCandidates,
+          externalSource: "canvas",
         })
     const responsePayload: CanvasExtensionImportPageResponse = {
       success: true,
