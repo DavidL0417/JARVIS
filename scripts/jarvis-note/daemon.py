@@ -171,8 +171,56 @@ def node_text(node: dict[str, Any]) -> str:
 # --------------------------------------------------------------------------- #
 # CAPTURE (you → JARVIS) — non-destructive read + diff + upload
 # --------------------------------------------------------------------------- #
+def extract_jarvis_items(reader: Any, note: Any) -> list[dict[str, Any]]:
+    """Like the reader's extract_items, but ALSO captures plain paragraph lines as
+    items. The JARVIS note is a chat surface where David types naturally — not just
+    bullets — so the brain must see those plain lines. Headings and horizontal rules
+    are skipped; bullet/task lines keep their normal parsing. Authorship is by leading
+    status icon (agent lines start with one; David's never do), so our own replies and
+    confirm checkboxes are tagged 'agent' and excluded from David's lines downstream."""
+    items: list[dict[str, Any]] = []
+    heading_stack: list[str] = []
+    for line in note.markdown.splitlines():
+        heading_match = reader.HEADING_RE.match(line)
+        if heading_match:
+            level = len(heading_match.group("marks"))
+            heading_stack = heading_stack[: level - 1]
+            heading_stack.append(heading_match.group("title").strip())
+            continue
+        stripped = line.strip()
+        if not stripped or stripped == "---":
+            continue
+        section = " > ".join(heading_stack) or None
+        item_match = reader.ITEM_RE.match(line)
+        if item_match:
+            box = item_match.group("box")
+            text = item_match.group("text").strip()
+            if not text or text in {"[ ]", "[x]", "[X]"}:
+                continue
+            items.append({
+                "kind": "task" if box else "bullet",
+                "checked": None if not box else box.lower() == "[x]",
+                "text": text,
+                "noteTitle": note.title or None,
+                "section": section,
+                "authored": reader.line_author(text),
+            })
+        else:
+            # Plain paragraph line — David's natural typing on the JARVIS note.
+            items.append({
+                "kind": "bullet",
+                "checked": None,
+                "text": stripped,
+                "noteTitle": note.title or None,
+                "section": section,
+                "authored": reader.line_author(stripped),
+            })
+    return items
+
+
 def read_jarvis_note(reader: Any) -> tuple[Any | None, list[dict[str, Any]]]:
-    """WAL-aware read of just the JARVIS note + its parsed items (all authors)."""
+    """WAL-aware read of just the JARVIS note + its parsed items (all authors,
+    incl. plain paragraph lines)."""
     passphrase = reader.derive_passphrase()
     with tempfile.TemporaryDirectory(prefix="jarvis-note-read-") as tmp:
         db = reader.copy_database(reader.DEFAULT_DB, Path(tmp))
@@ -180,7 +228,7 @@ def read_jarvis_note(reader: Any) -> tuple[Any | None, list[dict[str, Any]]]:
     note = next((n for n in notes if n.note_id.upper() == JARVIS_NOTE_ID), None)
     if note is None:
         return None, []
-    items = reader.extract_items([note])
+    items = extract_jarvis_items(reader, note)
     return note, items
 
 
