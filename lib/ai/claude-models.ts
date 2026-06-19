@@ -8,7 +8,7 @@ export const CLAUDE_PLANNER_MODEL_OPTIONS = [
   {
     key: "opus",
     label: "Opus",
-    model: "claude-opus-4-7",
+    model: "claude-opus-4-8",
     description: "Deeper planner for complex days with more tradeoffs.",
   },
 ] as const

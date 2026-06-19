@@ -26,6 +26,7 @@ function makeItem(overrides: Partial<RaycastItemPayload> = {}): RaycastItemPaylo
     text: "do a thing",
     noteTitle: "For tonight:",
     section: null,
+    authored: "user",
     ...overrides,
   }
 }
@@ -104,6 +105,32 @@ describe("buildRaycastDigest", () => {
 
   it("handles the empty-notes case", () => {
     expect(buildRaycastDigest([], [])).toBe("Raycast intake received no active notes.")
+  })
+
+  it("excludes assistant-authored board lines from David's counts and notes them as context", () => {
+    const digest = buildRaycastDigest(
+      [makeNote({ id: "A" })],
+      [
+        makeItem({ text: "my real task" }),
+        makeItem({ kind: "bullet", checked: null, text: "📝 Scheduler note", authored: "agent" }),
+        makeItem({ kind: "bullet", checked: null, text: "✅ Scheduler ack", authored: "agent" }),
+      ],
+    )
+    expect(digest).toContain("1 open scratchpad task")
+    expect(digest).toContain("0 bullets") // the two agent bullets are not David's
+    expect(digest).toContain("2 assistant lines on the board kept as context")
+  })
+
+  it("never lists an agent line among the top open tasks", () => {
+    const digest = buildRaycastDigest(
+      [makeNote({ id: "A" })],
+      [
+        makeItem({ text: "Declare polisci major" }),
+        makeItem({ kind: "task", checked: false, text: "🛑 do this now", authored: "agent" }),
+      ],
+    )
+    expect(digest).toContain("• Declare polisci major")
+    expect(digest).not.toContain("do this now")
   })
 })
 
