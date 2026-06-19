@@ -454,9 +454,16 @@ def _fetch_jarvis_doc(rne: Any, passphrase: str) -> tuple[dict[str, Any], dict[s
 
 
 def _write_jarvis_doc(cnb: Any, rne: Any, passphrase: str, document: dict[str, Any]) -> dict[str, Any]:
-    """UPDATE the JARVIS note's text+document+modifiedAt (never openedAt), with the
-    Scheduler writer's quit→write→relaunch + read-back verify. Targets the JARVIS id."""
-    import subprocess  # local: only the live-write path needs it
+    """LIVE write of the JARVIS note's text+document+modifiedAt (never openedAt) while
+    Raycast keeps running — NO quit/relaunch. Raycast re-reads the note from disk when
+    the operator next opens it (verified 2026-06-19: a live write was visible on open and
+    survived relaunches), so the quit→relaunch — which popped Raycast's launcher on every
+    write — is unnecessary here and is dropped. Trade-off: a live write is only at risk if
+    the note is OPEN with a stale in-memory copy AND the operator edits it before
+    reopening; worst case loses a JARVIS reply, never the operator's own text — acceptable
+    for the fire-and-forget flow. Read-back verifies at the DB level. Targets the JARVIS
+    id; held under the shared .claude-note-board.lock by the caller."""
+    import subprocess  # local: only the write path needs it
 
     text = cnb.doc_to_plaintext(document)
     doc_hex = json.dumps(document, ensure_ascii=False, separators=(",", ":")).encode("utf-8").hex()
@@ -469,15 +476,10 @@ def _write_jarvis_doc(cnb: Any, rne: Any, passphrase: str, document: dict[str, A
         f"WHERE hex(id)='{JARVIS_NOTE_ID_HEX}';\nSELECT 'rows=' || changes();"
     )
 
-    running = cnb._raycast_running()
-    if running:
-        cnb._quit_raycast()
     proc = subprocess.run(
         [rne.sqlcipher_binary(), str(rne.DEFAULT_DB)],
         input=sql, text=True, capture_output=True, timeout=20,
     )
-    if running:
-        cnb._relaunch_raycast()
     if proc.returncode != 0 or "rows=1" not in proc.stdout:
         raise RuntimeError(f"write failed: rc={proc.returncode} out={proc.stdout!r} err={proc.stderr!r}")
 
