@@ -73,3 +73,36 @@ export function compareByDeadline(left: Task, right: Task): number {
 
   return leftMs - rightMs
 }
+
+// Canonical display orders, shared by the pane's grouping and the filter/sort
+// engine (so a Status select and the Status group agree on ordering).
+export const TASK_STATUS_ORDER = ["Overdue", "Todo", "Scheduled", "Completed", "Missed"]
+export const TASK_SOURCE_ORDER = ["Notion", "Canvas", "Gmail", "Apple Reminders", "Apple Calendar", "JARVIS"]
+export const TASK_PRIORITY_ORDER = ["High", "Medium", "Low"]
+
+// The source channel a task flowed in from. Prefers the structured provenance
+// (`lastSyncedFrom`); falls back to a legacy "canvas" tag; else JARVIS-native.
+export function taskSourceLabel(task: Task): string {
+  if (task.lastSyncedFrom === "notion") return "Notion"
+  if (task.lastSyncedFrom === "gmail") return "Gmail"
+  if (task.lastSyncedFrom === "canvas") return "Canvas"
+  if (task.lastSyncedFrom === "apple_reminders") return "Apple Reminders"
+  if (task.lastSyncedFrom === "caldav") return "Apple Calendar"
+  if (task.tags.includes("canvas")) return "Canvas"
+  return "JARVIS"
+}
+
+// The human status label (Overdue is derived from a live past deadline, not a
+// stored status). Shared by the Status group, the Status filter, and Status sort.
+export function taskStatusLabel(task: Task, nowMs: number): string {
+  if (task.status === "completed") return "Completed"
+  if (task.status === "missed") return "Missed"
+  if (isTaskOverdue(task, nowMs)) return "Overdue"
+  if (task.status === "scheduled" || task.scheduledFor) return "Scheduled"
+  return "Todo"
+}
+
+// "high" → "High". Priority is stored lowercase; chips/filters show title case.
+export function priorityLabel(priority: string): string {
+  return priority ? priority[0].toUpperCase() + priority.slice(1) : priority
+}

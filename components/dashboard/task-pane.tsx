@@ -6,7 +6,6 @@ import {
   AlertCircle,
   CalendarClock,
   CalendarDays,
-  Check,
   CheckCircle2,
   ChevronDown,
   ChevronRight,
@@ -14,7 +13,6 @@ import {
   CircleSlash,
   GraduationCap,
   ListChecks,
-  ListFilter,
   Mail,
   NotebookText,
   RotateCcw,
@@ -25,11 +23,30 @@ import {
 } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
 
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { RailSheet } from "@/components/dashboard/rail-sheet"
 import { TaskCheckbox } from "@/components/dashboard/task-row"
+import { FilterControls, SortControls } from "@/components/dashboard/task-filter-controls"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
-import { NOISE_TAGS, compareByDeadline, formatDeadlineShort, isTaskOverdue, shortCourseLabel } from "@/lib/task-display"
+import {
+  NOISE_TAGS,
+  TASK_PRIORITY_ORDER,
+  TASK_SOURCE_ORDER,
+  TASK_STATUS_ORDER,
+  formatDeadlineShort,
+  isTaskOverdue,
+  priorityLabel,
+  shortCourseLabel,
+  taskSourceLabel,
+  taskStatusLabel,
+} from "@/lib/task-display"
+import {
+  EMPTY_FILTER,
+  evaluateFilter,
+  makeSortComparator,
+  type FilterPropertyKey,
+  type FilterState,
+  type SortRule,
+} from "@/lib/task-filter"
 import { searchTasks } from "@/lib/task-search"
 import type { Task, UpdateTaskRequest } from "@/types"
 
@@ -42,33 +59,15 @@ const GROUP_OPTIONS: { id: GroupBy; label: string }[] = [
 ]
 
 const NO_COURSE = "No course"
-
-function taskSourceLabel(task: Task): string {
-  if (task.lastSyncedFrom === "notion") return "Notion"
-  if (task.lastSyncedFrom === "gmail") return "Gmail"
-  if (task.lastSyncedFrom === "canvas") return "Canvas"
-  if (task.lastSyncedFrom === "apple_reminders") return "Apple Reminders"
-  if (task.lastSyncedFrom === "caldav") return "Apple Calendar"
-  if (task.tags.includes("canvas")) return "Canvas"
-  return "JARVIS"
-}
-
-function statusLabel(task: Task, nowMs: number): string {
-  if (task.status === "completed") return "Completed"
-  if (task.status === "missed") return "Missed"
-  if (isTaskOverdue(task, nowMs)) return "Overdue"
-  if (task.status === "scheduled" || task.scheduledFor) return "Scheduled"
-  return "Todo"
-}
+const DEFAULT_SORTS: SortRule[] = [{ id: "sort-default-due", key: "due", direction: "asc" }]
 
 function courseKey(task: Task): string {
   return task.course?.trim() || NO_COURSE
 }
 
-// A group's leading glyph. Source channels carry their DESIGN.md signal hue (the
-// "abstract source channels flowing into a plan"); status uses semantic color;
-// JARVIS-native tasks wear the brand copper. `tone` is a CSS var/color string,
-// `className` a token utility — at most one is set.
+// A group's leading glyph. Source channels carry their DESIGN.md signal hue; status
+// uses semantic color; JARVIS-native tasks wear the brand copper. `tone` is a CSS
+// var/color string, `className` a token utility — at most one is set.
 type Glyph = { Icon: LucideIcon; tone?: string; className?: string }
 
 function sourceGlyph(key: string): Glyph {
@@ -118,57 +117,20 @@ function pushInto(map: Map<string, Task[]>, key: string, task: Task) {
   }
 }
 
-function inc(map: Map<string, number>, key: string) {
-  map.set(key, (map.get(key) ?? 0) + 1)
-}
-
-const STATUS_ORDER = ["Overdue", "Todo", "Scheduled", "Completed", "Missed"]
-const SOURCE_ORDER = ["Notion", "Canvas", "Gmail", "Apple Reminders", "Apple Calendar", "JARVIS"]
-
 // Only the Status view collapses Completed/Missed by default; a free-form course or
 // source that happens to be named "Completed" stays expanded.
 function defaultCollapsed(groupBy: GroupBy, key: string): boolean {
   return groupBy === "status" && (key === "Completed" || key === "Missed")
 }
 
-type SortBy = "due" | "priority" | "title"
-
-const SORT_OPTIONS: { id: SortBy; label: string }[] = [
-  { id: "due", label: "Due date" },
-  { id: "priority", label: "Priority" },
-  { id: "title", label: "Name" },
-]
-
-const PRIORITY_RANK: Record<string, number> = { high: 0, medium: 1, low: 2 }
-
-// Finished work sinks below active work in every sort, so missed/completed items
-// never crowd the top of a group (that was the "why is missed at the front?" bug).
-function activityRank(task: Task): number {
-  if (task.status === "completed") return 1
-  if (task.status === "missed") return 2
-  return 0
-}
-
-function makeComparator(sortBy: SortBy): (left: Task, right: Task) => number {
-  return (left, right) => {
-    const rank = activityRank(left) - activityRank(right)
-    if (rank !== 0) return rank
-    if (sortBy === "priority") {
-      const byPriority = (PRIORITY_RANK[left.priority] ?? 1) - (PRIORITY_RANK[right.priority] ?? 1)
-      if (byPriority !== 0) return byPriority
-    } else if (sortBy === "title") {
-      return left.title.localeCompare(right.title)
-    }
-    const byDeadline = compareByDeadline(left, right)
-    if (byDeadline !== 0) return byDeadline
-    return left.title.localeCompare(right.title)
-  }
-}
-
 type Group = { key: string; tasks: Task[] }
 
-function buildGroups(tasks: Task[], groupBy: GroupBy, nowMs: number, sortBy: SortBy): Group[] {
-  const comparator = makeComparator(sortBy)
+function buildGroups(
+  tasks: Task[],
+  groupBy: GroupBy,
+  nowMs: number,
+  comparator: (left: Task, right: Task) => number,
+): Group[] {
   const map = new Map<string, Task[]>()
 
   if (groupBy === "course") {
@@ -180,29 +142,14 @@ function buildGroups(tasks: Task[], groupBy: GroupBy, nowMs: number, sortBy: Sor
     return entries.map(([key, groupTasks]) => ({ key, tasks: groupTasks.slice().sort(comparator) }))
   }
 
-  const labelOf = groupBy === "status" ? (t: Task) => statusLabel(t, nowMs) : taskSourceLabel
-  const order = groupBy === "status" ? STATUS_ORDER : SOURCE_ORDER
+  const labelOf = groupBy === "status" ? (t: Task) => taskStatusLabel(t, nowMs) : taskSourceLabel
+  const order = groupBy === "status" ? TASK_STATUS_ORDER : TASK_SOURCE_ORDER
   for (const task of tasks) pushInto(map, labelOf(task), task)
   const ordered = [
     ...order.filter((label) => map.has(label)),
     ...[...map.keys()].filter((label) => !order.includes(label)).sort(),
   ]
   return ordered.map((key) => ({ key, tasks: (map.get(key) as Task[]).slice().sort(comparator) }))
-}
-
-// ── Facet filtering ──────────────────────────────────────────────────────────
-// Filters narrow which tasks reach the grouped/searched view (Notion-style: pick
-// values per facet, results must match every active facet). Empty facet = no
-// constraint. Course/source/status are the three facets the data reliably carries.
-type Filters = { courses: string[]; statuses: string[]; sources: string[] }
-
-const EMPTY_FILTERS: Filters = { courses: [], statuses: [], sources: [] }
-
-function matchesFilters(task: Task, filters: Filters, nowMs: number): boolean {
-  if (filters.courses.length > 0 && !filters.courses.includes(courseKey(task))) return false
-  if (filters.statuses.length > 0 && !filters.statuses.includes(statusLabel(task, nowMs))) return false
-  if (filters.sources.length > 0 && !filters.sources.includes(taskSourceLabel(task))) return false
-  return true
 }
 
 function Segmented<T extends string>({
@@ -230,86 +177,6 @@ function Segmented<T extends string>({
         </button>
       ))}
     </div>
-  )
-}
-
-// A single facet dropdown: a checkbox list of values + counts, with the active
-// count surfaced on the trigger so the bar reads as a live filter state.
-function FacetMenu({
-  label,
-  Icon,
-  options,
-  order,
-  selected,
-  onToggle,
-}: {
-  label: string
-  Icon: LucideIcon
-  options: Map<string, number>
-  order?: string[]
-  selected: string[]
-  onToggle: (value: string) => void
-}) {
-  const count = selected.length
-  const entries = [...options.entries()].sort((a, b) => {
-    if (order) {
-      const ai = order.indexOf(a[0])
-      const bi = order.indexOf(b[0])
-      if (ai !== -1 || bi !== -1) return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi)
-    }
-    return b[1] - a[1] || a[0].localeCompare(b[0])
-  })
-
-  return (
-    <Popover>
-      <PopoverTrigger asChild>
-        <button
-          type="button"
-          className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-[11.5px] font-medium transition-colors ${
-            count > 0
-              ? "border-copper/40 bg-copper-soft text-copper"
-              : "border-rule text-muted-foreground hover:text-foreground"
-          }`}
-        >
-          <Icon className="h-3 w-3" aria-hidden="true" />
-          {label}
-          {count > 0 ? <span className="num">· {count}</span> : null}
-          <ChevronDown className="h-3 w-3 opacity-70" aria-hidden="true" />
-        </button>
-      </PopoverTrigger>
-      <PopoverContent align="start" className="w-60 p-1.5">
-        {entries.length === 0 ? (
-          <p className="px-2 py-1.5 text-[11.5px] text-muted-foreground">Nothing to filter.</p>
-        ) : (
-          <ul className="max-h-72 overflow-auto">
-            {entries.map(([value, n]) => {
-              const active = selected.includes(value)
-              return (
-                <li key={value}>
-                  <button
-                    type="button"
-                    onClick={() => onToggle(value)}
-                    className="flex w-full items-center justify-between gap-2 rounded-sm px-2 py-1.5 text-left transition-colors hover:bg-muted/40"
-                  >
-                    <span className="flex min-w-0 items-center gap-2">
-                      <span
-                        className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-[4px] border transition-colors ${
-                          active ? "border-copper bg-copper text-primary-foreground" : "border-rule-strong"
-                        }`}
-                      >
-                        {active ? <Check className="h-2.5 w-2.5" strokeWidth={3} /> : null}
-                      </span>
-                      <span className="truncate text-[12px] text-foreground">{value}</span>
-                    </span>
-                    <span className="num shrink-0 text-[10.5px] text-muted-foreground">{n}</span>
-                  </button>
-                </li>
-              )
-            })}
-          </ul>
-        )}
-      </PopoverContent>
-    </Popover>
   )
 }
 
@@ -345,8 +212,8 @@ export function TaskPane({
 }) {
   const [query, setQuery] = useState("")
   const [groupBy, setGroupBy] = useState<GroupBy>("source")
-  const [sortBy, setSortBy] = useState<SortBy>("due")
-  const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS)
+  const [sorts, setSorts] = useState<SortRule[]>(DEFAULT_SORTS)
+  const [filter, setFilter] = useState<FilterState>(EMPTY_FILTER)
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
   // Rows with a delete in flight, so the click reads as acknowledged across the
   // DELETE + dashboard-reload round-trip instead of sitting there inert.
@@ -357,40 +224,40 @@ export function TaskPane({
   const nowMs = useMemo(() => Date.now(), [tasks])
   const isSearching = query.trim().length > 0
 
-  // Facet options come from the full task set so the menus stay stable as filters
-  // narrow the visible list (you can always widen back out).
-  const facetOptions = useMemo(() => {
-    const courses = new Map<string, number>()
-    const statuses = new Map<string, number>()
-    const sources = new Map<string, number>()
+  // Available values for the select-property filter editors (Category is data-
+  // derived; Status/Source/Priority use the canonical order, filtered to present).
+  const facetValues = useMemo(() => {
+    const category = new Set<string>()
+    const source = new Set<string>()
+    const priority = new Set<string>()
     for (const task of tasks) {
-      inc(courses, courseKey(task))
-      inc(statuses, statusLabel(task, nowMs))
-      inc(sources, taskSourceLabel(task))
+      if (task.category) category.add(task.category)
+      source.add(taskSourceLabel(task))
+      priority.add(priorityLabel(task.priority))
     }
-    return { courses, statuses, sources }
-  }, [tasks, nowMs])
+    return {
+      category: [...category].sort(),
+      source: TASK_SOURCE_ORDER.filter((value) => source.has(value)),
+      priority: TASK_PRIORITY_ORDER.filter((value) => priority.has(value)),
+    }
+  }, [tasks])
 
-  const activeFilterCount = filters.courses.length + filters.statuses.length + filters.sources.length
+  const optionsFor = (key: FilterPropertyKey): string[] => {
+    if (key === "category") return facetValues.category
+    if (key === "source") return facetValues.source
+    if (key === "priority") return facetValues.priority
+    if (key === "status") return TASK_STATUS_ORDER
+    return []
+  }
 
+  const comparator = useMemo(() => makeSortComparator(sorts, nowMs), [sorts, nowMs])
   const filteredTasks = useMemo(
-    () => tasks.filter((task) => matchesFilters(task, filters, nowMs)),
-    [tasks, filters, nowMs],
+    () => tasks.filter((task) => evaluateFilter(filter, task, nowMs)),
+    [tasks, filter, nowMs],
   )
-
-  const groups = useMemo(() => buildGroups(filteredTasks, groupBy, nowMs, sortBy), [filteredTasks, groupBy, nowMs, sortBy])
+  const groups = useMemo(() => buildGroups(filteredTasks, groupBy, nowMs, comparator), [filteredTasks, groupBy, nowMs, comparator])
   // Pre-sort so equal-relevance search ties fall back to the chosen ordering.
-  const results = useMemo(
-    () => searchTasks([...filteredTasks].sort(makeComparator(sortBy)), query),
-    [filteredTasks, query, sortBy],
-  )
-
-  const toggleFacet = (facet: keyof Filters, value: string) =>
-    setFilters((current) => {
-      const values = current[facet]
-      const next = values.includes(value) ? values.filter((v) => v !== value) : [...values, value]
-      return { ...current, [facet]: next }
-    })
+  const results = useMemo(() => searchTasks([...filteredTasks].sort(comparator), query), [filteredTasks, comparator, query])
 
   // Collapse state is namespaced per view so a course named "Completed" doesn't
   // inherit the Status view's collapse, and views don't cross-contaminate.
@@ -419,8 +286,6 @@ export function TaskPane({
     try {
       await onDeleteTask(taskId)
     } finally {
-      // On success the row is already gone from `tasks`; on failure it stays and
-      // un-dims so the inline error is actionable. Either way, clear the flag.
       setDeletingIds((current) => {
         const next = new Set(current)
         next.delete(taskId)
@@ -512,9 +377,7 @@ export function TaskPane({
               </Chip>
             ) : null}
             {task.category ? <Chip className="border-rule bg-muted/40 text-muted-foreground">{task.category}</Chip> : null}
-            <Chip className={PRIORITY_CHIP[task.priority] ?? PRIORITY_CHIP.medium}>
-              {task.priority[0].toUpperCase() + task.priority.slice(1)}
-            </Chip>
+            <Chip className={PRIORITY_CHIP[task.priority] ?? PRIORITY_CHIP.medium}>{priorityLabel(task.priority)}</Chip>
             {extraTags.map((tag) => (
               <Chip key={tag} className="border-rule bg-muted/20 text-muted-foreground">
                 {tag}
@@ -590,55 +453,15 @@ export function TaskPane({
                   <span className="eyebrow">Group by</span>
                   <Segmented options={GROUP_OPTIONS} value={groupBy} onChange={setGroupBy} />
                 </div>
-                <div className="flex items-center gap-2.5">
-                  <span className="eyebrow">Sort</span>
-                  <Segmented options={SORT_OPTIONS} value={sortBy} onChange={setSortBy} />
-                </div>
+                <SortControls sorts={sorts} onChange={setSorts} />
               </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="inline-flex items-center gap-1.5 text-muted-foreground">
-                  <ListFilter className="h-3.5 w-3.5" aria-hidden="true" />
-                  <span className="eyebrow">Filter</span>
-                </span>
-                <FacetMenu
-                  label="Course"
-                  Icon={GraduationCap}
-                  options={facetOptions.courses}
-                  selected={filters.courses}
-                  onToggle={(value) => toggleFacet("courses", value)}
-                />
-                <FacetMenu
-                  label="Status"
-                  Icon={Circle}
-                  options={facetOptions.statuses}
-                  order={STATUS_ORDER}
-                  selected={filters.statuses}
-                  onToggle={(value) => toggleFacet("statuses", value)}
-                />
-                <FacetMenu
-                  label="Source"
-                  Icon={Sparkles}
-                  options={facetOptions.sources}
-                  order={SOURCE_ORDER}
-                  selected={filters.sources}
-                  onToggle={(value) => toggleFacet("sources", value)}
-                />
-                {activeFilterCount > 0 ? (
-                  <button
-                    type="button"
-                    onClick={() => setFilters(EMPTY_FILTERS)}
-                    className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11.5px] text-muted-foreground transition-colors hover:text-foreground"
-                  >
-                    <X className="h-3 w-3" /> Clear
-                  </button>
-                ) : null}
-              </div>
+              <FilterControls state={filter} onChange={setFilter} optionsFor={optionsFor} />
             </div>
 
             <div className="flex flex-col gap-6">
               {groups.length === 0 ? (
                 <p className="px-2 text-[12.5px] text-muted-foreground">
-                  {activeFilterCount > 0 ? "No tasks match these filters." : "No tasks yet."}
+                  {filter.rules.length > 0 ? "No tasks match these filters." : "No tasks yet."}
                 </p>
               ) : (
                 groups.map((group) => {
