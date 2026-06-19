@@ -62,6 +62,7 @@ function makeCtx(overrides: Partial<JarvisBrainContext> & { intents?: Record<str
     confirms: [] as Array<{ action: string; sourceLine: string }>,
     deletes: [] as string[][],
   }
+  const claimed = new Set<string>()
   const ctx: JarvisBrainContext = {
     classifyIntent: async (line) => overrides.intents?.[line] ?? { kind: "answer" },
     answer: async (line) => {
@@ -79,6 +80,14 @@ function makeCtx(overrides: Partial<JarvisBrainContext> & { intents?: Record<str
     deleteLines: async (match) => {
       calls.deletes.push(match)
     },
+    // default: claim each normalized line once (true first time, false after) — models
+    // the windowed claim for the dedup tests.
+    claimLine: overrides.claimLine ?? (async (line) => {
+      const key = line.replace(/\s+/g, " ").trim()
+      if (!key || claimed.has(key)) return false
+      claimed.add(key)
+      return true
+    }),
   }
   return { ctx, calls }
 }
@@ -153,5 +162,29 @@ describe("runBrainOnCapture", () => {
     expect(calls.answered).toEqual(["check off the MLM work"]) // deferred action ran now
     expect(calls.appended).toEqual([{ line: "📝 did: check off the MLM work", parentText: undefined }])
     expect(calls.deletes).toEqual([["⚠️ Confirm: mark it done? (#tok1)", "check off the MLM work"]])
+  })
+
+  it("does not answer a line that the claim rejects (idempotency gate)", async () => {
+    const { ctx, calls } = makeCtx({ claimLine: async () => false })
+    const result = await runBrainOnCapture(ctx, { currentUserLines: ["already answered"], previousUserLines: [], ackedTokens: [] })
+    expect(result.answered).toEqual([])
+    expect(calls.answered).toEqual([])
+  })
+
+  it("answers a line only once across two overlapping captures sharing a baseline", async () => {
+    const { ctx, calls } = makeCtx()
+    const input = { currentUserLines: ["what's due"], previousUserLines: [], ackedTokens: [] }
+    await runBrainOnCapture(ctx, input)
+    await runBrainOnCapture(ctx, input) // same stale baseline — the race the claim closes
+    expect(calls.answered).toEqual(["what's due"]) // exactly once
+  })
+
+  it("gates the confirm branch on the claim too", async () => {
+    const { ctx, calls } = makeCtx({
+      intents: { "add task X": { kind: "create_task", title: "X", priority: "medium" } },
+      claimLine: async () => false,
+    })
+    await runBrainOnCapture(ctx, { currentUserLines: ["add task X"], previousUserLines: [], ackedTokens: [] })
+    expect(calls.confirms).toEqual([])
   })
 })

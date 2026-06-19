@@ -110,10 +110,15 @@ function cleanContactName(raw: string): string {
 export function parseReadMessages(message: string): string | null {
   const normalized = normalizeAssistantCommand(message)
   const patterns = [
-    /\b(?:read|show|pull up|see|check|look at|find|search)\b[^.?!]*\b(?:messages?|texts?|imessages?|conversations?|threads?|chats?|dms?)\b\s+(?:with|from|to)\s+(?<name>.+)$/i,
-    /^(?:what did|what'd|what has|what's)\s+(?<name>.+?)\s+(?:say|said|text|texted|message|messaged|tell|told|send|sent)\b/i,
+    // verb-led: read/show/pull up/access/list out/give me/get me ... messages|texts|... with|from X
+    // (run-up class excludes only . and ! so a mid-sentence "?" — e.g. "my imessages? if so,
+    // list out messages from Alan" — doesn't sever the verb from the noun; name stops at .?!)
+    /\b(?:read|show(?:\s+me)?|pull up|see|check|look at|find|search|access|list(?:\s+out)?|give me|get me|grab|fetch)\b[^.!]*\b(?:messages?|texts?|imessages?|conversations?|threads?|chats?|dms?)\b\s+(?:with|from)\s+(?<name>[^.?!]+)/i,
+    /^(?:what did|what'd|what has|what's)\s+(?<name>.+?)\s+(?:say|said|text|texted|message|messaged|tell|told|send|sent|been saying|been texting)\b/i,
     /^(?:messages?|texts?|imessages?|conversations?|threads?|chats?)\s+(?:with|from)\s+(?<name>.+)$/i,
     /\bdid\s+(?<name>(?!you\b|i\b|we\b|they\b)[a-z].+?)\s+(?:say|text|message|mention|send)\b/i,
+    // "any|new ... messages|texts|word from X"
+    /\b(?:any|anything|new)\b[^.!]*\b(?:messages?|texts?|imessages?|word)\b\s+(?:with|from)\s+(?<name>[^.?!]+)/i,
   ]
   for (const pattern of patterns) {
     const name = normalized.match(pattern)?.groups?.name

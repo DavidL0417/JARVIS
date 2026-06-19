@@ -85,6 +85,13 @@ describe("secretary orchestrator", () => {
     await expect(
       classifySecretaryIntent({ ...baseInput, message: "Can you read my messages with Dani?" }),
     ).resolves.toMatchObject({ kind: "read_messages", contactQuery: "Dani" })
+
+    await expect(
+      classifySecretaryIntent({
+        ...baseInput,
+        message: "Can you access my imessages? if so, list out a couple messages from Alan.",
+      }),
+    ).resolves.toMatchObject({ kind: "read_messages", contactQuery: "Alan" })
   })
 })
 
@@ -94,11 +101,21 @@ describe("parseReadMessages", () => {
     expect(parseReadMessages("read my messages with Dani Liu")).toBe("Dani Liu")
     expect(parseReadMessages("texts from Mom")).toBe("Mom")
     expect(parseReadMessages("pull up my conversation with Ana")).toBe("Ana")
+    // widened phrasings (access/list out/give me, mid-sentence "?", been saying, any new)
+    expect(parseReadMessages("Can you access my imessages? if so, list out a couple messages from Alan.")).toBe("Alan")
+    expect(parseReadMessages("give me a couple texts from Sarah")).toBe("Sarah")
+    expect(parseReadMessages("access my messages from Alan")).toBe("Alan")
+    expect(parseReadMessages("what's Alan been saying")).toBe("Alan")
+    expect(parseReadMessages("any new texts from Sarah")).toBe("Sarah")
   })
 
   it("ignores requests that are not about reading a person's messages", () => {
     expect(parseReadMessages("what did I accomplish today")).toBeNull()
     expect(parseReadMessages("add task to text Alan")).toBeNull()
     expect(parseReadMessages("read me the news")).toBeNull()
+    // send phrasings (no read verb / no with-from) must NOT be read-messages
+    expect(parseReadMessages("message Alan about the deck")).toBeNull()
+    expect(parseReadMessages("send a message to Alan")).toBeNull()
+    expect(parseReadMessages("text Alan that I'm running late")).toBeNull()
   })
 })
