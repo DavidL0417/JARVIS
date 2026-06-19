@@ -149,16 +149,23 @@ def write_state(path: Path, state: dict[str, Any]) -> None:
 
 
 def node_text(node: dict[str, Any]) -> str:
-    """Visible text of a single content node (list/paragraph/heading)."""
+    """Visible text of a single content node. Handles a paragraph/heading directly
+    (David's typed lines are paragraphs) AND a list node via its paragraph child
+    (bullets/tasks) — so delete_lines can match either."""
     def inline(n: dict[str, Any]) -> str:
         if n.get("type") == "text":
             return n.get("text", "")
         return "".join(inline(c) for c in n.get("content") or [])
-    parts: list[str] = []
-    for child in node.get("content") or []:
-        if child.get("type") == "paragraph":
-            parts.append(inline(child))
-    return " ".join(p for p in parts if p).strip()
+
+    node_type = node.get("type")
+    if node_type in ("paragraph", "heading"):
+        return inline(node).strip()
+    if node_type == "list":
+        for child in node.get("content") or []:
+            if child.get("type") == "paragraph":
+                return inline(child).strip()
+        return ""
+    return inline(node).strip()
 
 
 # --------------------------------------------------------------------------- #
