@@ -168,6 +168,21 @@ def node_text(node: dict[str, Any]) -> str:
     return inline(node).strip()
 
 
+def _find_list_node(nodes: list[dict[str, Any]], text: str) -> dict[str, Any] | None:
+    """Recursively find the list (bullet/task) node whose visible text == text, so a
+    reply can be nested under the request it answers. Searches nested lists too."""
+    for node in nodes:
+        if node.get("type") != "list":
+            continue
+        if node_text(node).strip() == text:
+            return node
+        children = [c for c in node.get("content") or [] if c.get("type") == "list"]
+        found = _find_list_node(children, text)
+        if found is not None:
+            return found
+    return None
+
+
 # --------------------------------------------------------------------------- #
 # CAPTURE (you → JARVIS) — non-destructive read + diff + upload
 # --------------------------------------------------------------------------- #
@@ -390,8 +405,15 @@ def apply_command(cnb: Any, rne: Any, command: dict[str, Any]) -> dict[str, Any]
         content = list(document.get("content") or [])
         before = len(content)
         if kind == "append":
+            parent_text = (payload.get("parentText") or "").strip()
+            parent = _find_list_node(content, parent_text) if parent_text else None
             for line in payload.get("lines", []):
-                content.append(cnb._list_node(None, line))
+                node = cnb._list_node(None, line)
+                if parent is not None:
+                    # nest as a sub-bullet under the matching line (thread the reply)
+                    parent.setdefault("content", []).append(node)
+                else:
+                    content.append(node)
         elif kind == "confirm":
             content.append(cnb._list_node("[ ]", payload["confirmText"]))
         elif kind == "delete_lines":

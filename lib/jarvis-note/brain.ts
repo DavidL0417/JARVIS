@@ -90,8 +90,9 @@ export function diffNewUserLines(current: string[], previous: string[]): string[
 export interface JarvisBrainContext {
   classifyIntent(line: string): Promise<SecretaryIntent>
   answer(line: string): Promise<{ reply: string; ok: boolean }>
-  // Append one ready-to-write line to the note (already icon-tagged by the caller).
-  appendLine(line: string): Promise<void>
+  // Append one ready-to-write line (already icon-tagged). When parentText is given,
+  // the line nests as a sub-bullet under the matching line (threads the reply).
+  appendLine(line: string, parentText?: string): Promise<void>
   enqueueConfirm(action: string, sourceLine: string): Promise<void>
   hasOpenConfirm(sourceLine: string): Promise<boolean>
   ackedConfirms(tokens: string[]): Promise<Array<{ sourceLine: string; confirmText: string }>>
@@ -134,7 +135,7 @@ export async function runBrainOnCapture(
       result.confirmed.push(line)
     } else {
       const { reply } = await ctx.answer(line)
-      await ctx.appendLine(replyAppendLine(reply))
+      await ctx.appendLine(replyAppendLine(reply), line) // thread the reply under the question
       result.answered.push(line)
     }
   }
@@ -185,8 +186,12 @@ export function createJarvisBrainContext(adminClient: AdminClient, userId: strin
       return { reply: turn.reply, ok: turn.ok }
     },
 
-    appendLine: async (line) => {
-      await enqueueCommand(adminClient, userId, { kind: "append", payload: { lines: [line] } })
+    appendLine: async (line, parentText) => {
+      const payload: Record<string, unknown> = { lines: [line] }
+      if (parentText) {
+        payload.parentText = parentText
+      }
+      await enqueueCommand(adminClient, userId, { kind: "append", payload })
     },
 
     enqueueConfirm: async (action, sourceLine) => {
