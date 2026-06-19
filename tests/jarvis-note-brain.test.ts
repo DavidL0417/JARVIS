@@ -58,7 +58,7 @@ describe("diffNewUserLines / userLinesFromItems", () => {
 function makeCtx(overrides: Partial<JarvisBrainContext> & { intents?: Record<string, SecretaryIntent> } = {}) {
   const calls = {
     answered: [] as string[],
-    appended: [] as string[],
+    appended: [] as Array<{ line: string; parentText?: string }>,
     confirms: [] as Array<{ action: string; sourceLine: string }>,
     deletes: [] as string[][],
   }
@@ -68,8 +68,8 @@ function makeCtx(overrides: Partial<JarvisBrainContext> & { intents?: Record<str
       calls.answered.push(line)
       return { reply: `did: ${line}`, ok: true }
     },
-    appendLine: async (line) => {
-      calls.appended.push(line)
+    appendLine: async (line, parentText) => {
+      calls.appended.push({ line, parentText })
     },
     enqueueConfirm: async (action, sourceLine) => {
       calls.confirms.push({ action, sourceLine })
@@ -94,7 +94,8 @@ describe("runBrainOnCapture", () => {
     expect(result.answered).toEqual(["what's due tomorrow"])
     expect(result.confirmed).toEqual([])
     expect(calls.answered).toEqual(["what's due tomorrow"])
-    expect(calls.appended).toEqual(["📝 did: what's due tomorrow"])
+    // the reply threads UNDER the question
+    expect(calls.appended).toEqual([{ line: "📝 did: what's due tomorrow", parentText: "what's due tomorrow" }])
   })
 
   it("gates a mutating line behind a confirm — no action taken yet", async () => {
@@ -150,7 +151,7 @@ describe("runBrainOnCapture", () => {
     })
     expect(result.executed).toEqual(["check off the MLM work"])
     expect(calls.answered).toEqual(["check off the MLM work"]) // deferred action ran now
-    expect(calls.appended).toEqual(["📝 did: check off the MLM work"])
+    expect(calls.appended).toEqual([{ line: "📝 did: check off the MLM work", parentText: undefined }])
     expect(calls.deletes).toEqual([["⚠️ Confirm: mark it done? (#tok1)", "check off the MLM work"]])
   })
 })

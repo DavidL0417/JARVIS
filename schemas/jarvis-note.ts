@@ -10,9 +10,13 @@ export const jarvisNoteCommandKindSchema = z.enum(["append", "confirm", "delete_
 export type JarvisNoteCommandKind = z.infer<typeof jarvisNoteCommandKindSchema>
 
 // 'append' — add icon-tagged line(s) to the note, verbatim (each must already
-// start with a canonical status icon so it reads as agent-authored).
+// start with a canonical status icon so it reads as agent-authored). When
+// parentText is set, the line(s) nest as sub-bullet(s) UNDER the (bullet/task) line
+// whose text matches it — threading a reply beneath the request it answers — and
+// fall back to top-level if no such line is found.
 export const jarvisNoteAppendPayloadSchema = z.object({
   lines: z.array(z.string().min(1).max(2000)).min(1).max(20),
+  parentText: z.string().min(1).max(2000).optional(),
 })
 
 // 'confirm' — render "- [ ] ⚠️ Confirm: <action>? (#<ackToken>)". The cloud mints
