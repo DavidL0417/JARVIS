@@ -1,5 +1,11 @@
 import { NextResponse } from "next/server"
 
+import {
+  createJarvisBrainContext,
+  getPreviousCaptureUserLines,
+  runBrainOnCapture,
+  userLinesFromItems,
+} from "@/lib/jarvis-note/brain"
 import { recordCapture } from "@/lib/jarvis-note/commands"
 import { requireRaycastOperator } from "@/lib/raycast/operator-auth"
 import { jarvisNoteCaptureRequestSchema } from "@/schemas/jarvis-note"
@@ -24,8 +30,25 @@ export async function POST(request: Request) {
   }
 
   try {
+    // Baseline for the new-line diff — read BEFORE this capture is inserted.
+    const previousUserLines = await getPreviousCaptureUserLines(auth.adminClient, auth.userId)
     const result = await recordCapture(auth.adminClient, auth.userId, parsed.data)
-    return NextResponse.json({ success: true, ...result })
+
+    // Run the brain on the capture (interpret David's new lines + handle acks),
+    // best-effort: a brain failure must never fail the capture record itself.
+    let brain: unknown = null
+    try {
+      const ctx = createJarvisBrainContext(auth.adminClient, auth.userId)
+      brain = await runBrainOnCapture(ctx, {
+        currentUserLines: userLinesFromItems(parsed.data.items),
+        previousUserLines,
+        ackedTokens: result.newlyAcked,
+      })
+    } catch (brainError) {
+      brain = { error: brainError instanceof Error ? brainError.message : "brain failed" }
+    }
+
+    return NextResponse.json({ success: true, ...result, brain })
   } catch (error) {
     const message = error instanceof Error ? error.message : "JARVIS note capture failed."
     return NextResponse.json({ error: message }, { status: 500 })
