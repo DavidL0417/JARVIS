@@ -1,4 +1,4 @@
-import { randomBytes } from "node:crypto"
+import { createHash, randomBytes } from "node:crypto"
 
 import { createSupabaseAdminClient } from "@/lib/supabase/server"
 import {
@@ -32,6 +32,48 @@ export function mintAckToken(): string {
 // keep the two in sync (it is the handshake contract).
 export function renderConfirmText(action: string, ackToken: string): string {
   return `⚠️ Confirm: ${action.trim()}? (#${ackToken})`
+}
+
+// Default dedup window: long enough to absorb overlapping/racing captures (the
+// ambient watcher firing on JARVIS's own write, on re-open, or a manual capture),
+// short enough that a deliberately re-typed request after a couple minutes re-answers.
+const CLAIM_WINDOW_SECONDS = 120
+
+// Normalize so trivial whitespace differences don't re-process a line, while an actual
+// text edit hashes differently (and is intentionally treated as a new line).
+export function normalizeLineText(line: string): string {
+  return line.replace(/\s+/g, " ").trim()
+}
+
+export function hashLineText(line: string): string {
+  return createHash("sha256").update(normalizeLineText(line)).digest("hex")
+}
+
+// Windowed atomic claim for a user line (via the claim_jarvis_note_line RPC — the
+// PK + ON CONFLICT is the race-safe CAS). Returns true if THIS call won the claim
+// (process the line); false if it was already claimed within the window (skip — an
+// overlapping/racing capture handled it). Empty/whitespace lines never claim. The
+// window also self-heals: a line whose processing threw is re-claimable after it.
+export async function claimLine(
+  adminClient: AdminClient,
+  userId: string,
+  line: string,
+  windowSeconds: number = CLAIM_WINDOW_SECONDS,
+): Promise<boolean> {
+  const normalized = normalizeLineText(line)
+  if (!normalized) {
+    return false
+  }
+  const { data, error } = await adminClient.rpc("claim_jarvis_note_line", {
+    p_user_id: userId,
+    p_line_hash: hashLineText(normalized),
+    p_line_text: normalized,
+    p_window_seconds: windowSeconds,
+  })
+  if (error) {
+    throw new Error(error.message)
+  }
+  return data === true
 }
 
 // Pull ack tokens out of ticked (checked) task lines in a capture. Defense in depth:

@@ -1,13 +1,16 @@
 import { describe, expect, it } from "vitest"
 
 import {
+  claimLine,
   claimNextCommand,
   completeCommand,
   enqueueCommand,
   enqueueConfirm,
   extractAckTokens,
+  hashLineText,
   mapClaimedCommand,
   mintAckToken,
+  normalizeLineText,
   recordCapture,
   renderConfirmText,
   validateCommandPayload,
@@ -233,5 +236,37 @@ describe("recordCapture", () => {
       expect(u.table).toBe("jarvis_note_commands")
       expect(u.filters).toMatchObject({ user_id: "user-1", requires_ack: true, acked_at: null })
     }
+  })
+})
+
+describe("normalizeLineText / hashLineText", () => {
+  it("collapses whitespace so trivial diffs hash the same; real edits differ", () => {
+    expect(normalizeLineText("  hello   world ")).toBe("hello world")
+    expect(hashLineText("  hello   world ")).toBe(hashLineText("hello world"))
+    expect(hashLineText("hello world")).not.toBe(hashLineText("hello worlds"))
+  })
+})
+
+describe("claimLine", () => {
+  it("claims via the windowed RPC and returns true when the RPC grants it", async () => {
+    const calls: Array<ChainState | { rpc: string; args: Record<string, unknown> }> = []
+    const admin = makeAdmin({ calls, rpcResolve: () => ({ data: true, error: null }) })
+    expect(await claimLine(admin, "user-1", "  what's due?  ")).toBe(true)
+    const rpc = calls.find((c): c is { rpc: string; args: Record<string, unknown> } => "rpc" in c)!
+    expect(rpc.rpc).toBe("claim_jarvis_note_line")
+    expect(rpc.args).toMatchObject({ p_user_id: "user-1", p_line_text: "what's due?" })
+    expect(rpc.args.p_line_hash).toBe(hashLineText("what's due?"))
+  })
+
+  it("returns false when the RPC says it was claimed within the window", async () => {
+    const admin = makeAdmin({ calls: [], rpcResolve: () => ({ data: false, error: null }) })
+    expect(await claimLine(admin, "user-1", "dup line")).toBe(false)
+  })
+
+  it("never claims an empty/whitespace line and does not call the RPC", async () => {
+    const calls: Array<ChainState | { rpc: string; args: Record<string, unknown> }> = []
+    const admin = makeAdmin({ calls })
+    expect(await claimLine(admin, "user-1", "   ")).toBe(false)
+    expect(calls).toHaveLength(0)
   })
 })

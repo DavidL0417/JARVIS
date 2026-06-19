@@ -1,6 +1,6 @@
 import { classifySecretaryIntent, type SecretaryIntent } from "@/lib/assistant/orchestrator"
 import { runSecretaryTurn } from "@/lib/assistant/secretary"
-import { enqueueCommand, mintAckToken, renderConfirmText } from "@/lib/jarvis-note/commands"
+import { claimLine, enqueueCommand, mintAckToken, renderConfirmText } from "@/lib/jarvis-note/commands"
 import { createSupabaseAdminClient } from "@/lib/supabase/server"
 import type { AssistantConversationEntry } from "@/types"
 
@@ -97,6 +97,10 @@ export interface JarvisBrainContext {
   hasOpenConfirm(sourceLine: string): Promise<boolean>
   ackedConfirms(tokens: string[]): Promise<Array<{ sourceLine: string; confirmText: string }>>
   deleteLines(match: string[]): Promise<void>
+  // Windowed atomic claim: true = this capture won the right to process the line;
+  // false = an overlapping/racing capture already claimed it (skip). The idempotency
+  // gate that stops duplicate replies when captures overlap.
+  claimLine(line: string): Promise<boolean>
 }
 
 export interface BrainResult {
@@ -126,6 +130,14 @@ export async function runBrainOnCapture(
   // 2) New lines: classify, then answer directly or gate behind a confirm.
   const newLines = diffNewUserLines(input.currentUserLines, input.previousUserLines).slice(0, MAX_LINES_PER_CAPTURE)
   for (const line of newLines) {
+    // Idempotency gate: only ONE capture ever proceeds past here for a given line
+    // (within the dedup window). diffNewUserLines is the cheap candidate filter (and
+    // prevents a first-capture backlog burst); the claim is the race-safe gate that
+    // stops duplicate replies when captures overlap. Claim BEFORE classify so a losing
+    // race wastes no LLM call.
+    if (!(await ctx.claimLine(line))) {
+      continue
+    }
     const intent = await ctx.classifyIntent(line)
     if (isMutatingIntent(intent)) {
       if (await ctx.hasOpenConfirm(line)) {
@@ -246,5 +258,7 @@ export function createJarvisBrainContext(adminClient: AdminClient, userId: strin
     deleteLines: async (match) => {
       await enqueueCommand(adminClient, userId, { kind: "delete_lines", payload: { match } })
     },
+
+    claimLine: (line) => claimLine(adminClient, userId, line),
   }
 }
