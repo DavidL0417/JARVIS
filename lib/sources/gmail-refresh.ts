@@ -38,7 +38,7 @@ interface GmailMessagePart {
   parts?: GmailMessagePart[]
 }
 
-interface GmailMessageResponse {
+export interface GmailMessageResponse {
   id?: string
   snippet?: string
   payload?: GmailMessagePart & {
@@ -57,7 +57,7 @@ function decodeBase64Url(value: string) {
   return Buffer.from(normalized, "base64").toString("utf8")
 }
 
-function collectTextParts(part: GmailMessagePart | undefined): string[] {
+export function collectTextParts(part: GmailMessagePart | undefined): string[] {
   if (!part) {
     return []
   }
@@ -70,7 +70,7 @@ function collectTextParts(part: GmailMessagePart | undefined): string[] {
   return [...ownText, ...(part.parts || []).flatMap(collectTextParts)]
 }
 
-function getHeader(message: GmailMessageResponse, headerName: string) {
+export function getHeader(message: GmailMessageResponse, headerName: string) {
   return message.payload?.headers?.find((header) => header.name?.toLowerCase() === headerName.toLowerCase())?.value ?? null
 }
 
@@ -78,7 +78,7 @@ function isGmailApiDisabledMessage(message: string) {
   return /gmail api has not been used|gmail\.googleapis\.com|api has not been used|it is disabled/i.test(message)
 }
 
-async function fetchGmailJson<T>(accessToken: string, url: string): Promise<T> {
+export async function fetchGmailJson<T>(accessToken: string, url: string): Promise<T> {
   const response = await fetch(url, {
     headers: {
       Authorization: `Bearer ${accessToken}`,

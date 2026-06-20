@@ -66,6 +66,18 @@ describe("secretary orchestrator", () => {
     })
   })
 
+  it("does not divert a Gmail READ/search question to the external-write path", async () => {
+    // "email" is a noun here; previously the external-write regex matched it and
+    // hijacked the message into "unsupported external write" instead of letting the
+    // agent loop search Gmail. Should fall through to a plain answer (the loop).
+    await expect(
+      classifySecretaryIntent({
+        ...baseInput,
+        message: "Search my Gmail for my most recent email",
+      }),
+    ).resolves.toMatchObject({ kind: "answer" })
+  })
+
   it("routes explicit source refresh commands without asking the model", async () => {
     await expect(
       classifySecretaryIntent({
@@ -93,6 +105,17 @@ describe("secretary orchestrator", () => {
       }),
     ).resolves.toMatchObject({ kind: "read_messages", contactQuery: "Alan" })
   })
+
+  it("does not divert email/general questions to the iMessage read fast-path", async () => {
+    // Was mis-routed to read_messages (contact "anyone"); should fall through to
+    // the agentic answer path, which can search Gmail.
+    await expect(
+      classifySecretaryIntent({
+        ...baseInput,
+        message: "Check my email — did anyone send me anything about a deadline?",
+      }),
+    ).resolves.toMatchObject({ kind: "answer" })
+  })
 })
 
 describe("parseReadMessages", () => {
@@ -107,6 +130,8 @@ describe("parseReadMessages", () => {
     expect(parseReadMessages("access my messages from Alan")).toBe("Alan")
     expect(parseReadMessages("what's Alan been saying")).toBe("Alan")
     expect(parseReadMessages("any new texts from Sarah")).toBe("Sarah")
+    // named-contact "did X verb" still resolves
+    expect(parseReadMessages("did Alan text me")).toBe("Alan")
   })
 
   it("ignores requests that are not about reading a person's messages", () => {
@@ -117,5 +142,17 @@ describe("parseReadMessages", () => {
     expect(parseReadMessages("message Alan about the deck")).toBeNull()
     expect(parseReadMessages("send a message to Alan")).toBeNull()
     expect(parseReadMessages("text Alan that I'm running late")).toBeNull()
+  })
+
+  it("does not capture indefinite pronouns or fire on email questions", () => {
+    // indefinite-pronoun subjects are never a contact
+    expect(parseReadMessages("did anyone send me anything about the deadline")).toBeNull()
+    expect(parseReadMessages("did someone text me")).toBeNull()
+    expect(parseReadMessages("what did anyone say in the meeting")).toBeNull()
+    // plainly-email questions fall through (no iMessage/text signal)
+    expect(parseReadMessages("Check my email — did anyone send me anything about a deadline?")).toBeNull()
+    expect(parseReadMessages("did Alan email me about the project")).toBeNull()
+    // real names that merely start with an excluded word are still captured
+    expect(parseReadMessages("did Ian text me")).toBe("Ian")
   })
 })
