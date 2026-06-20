@@ -6,6 +6,7 @@ import { DIGEST_DEFAULTS } from "@/lib/digest/config"
 import { buildMorningDigest } from "@/lib/digest/morning"
 import { isDigestDue, localDayKey } from "@/lib/digest/schedule"
 import { enqueueOutboxMessage } from "@/lib/imessage/outbox"
+import { deliverPendingOutbox } from "@/lib/imessage/transport/deliver"
 import { getAutomationSettings, isAutomationPaused } from "@/lib/supabase/automation-settings"
 import { createSupabaseAdminClient } from "@/lib/supabase/server"
 
@@ -99,16 +100,20 @@ export async function GET(request: Request) {
         dedupKey,
         context: composed.context,
       })
+      // Server-direct transports (Telnyx) deliver now; 'mac' leaves the row for the daemon.
+      const delivery = await deliverPendingOutbox(adminClient, operatorUserId, { limit: 5 })
       await recordAutomationRun({
         userId: operatorUserId,
         kind,
         status: "completed",
-        summary: enqueued.deduped ? "Morning digest already queued (deduped)." : "Morning digest queued for delivery.",
-        payload: { deduped: enqueued.deduped, messageId: enqueued.id },
+        summary: enqueued.deduped
+          ? "Morning digest already queued (deduped)."
+          : `Morning digest queued; ${delivery.transport} delivery sent ${delivery.sent}, failed ${delivery.failed}.`,
+        payload: { deduped: enqueued.deduped, messageId: enqueued.id, delivery },
         startedAt,
         adminClient,
       })
-      return NextResponse.json({ success: true, kind, ok: true, deduped: enqueued.deduped, messageId: enqueued.id })
+      return NextResponse.json({ success: true, kind, ok: true, deduped: enqueued.deduped, messageId: enqueued.id, delivery })
     } catch (error) {
       const message = error instanceof Error ? error.message : "Morning digest composition failed."
       await recordAutomationRun({
