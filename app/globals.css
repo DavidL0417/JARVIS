@@ -628,28 +628,30 @@ body {
   clip-path: inset(0 0 0 0);
 }
 
-/* ---------------- "What it isn't" refrain (per-line scroll fade-in) ---------------- */
+/* ---------------- "What it isn't" refrain (per-line scroll light-up) ---------------- */
 .refrain-line {
-  opacity: 0;
-  transform: translateY(16px);
-  color: oklch(0.96 0.014 70 / 0.34);
+  color: oklch(0.96 0.014 70 / 0.24);
+  transform: translateY(8px);
   transition:
-    opacity 620ms cubic-bezier(0.22, 1, 0.36, 1),
-    transform 760ms cubic-bezier(0.16, 1, 0.3, 1);
-  will-change: opacity, transform;
+    color 560ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 640ms cubic-bezier(0.16, 1, 0.3, 1),
+    text-shadow 560ms cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: color, transform;
 }
 
-.refrain[data-shown="true"] .refrain-line {
-  opacity: 1;
+/* Each line lights up as it scrolls past the trigger; sticky once lit. */
+.refrain-line[data-active="true"] {
+  color: var(--foreground);
   transform: none;
 }
 
-.refrain-line-final {
-  color: var(--foreground);
-}
-
-.refrain[data-shown="true"] .refrain-line-final {
-  text-shadow: 0 0 34px oklch(0.74 0.14 42 / 0.18);
+/* The closing line lights up in the same copper accent as the CTA "remembers". */
+.refrain-line-final[data-active="true"] {
+  color: var(--copper-bright);
+  text-shadow:
+    0 0 22px oklch(0.84 0.13 50 / 0.48),
+    0 0 48px oklch(0.74 0.14 42 / 0.32);
+  animation: cta-accent-breathe 3.6s cubic-bezier(0.42, 0, 0.58, 1) 1.2s infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -665,8 +667,11 @@ body {
   }
 
   .refrain-line {
-    opacity: 1;
     transform: none;
     transition: none;
+  }
+
+  .refrain-line-final[data-active="true"] {
+    animation: none;
   }
 }
