@@ -454,15 +454,19 @@ def _fetch_jarvis_doc(rne: Any, passphrase: str) -> tuple[dict[str, Any], dict[s
 
 
 def _write_jarvis_doc(cnb: Any, rne: Any, passphrase: str, document: dict[str, Any]) -> dict[str, Any]:
-    """LIVE write of the JARVIS note's text+document+modifiedAt (never openedAt) while
-    Raycast keeps running — NO quit/relaunch. Raycast re-reads the note from disk when
-    the operator next opens it (verified 2026-06-19: a live write was visible on open and
-    survived relaunches), so the quit→relaunch — which popped Raycast's launcher on every
-    write — is unnecessary here and is dropped. Trade-off: a live write is only at risk if
-    the note is OPEN with a stale in-memory copy AND the operator edits it before
-    reopening; worst case loses a JARVIS reply, never the operator's own text — acceptable
-    for the fire-and-forget flow. Read-back verifies at the DB level. Targets the JARVIS
-    id; held under the shared .claude-note-board.lock by the caller."""
+    """UPDATE the JARVIS note's text+document+modifiedAt (never openedAt) via
+    quit→write→relaunch + read-back verify. Targets the JARVIS id; held under the
+    shared lock by the caller.
+
+    WHY quit-relaunch and NOT a live write: the operator interacts with the note while
+    the assistant replies asynchronously. A live write is clobbered when Raycast saves
+    its STALE in-memory copy over our write — the normal pattern (operator types,
+    pauses while we capture+reply, then keeps typing or reopens → Raycast persists its
+    cache, which never had the reply → reply lost). We tried live-write (2026-06-19) and
+    it lost replies exactly this way. Quitting Raycast FLUSHES its in-memory state to
+    disk first, so our write lands on top and wins; relaunch reloads from disk so the
+    reply actually shows (no reopen needed). Cost: Raycast's launcher briefly pops
+    (backgrounded via `open -g`) — accepted for reliability."""
     import subprocess  # local: only the write path needs it
 
     text = cnb.doc_to_plaintext(document)
@@ -476,10 +480,15 @@ def _write_jarvis_doc(cnb: Any, rne: Any, passphrase: str, document: dict[str, A
         f"WHERE hex(id)='{JARVIS_NOTE_ID_HEX}';\nSELECT 'rows=' || changes();"
     )
 
+    running = cnb._raycast_running()
+    if running:
+        cnb._quit_raycast()
     proc = subprocess.run(
         [rne.sqlcipher_binary(), str(rne.DEFAULT_DB)],
         input=sql, text=True, capture_output=True, timeout=20,
     )
+    if running:
+        cnb._relaunch_raycast()
     if proc.returncode != 0 or "rows=1" not in proc.stdout:
         raise RuntimeError(f"write failed: rc={proc.returncode} out={proc.stdout!r} err={proc.stderr!r}")
 
