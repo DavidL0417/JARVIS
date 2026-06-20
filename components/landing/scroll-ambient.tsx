@@ -1,0 +1,459 @@
+"use client"
+
+import { useEffect, useRef } from "react"
+
+/**
+ * Signal Streams — the landing-page background.
+ *
+ * A single WebGL2 canvas, fixed behind the whole page, renders a GPU particle
+ * flow-field with additive copper light-trails: rivers of light that flow across
+ * the page and converge, bending and accelerating as you scroll. The whole effect
+ * is one GPU draw pass per frame (fade previous → draw segments → present), so
+ * there is NO CSS gradient/blend/blur stack to repaint — which is what made the
+ * previous version cost ~25% CPU on scroll. One passive scroll listener feeds a
+ * smoothed progress value into the sim and writes --sp for the progress bar.
+ *
+ * Falls back to the CSS gradient painted on `.scroll-ambient-canvas` when WebGL2
+ * is unavailable or the user prefers reduced motion.
+ */
+
+const MAX_PARTICLES = 12000
+const PARTICLE_DENSITY = 0.007 // particles per CSS px² (keeps visual density ~constant)
+const TRAIL_FADE = 0.93 // persistence → streaks smear into continuous rivers of light
+const BASE_ALPHA = 0.42 // bright per-streak; accumulation + bloom build glowing rivers
+const MAX_DPR = 1.25 // cap backing resolution; softer (glowier) + far cheaper than retina
+
+// Copper light added over graphite; overlaps + bloom go toward hot copper.
+const STREAM: [number, number, number] = [1.0, 0.58, 0.32]
+const GRAPHITE: [number, number, number] = [0.082, 0.075, 0.063]
+
+const QUAD_VS = `#version 300 es
+layout(location=0) in vec2 a_quad;
+out vec2 v_uv;
+void main(){ v_uv = a_quad * 0.5 + 0.5; gl_Position = vec4(a_quad, 0.0, 1.0); }`
+
+const FADE_FS = `#version 300 es
+precision highp float;
+in vec2 v_uv;
+uniform sampler2D u_tex;
+uniform float u_fade;
+out vec4 o;
+void main(){ o = texture(u_tex, v_uv) * u_fade; }`
+
+const PRESENT_FS = `#version 300 es
+precision highp float;
+in vec2 v_uv;
+uniform sampler2D u_tex;
+uniform vec3 u_bg;
+uniform vec2 u_res;
+uniform float u_seed;
+out vec4 o;
+const vec2 OFF[8] = vec2[8](
+  vec2(1.0, 0.0), vec2(-1.0, 0.0), vec2(0.0, 1.0), vec2(0.0, -1.0),
+  vec2(0.7, 0.7), vec2(-0.7, 0.7), vec2(0.7, -0.7), vec2(-0.7, -0.7));
+float hash(vec2 p){ return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
+void main(){
+  vec3 core = texture(u_tex, v_uv).rgb;
+  vec2 r1 = 5.0 / u_res;
+  vec2 r2 = 13.0 / u_res;
+  vec3 g1 = vec3(0.0);
+  vec3 g2 = vec3(0.0);
+  for (int i = 0; i < 8; i++) {
+    g1 += texture(u_tex, v_uv + OFF[i] * r1).rgb;
+    g2 += texture(u_tex, v_uv + OFF[i] * r2).rgb;
+  }
+  vec3 light = core + g1 * (0.42 / 8.0) + g2 * (0.3 / 8.0); // two-ring bloom
+  vec3 col = u_bg + light;
+  float d = distance(v_uv, vec2(0.5));
+  col *= 0.72 + 0.28 * smoothstep(1.15, 0.2, d);
+  col += (hash(v_uv * u_res + u_seed) - 0.5) * (1.0 / 255.0); // dither
+  o = vec4(col, 1.0);
+}`
+
+const SEG_VS = `#version 300 es
+layout(location=0) in vec2 a_pos;
+layout(location=1) in float a_alpha;
+uniform vec2 u_res;
+out float v_a;
+void main(){
+  vec2 c = a_pos / u_res * 2.0 - 1.0;
+  c.y = -c.y;
+  gl_Position = vec4(c, 0.0, 1.0);
+  v_a = a_alpha;
+}`
+
+const SEG_FS = `#version 300 es
+precision highp float;
+in float v_a;
+uniform vec3 u_color;
+out vec4 o;
+void main(){ o = vec4(u_color * v_a, v_a); }`
+
+export function ScrollAmbient() {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null)
+
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const root = document.documentElement
+    const disposers: Array<() => void> = []
+
+    // --- scroll progress (runs even in fallback) -> --sp + sim input ---
+    let scrollMax = 1
+    let spTarget = 0
+    const measureScroll = () => {
+      scrollMax = Math.max(1, root.scrollHeight - window.innerHeight)
+    }
+    const onScroll = () => {
+      spTarget = Math.min(1, Math.max(0, window.scrollY / scrollMax))
+      root.style.setProperty("--sp", spTarget.toFixed(4))
+    }
+    measureScroll()
+    onScroll()
+    window.addEventListener("scroll", onScroll, { passive: true })
+    disposers.push(() => window.removeEventListener("scroll", onScroll))
+
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    const gl = reduced
+      ? null
+      : canvas.getContext("webgl2", {
+          alpha: true,
+          antialias: false,
+          premultipliedAlpha: false,
+          powerPreference: "high-performance",
+        })
+
+    if (!gl) {
+      // Reduced motion or no WebGL2: keep --sp synced; CSS gradient is the bg.
+      const onResize = () => {
+        measureScroll()
+        onScroll()
+      }
+      window.addEventListener("resize", onResize)
+      disposers.push(() => window.removeEventListener("resize", onResize))
+      return () => disposers.forEach((d) => d())
+    }
+
+    // ---- GL program helpers ----
+    const compile = (type: number, srcText: string) => {
+      const s = gl.createShader(type)!
+      gl.shaderSource(s, srcText)
+      gl.compileShader(s)
+      if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
+        console.error("ambient shader:", gl.getShaderInfoLog(s))
+      }
+      return s
+    }
+    const link = (vs: string, fs: string) => {
+      const p = gl.createProgram()!
+      gl.attachShader(p, compile(gl.VERTEX_SHADER, vs))
+      gl.attachShader(p, compile(gl.FRAGMENT_SHADER, fs))
+      gl.linkProgram(p)
+      if (!gl.getProgramParameter(p, gl.LINK_STATUS)) {
+        console.error("ambient program:", gl.getProgramInfoLog(p))
+      }
+      return p
+    }
+
+    const fadeProg = link(QUAD_VS, FADE_FS)
+    const presentProg = link(QUAD_VS, PRESENT_FS)
+    const segProg = link(SEG_VS, SEG_FS)
+
+    const u = (p: WebGLProgram, n: string) => gl.getUniformLocation(p, n)
+    const fadeTex = u(fadeProg, "u_tex")
+    const fadeAmt = u(fadeProg, "u_fade")
+    const presentTex = u(presentProg, "u_tex")
+    const presentBg = u(presentProg, "u_bg")
+    const presentRes = u(presentProg, "u_res")
+    const presentSeed = u(presentProg, "u_seed")
+    const segRes = u(segProg, "u_res")
+    const segColor = u(segProg, "u_color")
+
+    // ---- geometry ----
+    const quadVAO = gl.createVertexArray()!
+    gl.bindVertexArray(quadVAO)
+    const quadBuf = gl.createBuffer()!
+    gl.bindBuffer(gl.ARRAY_BUFFER, quadBuf)
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW)
+    gl.enableVertexAttribArray(0)
+    gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0)
+
+    const segData = new Float32Array(MAX_PARTICLES * 2 * 3) // 2 verts * (x, y, a)
+    const segVAO = gl.createVertexArray()!
+    gl.bindVertexArray(segVAO)
+    const segBuf = gl.createBuffer()!
+    gl.bindBuffer(gl.ARRAY_BUFFER, segBuf)
+    gl.bufferData(gl.ARRAY_BUFFER, segData.byteLength, gl.DYNAMIC_DRAW)
+    gl.enableVertexAttribArray(0)
+    gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 12, 0)
+    gl.enableVertexAttribArray(1)
+    gl.vertexAttribPointer(1, 1, gl.FLOAT, false, 12, 8)
+    gl.bindVertexArray(null)
+
+    // ---- ping-pong trail buffers ----
+    let bw = 2
+    let bh = 2
+    type Target = { tex: WebGLTexture; fb: WebGLFramebuffer }
+    const makeTarget = (w: number, h: number): Target => {
+      const tex = gl.createTexture()!
+      gl.bindTexture(gl.TEXTURE_2D, tex)
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null)
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR)
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
+      const fb = gl.createFramebuffer()!
+      gl.bindFramebuffer(gl.FRAMEBUFFER, fb)
+      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0)
+      gl.clearColor(0, 0, 0, 0)
+      gl.clear(gl.COLOR_BUFFER_BIT)
+      return { tex, fb }
+    }
+    let srcTarget = makeTarget(bw, bh)
+    let dstTarget = makeTarget(bw, bh)
+
+    // ---- particles ----
+    const px = new Float32Array(MAX_PARTICLES)
+    const py = new Float32Array(MAX_PARTICLES)
+    const ppx = new Float32Array(MAX_PARTICLES)
+    const ppy = new Float32Array(MAX_PARTICLES)
+    const life = new Float32Array(MAX_PARTICLES)
+    const maxLife = new Float32Array(MAX_PARTICLES)
+    const weight = new Float32Array(MAX_PARTICLES)
+    let count = MAX_PARTICLES // active particles, set by area in resize()
+    let curX = -1 // smoothed light source the streaks radiate from (backing px)
+    let curY = -1
+    let tgtX = 0
+    let tgtY = 0
+    let lastNX = 0.5 // last pointer position, normalized to the viewport
+    let lastNY = 0.5
+    let hasPointer = false
+
+    const spawn = (i: number, stagger: boolean) => {
+      // Most streaks are BORN in a tight disk at the cursor so they emit FROM it;
+      // a few seed uniformly so the far field never goes fully dark.
+      if (curX >= 0 && Math.random() < 0.5) {
+        const a = Math.random() * Math.PI * 2
+        const r = Math.sqrt(Math.random()) * Math.max(bw, bh) * 0.015
+        px[i] = curX + Math.cos(a) * r
+        py[i] = curY + Math.sin(a) * r
+      } else {
+        px[i] = Math.random() * bw
+        py[i] = Math.random() * bh
+      }
+      ppx[i] = px[i]
+      ppy[i] = py[i]
+      maxLife[i] = 5 + Math.random() * 8
+      life[i] = stagger ? Math.random() * maxLife[i] : maxLife[i]
+      weight[i] = 0.55 + Math.random() * 0.9
+    }
+
+    const resize = () => {
+      const dpr = Math.min(window.devicePixelRatio || 1, MAX_DPR)
+      bw = Math.max(2, Math.round(window.innerWidth * dpr))
+      bh = Math.max(2, Math.round(window.innerHeight * dpr))
+      canvas.width = bw
+      canvas.height = bh
+      gl.deleteTexture(srcTarget.tex)
+      gl.deleteFramebuffer(srcTarget.fb)
+      gl.deleteTexture(dstTarget.tex)
+      gl.deleteFramebuffer(dstTarget.fb)
+      srcTarget = makeTarget(bw, bh)
+      dstTarget = makeTarget(bw, bh)
+      count = Math.max(
+        1500,
+        Math.min(MAX_PARTICLES, Math.round(window.innerWidth * window.innerHeight * PARTICLE_DENSITY)),
+      )
+      if (hasPointer) {
+        tgtX = lastNX * bw
+        tgtY = lastNY * bh
+      } else {
+        tgtX = bw * 0.5
+        tgtY = bh * 0.5
+      }
+      // Re-anchor the source on (re)size so a transient mount viewport can't strand it.
+      curX = tgtX
+      curY = tgtY
+      for (let i = 0; i < count; i++) spawn(i, true)
+      measureScroll()
+      onScroll()
+    }
+    resize()
+
+    const onResize = () => resize()
+    window.addEventListener("resize", onResize)
+    disposers.push(() => window.removeEventListener("resize", onResize))
+
+    const onPointerMove = (e: PointerEvent) => {
+      hasPointer = true
+      lastNX = e.clientX / Math.max(1, window.innerWidth)
+      lastNY = e.clientY / Math.max(1, window.innerHeight)
+      tgtX = lastNX * bw
+      tgtY = lastNY * bh
+    }
+    window.addEventListener("pointermove", onPointerMove, { passive: true })
+    disposers.push(() => window.removeEventListener("pointermove", onPointerMove))
+
+    // ---- simulation ----
+    let sp = 0
+    let t = 0
+    let last = 0
+    let raf = 0
+
+    const step = (dt: number) => {
+      const speed = (2.0 + sp * 2.2) * (dt * 60)
+      const md = Math.max(bw, bh)
+      const baseAng = 0.9 + 0.35 * Math.sin(t * 0.025) // overall drift, gently swaying
+      for (let i = 0; i < count; i++) {
+        life[i] -= dt
+        if (life[i] <= 0) spawn(i, false)
+        const x = px[i]
+        const y = py[i]
+        // One smooth, laminar flow everywhere — a low-amplitude direction field, so it
+        // gently undulates but can never wind into a vortex. The cursor is not a force
+        // here: it's where streaks are BORN (see spawn) and where they're brightest
+        // (see fall), so they emit from the pointer and flow off into the current.
+        const flowAng =
+          baseAng + 0.5 * Math.sin(x * 0.0015 + t * 0.05) + 0.4 * Math.sin(y * 0.0018 - t * 0.045)
+        const vx = Math.cos(flowAng)
+        const vy = Math.sin(flowAng)
+        const nx = x + vx * speed
+        const ny = y + vy * speed
+        if (nx < -20 || nx > bw + 20 || ny < -20 || ny > bh + 20) {
+          spawn(i, false)
+        } else {
+          ppx[i] = x
+          ppy[i] = y
+          px[i] = nx
+          py[i] = ny
+        }
+        const dxc = x - curX
+        const dyc = y - curY
+        const rl = Math.sqrt(dxc * dxc + dyc * dyc)
+        const lp = life[i] / maxLife[i]
+        const env = Math.sin(Math.max(0, Math.min(1, lp)) * Math.PI)
+        // Bright tight core right at the cursor + a softer halo, fading to a dim
+        // ambient floor — so the streaks clearly originate AT the pointer.
+        const fall = 0.25 + 0.5 * Math.exp(-rl / (md * 0.22)) + 0.6 * Math.exp(-rl / (md * 0.06))
+        const alpha = env * BASE_ALPHA * weight[i] * fall
+        const o = i * 6
+        segData[o] = ppx[i]
+        segData[o + 1] = ppy[i]
+        segData[o + 2] = alpha
+        segData[o + 3] = px[i]
+        segData[o + 4] = py[i]
+        segData[o + 5] = alpha
+      }
+    }
+
+    const renderOnce = () => {
+      gl.bindBuffer(gl.ARRAY_BUFFER, segBuf)
+      gl.bufferSubData(gl.ARRAY_BUFFER, 0, segData, 0, count * 6)
+
+      // 1 — fade the previous frame into dstTarget
+      gl.bindFramebuffer(gl.FRAMEBUFFER, dstTarget.fb)
+      gl.viewport(0, 0, bw, bh)
+      gl.disable(gl.BLEND)
+      gl.useProgram(fadeProg)
+      gl.bindVertexArray(quadVAO)
+      gl.activeTexture(gl.TEXTURE0)
+      gl.bindTexture(gl.TEXTURE_2D, srcTarget.tex)
+      gl.uniform1i(fadeTex, 0)
+      gl.uniform1f(fadeAmt, TRAIL_FADE)
+      gl.drawArrays(gl.TRIANGLES, 0, 3)
+
+      // 2 — draw the new segments additively on top
+      gl.enable(gl.BLEND)
+      gl.blendFunc(gl.ONE, gl.ONE)
+      gl.useProgram(segProg)
+      gl.bindVertexArray(segVAO)
+      gl.uniform2f(segRes, bw, bh)
+      gl.uniform3f(segColor, STREAM[0], STREAM[1], STREAM[2])
+      gl.drawArrays(gl.LINES, 0, count * 2)
+
+      // 3 — present to the screen (graphite + glow + vignette + dither)
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null)
+      gl.viewport(0, 0, bw, bh)
+      gl.disable(gl.BLEND)
+      gl.useProgram(presentProg)
+      gl.bindVertexArray(quadVAO)
+      gl.activeTexture(gl.TEXTURE0)
+      gl.bindTexture(gl.TEXTURE_2D, dstTarget.tex)
+      gl.uniform1i(presentTex, 0)
+      gl.uniform3f(presentBg, GRAPHITE[0], GRAPHITE[1], GRAPHITE[2])
+      gl.uniform2f(presentRes, bw, bh)
+      gl.uniform1f(presentSeed, (t * 60) % 1000)
+      gl.drawArrays(gl.TRIANGLES, 0, 3)
+
+      const tmp = srcTarget
+      srcTarget = dstTarget
+      dstTarget = tmp
+    }
+
+    const frame = (now: number) => {
+      raf = requestAnimationFrame(frame)
+      const dt = last ? Math.min(0.05, (now - last) / 1000) : 0.016
+      last = now
+      t += dt
+      sp += (spTarget - sp) * Math.min(1, dt * 4)
+      // Source follows the pointer; with no pointer (touch / idle) it gently roams
+      // so the field still breathes.
+      if (!hasPointer) {
+        tgtX = bw * (0.5 + 0.3 * Math.sin(t * 0.07))
+        tgtY = bh * (0.5 + 0.26 * Math.cos(t * 0.053))
+      }
+      curX += (tgtX - curX) * Math.min(1, dt * 5)
+      curY += (tgtY - curY) * Math.min(1, dt * 5)
+      step(dt)
+      renderOnce()
+    }
+
+    // Pre-warm the trail so the field is already flowing on the first painted
+    // frame instead of fading up from black.
+    for (let i = 0; i < 90; i++) {
+      t += 1 / 60
+      step(1 / 60)
+      renderOnce()
+    }
+
+    const start = () => {
+      if (!raf) {
+        last = 0
+        raf = requestAnimationFrame(frame)
+      }
+    }
+    const stop = () => {
+      if (raf) {
+        cancelAnimationFrame(raf)
+        raf = 0
+      }
+    }
+    start()
+
+    const onVisibility = () => (document.hidden ? stop() : start())
+    document.addEventListener("visibilitychange", onVisibility)
+    disposers.push(() => document.removeEventListener("visibilitychange", onVisibility))
+
+    const onLost = (e: Event) => {
+      e.preventDefault()
+      stop()
+    }
+    canvas.addEventListener("webglcontextlost", onLost)
+    disposers.push(() => canvas.removeEventListener("webglcontextlost", onLost))
+
+    disposers.push(() => {
+      stop()
+      root.style.removeProperty("--sp")
+      gl.getExtension("WEBGL_lose_context")?.loseContext()
+    })
+
+    return () => disposers.forEach((d) => d())
+  }, [])
+
+  return (
+    <>
+      <canvas ref={canvasRef} aria-hidden="true" className="scroll-ambient-canvas" />
+      <div aria-hidden="true" className="scroll-progress" />
+    </>
+  )
+}

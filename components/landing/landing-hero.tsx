@@ -1,119 +1,45 @@
 "use client"
 
-import { useEffect, useRef } from "react"
+import { useEffect, useState } from "react"
 
 import { DashboardPreview } from "@/components/landing/dashboard-preview"
 import { WaitlistForm } from "@/components/landing/waitlist-form"
 
+const HERO_SUBHEAD =
+  "Jarvis reads your Canvas, Gmail, Notion, and calendar, then hands you the next thing to do. No setup, no check-ins, no mental tabs left open."
+
+const SOURCES = ["Canvas", "Gmail", "Notion", "Google Calendar"]
+
 export function LandingHero() {
-  const heroRef = useRef<HTMLDivElement | null>(null)
-  const eyebrowRef = useRef<HTMLParagraphElement | null>(null)
-  const headlineRef = useRef<HTMLHeadingElement | null>(null)
-  const subheadRef = useRef<HTMLParagraphElement | null>(null)
-  const formRef = useRef<HTMLDivElement | null>(null)
-  const previewRef = useRef<HTMLDivElement | null>(null)
-  const keywordRef = useRef<HTMLSpanElement | null>(null)
+  // CSS-driven entrance: render hidden, then flip one attribute on mount so every
+  // piece transitions in (opacity/transform only). No library, nothing scroll-linked.
+  const [shown, setShown] = useState(false)
 
   useEffect(() => {
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches
-    const targets = [
-      eyebrowRef.current,
-      headlineRef.current,
-      subheadRef.current,
-      formRef.current,
-      previewRef.current,
-    ].filter(Boolean) as HTMLElement[]
-    const keyword = keywordRef.current
-
-    const revealNow = () => {
-      targets.forEach((el) => {
-        el.style.opacity = "1"
-        el.style.transform = "none"
-      })
-      if (keyword) {
-        keyword.style.clipPath = "inset(0 0% 0 0)"
-        keyword.style.opacity = "1"
-        keyword.style.transform = "none"
-      }
-    }
-
-    const revealWhenVisible = () => {
-      if (document.visibilityState === "visible") revealNow()
-    }
-
-    window.addEventListener("pageshow", revealNow)
-    document.addEventListener("visibilitychange", revealWhenVisible)
-
     if (reduced) {
-      revealNow()
-      return () => {
-        window.removeEventListener("pageshow", revealNow)
-        document.removeEventListener("visibilitychange", revealWhenVisible)
-      }
+      setShown(true)
+      return
     }
-
-    let cancelled = false
-    const fallback = window.setTimeout(revealNow, 1800)
-    void (async () => {
-      const { eases, stagger, createTimeline } = await import("animejs")
-      if (cancelled) return
-
-      const tl = createTimeline({ defaults: { ease: eases.outExpo } })
-
-      tl.add(
-        targets,
-        {
-          opacity: [0, 1],
-          translateY: [22, 0],
-          duration: 800,
-          delay: stagger(110, { start: 60 }),
-        },
-        0,
-      )
-
-      if (keyword) {
-        tl.add(
-          keyword,
-          {
-            "clip-path": ["inset(0 100% 0 0)", "inset(0 0% 0 0)"],
-            opacity: [0, 1],
-            duration: 720,
-            ease: eases.outExpo,
-          },
-          440,
-        )
-      }
-    })()
-
+    const raf = window.requestAnimationFrame(() => setShown(true))
+    const fallback = window.setTimeout(() => setShown(true), 1200)
+    const onShow = () => setShown(true)
+    window.addEventListener("pageshow", onShow)
     return () => {
-      cancelled = true
+      window.cancelAnimationFrame(raf)
       window.clearTimeout(fallback)
-      window.removeEventListener("pageshow", revealNow)
-      document.removeEventListener("visibilitychange", revealWhenVisible)
+      window.removeEventListener("pageshow", onShow)
     }
   }, [])
 
   return (
-    <div ref={heroRef} className="landing-hero relative min-h-[100svh] overflow-hidden">
-      <div aria-hidden="true" className="hero-ambient-field">
-        <span className="hero-ambient-wash" />
-        <span className="hero-ambient-orb hero-ambient-orb-a" />
-        <span className="hero-ambient-orb hero-ambient-orb-b" />
-        <svg className="hero-ambient-svg" viewBox="0 0 1200 720" preserveAspectRatio="xMidYMid slice">
-          <path className="hero-ambient-poly hero-ambient-poly-a" d="M 272 176 L 686 42 L 1044 186 L 914 492 L 394 548 Z" />
-          <path className="hero-ambient-poly hero-ambient-poly-b" d="M 442 136 L 842 84 L 1018 358 L 704 612 L 318 448 Z" />
-          <path className="hero-ambient-poly hero-ambient-poly-c" d="M 126 460 L 496 216 L 800 398 L 566 686 L 174 624 Z" />
-          <ellipse className="hero-ambient-ring hero-ambient-ring-a" cx="720" cy="330" rx="315" ry="168" />
-          <ellipse className="hero-ambient-ring hero-ambient-ring-b" cx="720" cy="330" rx="214" ry="112" />
-          <circle className="hero-ambient-core" cx="720" cy="330" r="4" />
-        </svg>
-      </div>
-      <div className="relative z-10 mx-auto flex min-h-[100svh] w-full max-w-[1440px] flex-col justify-center px-[var(--landing-px)] pb-[clamp(56px,8vh,104px)] pt-[calc(56px+clamp(28px,5vh,76px))] md:pl-[calc(var(--landing-px)+72px)]">
+    <div data-hero-in={shown} className="landing-hero relative min-h-[100svh] overflow-hidden">
+      <div className="relative z-10 mx-auto flex min-h-[100svh] w-full max-w-[1200px] flex-col justify-center px-6 pb-[clamp(56px,8vh,104px)] pt-[calc(56px+clamp(28px,5vh,72px))] md:px-10">
         <div className="hero-layout">
           <div className="hero-copy-block flex flex-col">
             <p
-              ref={eyebrowRef}
-              className="landing-mark flex items-center gap-2 text-[10.5px] text-muted-foreground opacity-0"
+              className="hero-reveal landing-mark flex items-center gap-2 text-[10.5px] text-muted-foreground"
+              style={{ transitionDelay: "60ms" }}
             >
               <span aria-hidden="true" className="inline-flex items-center text-[var(--copper)]">
                 <svg width="9" height="9" viewBox="0 0 9 9" fill="none">
@@ -122,50 +48,60 @@ export function LandingHero() {
               </span>
               <span className="text-[var(--copper)]">01</span>
               <span aria-hidden="true">·</span>
-              <span>A secretary that connects to everything</span>
+              <span>the secretary that already knows</span>
             </p>
 
             <h1
               id="hero-heading"
-              ref={headlineRef}
-              className="landing-display mt-5 max-w-[20ch] text-[clamp(2.4rem,6vw,4.8rem)] font-semibold leading-[0.96] text-foreground opacity-0"
+              className="hero-reveal landing-display mt-5 max-w-[18ch] text-[clamp(2.4rem,6vw,4.8rem)] font-semibold leading-[0.95] text-foreground"
+              style={{ transitionDelay: "150ms" }}
             >
-              Stop deciding{" "}
-              <span
-                ref={keywordRef}
-                data-bloom-dim
-                className="landing-keyword opacity-0"
-                style={{ clipPath: "inset(0 100% 0 0)" }}
-              >
-                what to do
+              Stop holding your whole life{" "}
+              <span data-bloom-dim className="landing-keyword hero-keyword-reveal">
+                in your head
               </span>
               .
             </h1>
 
             <p
-              ref={subheadRef}
-              className="mt-10 max-w-[52ch] text-[clamp(1rem,1.4vw,1.125rem)] leading-[1.5] text-foreground/75 opacity-0"
+              className="hero-reveal mt-8 max-w-[50ch] text-[clamp(1rem,1.4vw,1.125rem)] leading-[1.5] text-foreground/75"
+              style={{ transitionDelay: "260ms" }}
             >
-              Jarvis connects to your Gmail, Canvas, Notion, and everything else — then autonomously decides what you should do next. Full context. Zero effort.
+              {HERO_SUBHEAD}
             </p>
 
-            <div ref={formRef} className="mt-11 flex flex-col gap-3 opacity-0">
+            <div className="hero-reveal mt-9 flex flex-col gap-3" style={{ transitionDelay: "360ms" }}>
               <WaitlistForm variant="compact" id="hero-waitlist" />
               <p className="landing-mark text-[10.5px] text-muted-foreground">
                 Invites in order. No spam. No setup. It just knows.
               </p>
             </div>
+
+            <div
+              className="hero-reveal mt-9 flex flex-wrap items-center gap-2"
+              style={{ transitionDelay: "440ms" }}
+            >
+              <span className="landing-mark mr-1 text-[10px] text-muted-foreground">connects to</span>
+              {SOURCES.map((source) => (
+                <span
+                  key={source}
+                  className="inline-flex items-center gap-1.5 rounded-sm border border-[var(--rule)] bg-[var(--panel)]/60 px-2.5 py-1 text-[11.5px] text-foreground/80"
+                >
+                  <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-[var(--copper)]" />
+                  {source}
+                </span>
+              ))}
+            </div>
           </div>
 
-          <div ref={previewRef} className="hero-preview-stage opacity-0">
+          <div className="hero-reveal hero-preview-stage" style={{ transitionDelay: "520ms" }}>
             <div className="hero-preview-frame relative">
               <span
                 aria-hidden="true"
                 className="pointer-events-none absolute -inset-5 -z-10 rounded-md"
                 style={{
                   background:
-                    "radial-gradient(65% 60% at 32% 38%, oklch(0.74 0.14 42 / 0.22), transparent 72%)",
-                  filter: "blur(2px)",
+                    "radial-gradient(65% 60% at 32% 38%, oklch(0.72 0.13 45 / 0.22), transparent 72%)",
                 }}
               />
               <DashboardPreview />
