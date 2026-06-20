@@ -463,13 +463,9 @@ export async function insertAndAutoApproveSourceCandidates(input: {
 
   const autoApprovable = inserted.filter(isAutoApprovableCandidate)
 
-  if (autoApprovable.length === 0) {
-    return inserted
-  }
-
   // Duplicate gate: a candidate that looks like an existing task/event (or like a
-  // candidate approved earlier in this same batch) stays pending for manual review
-  // instead of auto-approving. Six emails about one piano jury → one task, not six.
+  // candidate approved earlier in this same batch) is not auto-approved.
+  // Six emails about one piano jury → one task, not six.
   const existingCommitments = await loadExistingCommitments(input.adminClient, input.userId)
   const autoIds: string[] = []
 
@@ -484,18 +480,46 @@ export async function insertAndAutoApproveSourceCandidates(input: {
     autoIds.push(candidate.id)
   }
 
-  if (autoIds.length === 0) {
-    return inserted
+  const approvedById = new Map<string, SourceCandidate>()
+  if (autoIds.length > 0) {
+    const { candidates: approved } = await approveSourceCandidates({
+      adminClient: input.adminClient,
+      userId: input.userId,
+      candidateIds: autoIds,
+    })
+    for (const candidate of approved) {
+      approvedById.set(candidate.id, candidate)
+    }
   }
 
-  const { candidates: approved } = await approveSourceCandidates({
-    adminClient: input.adminClient,
-    userId: input.userId,
-    candidateIds: autoIds,
-  })
-  const approvedById = new Map(approved.map((candidate) => [candidate.id, candidate]))
+  // Auto-approve-only design (Option A, 2026-06-19, David's call): there is no
+  // manual review queue, so any inserted candidate that did NOT auto-approve is
+  // retired to `dismissed` now instead of lingering as a stranded `pending` row
+  // (which only ever inflated a count badge with no consumer). The row is kept —
+  // not deleted — so the cross-status unique dedup key still suppresses recreating
+  // the same commitment on the next refresh. Canvas REST reclaims a still-live
+  // dismissed candidate via fetchExistingCanvasCandidates (which now includes
+  // dismissed) rather than colliding on insert.
+  const leftoverIds = inserted
+    .filter((candidate) => !approvedById.has(candidate.id))
+    .map((candidate) => candidate.id)
 
-  return inserted.map((candidate) => approvedById.get(candidate.id) ?? candidate)
+  if (leftoverIds.length > 0) {
+    const { error: dismissError } = await input.adminClient
+      .from("source_candidates")
+      .update({ status: "dismissed", updated_at: new Date().toISOString() })
+      .eq("user_id", input.userId)
+      .in("id", leftoverIds)
+      .eq("status", "pending")
+
+    if (dismissError) {
+      throw new Error(dismissError.message)
+    }
+  }
+
+  return inserted.map(
+    (candidate) => approvedById.get(candidate.id) ?? { ...candidate, status: "dismissed" as const },
+  )
 }
 
 export async function undoSourceCandidateApproval(input: {
