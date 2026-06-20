@@ -194,6 +194,11 @@ export function createJarvisBrainContext(adminClient: AdminClient, userId: strin
         now: null,
         timezone: null,
         history: EMPTY_HISTORY,
+        // The note surface is read-only for the agent loop: mutations on this
+        // surface flow through the daemon's own ⚠️ Confirm-checkbox handshake
+        // (it classifies + gates before this port ever executes a write), so the
+        // loop must not auto-write and bypass that gate.
+        surface: "note",
       })
       return { reply: turn.reply, ok: turn.ok }
     },

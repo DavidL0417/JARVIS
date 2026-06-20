@@ -4,13 +4,14 @@ import { normalizeMemoryContent } from "@/lib/ai/memory-normalize"
 import { insertMemoryItem } from "@/lib/assistant/memory-write"
 import { loadAssistantRuntimeContext } from "@/lib/assistant/context"
 import { overlapsSimilarBlock } from "@/lib/dedupe"
-import { generateSecretaryDialogueReply, type ImessageThreadContext } from "@/lib/assistant/dialogue"
+import { generateSecretaryDialogueReply } from "@/lib/assistant/dialogue"
+import { runAssistantAgentLoop } from "@/lib/assistant/agent/loop"
+import type { AgentSurface } from "@/lib/assistant/agent/tools"
 import {
   classifySecretaryIntent,
   normalizeAssistantCommand,
 } from "@/lib/assistant/orchestrator"
-import { normalizeHandle } from "@/lib/imessage/handles"
-import { getImessageAllowlist, getImessageMessages } from "@/lib/imessage/store"
+import { loadImessageThread } from "@/lib/imessage/thread"
 import { buildDailyPlan } from "@/lib/daily-plan"
 import { refreshSourcesForUser } from "@/lib/sources/refresh"
 import { setAutomationPaused } from "@/lib/supabase/automation-settings"
@@ -31,6 +32,10 @@ interface RunSecretaryTurnInput {
   now: string | null
   timezone: string | null
   history: AssistantConversationEntry[]
+  // Which surface invoked the brain. "interactive" (Cmd+K, default) lets the agent
+  // auto-execute internal writes; "note" (the JARVIS-note daemon answer port) keeps
+  // the agent read-only so writes stay behind the daemon's ⚠️ Confirm checkbox.
+  surface?: AgentSurface
 }
 
 type AdminClient = Awaited<ReturnType<typeof requireAuthenticatedUser>>["adminClient"]
@@ -440,52 +445,6 @@ async function handleCreateTask(
   return receipt
 }
 
-// Resolve a contact query to their archived iMessage thread (oldest-first) for the
-// read_messages intent. Matches the allowlist by name (either-direction substring)
-// or by handle. Returns null when nothing on the allowlist matches; an empty
-// messages array means the contact is allowlisted but nothing is archived yet.
-async function loadImessageThread(
-  adminClient: AdminClient,
-  userId: string,
-  contactQuery: string,
-): Promise<ImessageThreadContext | null> {
-  const query = contactQuery.trim().toLowerCase()
-  if (!query) {
-    return null
-  }
-
-  const contacts = await getImessageAllowlist(userId, adminClient)
-  if (contacts.length === 0) {
-    return null
-  }
-
-  const queryHandleNorm = normalizeHandle(query)
-  const matches = contacts.filter((contact) => {
-    const name = contact.displayName.toLowerCase()
-    const byName = name.includes(query) || query.includes(name)
-    const byHandle = Boolean(queryHandleNorm) && contact.handleNorm === queryHandleNorm
-    return byName || byHandle
-  })
-  if (matches.length === 0) {
-    return null
-  }
-
-  const contactName = matches[0].displayName
-  const handleNorms = Array.from(new Set(matches.map((contact) => contact.handleNorm)))
-  const archived = await getImessageMessages({ userId, handles: handleNorms, maxRows: 120, adminClient })
-
-  const messages = archived
-    .slice()
-    .reverse() // store returns newest-first; the dialogue reads oldest-first
-    .map((message) => ({
-      at: message.sentAt,
-      from: message.isFromMe ? "Me" : message.senderName || contactName,
-      text: message.body,
-    }))
-
-  return { contactName, messages }
-}
-
 export async function runSecretaryTurn(input: RunSecretaryTurnInput): Promise<AssistantMessageResponse> {
   const cleanMessage = normalizeText(input.message)
   const runtimeBefore = await loadAssistantRuntimeContext(input.supabase, input.userId)
@@ -503,7 +462,11 @@ export async function runSecretaryTurn(input: RunSecretaryTurnInput): Promise<As
     content: cleanMessage,
   })
 
+  const surface: AgentSurface = input.surface ?? "interactive"
   const toolCalls: AssistantToolCallResult[] = []
+  // Payloads for agent-loop receipts (e.g. the external-write approval's
+  // { action: "google_task_event_sync" }) so the persist step records them.
+  const agentToolPayloads = new Map<string, Record<string, unknown>>()
   let reply: string
   let ok = true
   let error: string | undefined
@@ -634,17 +597,32 @@ export async function runSecretaryTurn(input: RunSecretaryTurnInput): Promise<As
       model = dialogue.model
     }
   } else {
-    const dialogue = await generateSecretaryDialogueReply({
+    const agent = await runAssistantAgentLoop({
+      supabase: input.supabase,
+      userId: input.userId,
       message: cleanMessage,
       now: input.now,
       timezone: input.timezone,
       history: input.history,
       runtime: runtimeBefore,
+      surface,
     })
-    reply = dialogue.reply
-    ok = dialogue.ok
-    error = dialogue.error
-    model = dialogue.model
+    reply = agent.reply
+    ok = agent.ok
+    error = agent.error
+    model = agent.model
+    if (agent.needsRefresh) {
+      needsRefresh = true
+    }
+    if (agent.clarification) {
+      clarification = agent.clarification
+    }
+    for (const entry of agent.receipts) {
+      toolCalls.push(entry.result)
+      if (entry.payload) {
+        agentToolPayloads.set(entry.result.id, entry.payload)
+      }
+    }
   }
 
   const assistantMessageId = await insertMessage(input.supabase, {
@@ -677,7 +655,7 @@ export async function runSecretaryTurn(input: RunSecretaryTurnInput): Promise<As
                 ? {
                     command: intent.command,
                   }
-                : undefined,
+                : agentToolPayloads.get(toolCall.id),
         requiresApproval: toolCall.requiresApproval,
       })
     }

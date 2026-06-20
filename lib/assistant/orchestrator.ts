@@ -104,19 +104,41 @@ function cleanContactName(raw: string): string {
     .trim()
 }
 
+// Pronouns/determiners that are never a contact name. Stops open-ended
+// questions like "did anyone send me anything" or "what did the email say"
+// from being mis-read as a request for one person's thread. Each alternative
+// is anchored with \b so real names that merely start with these letters
+// ("Ian", "Theo", "Noah", "Anya") are still captured.
+const NON_CONTACT_SUBJECT =
+  "(?!(?:you|i|we|they|he|she|it|anyone|anybody|anything|someone|somebody|something|everyone|everybody|everything|nobody|none|no\\s?one|the|this|that|these|those)\\b)"
+
 // Detect a request to read the archived iMessage/SMS thread with a contact, e.g.
 // "what did Alan say about the trip", "read my messages with Dani", "texts from Mom".
 // Returns the contact name to resolve against the allowlist, or null.
 export function parseReadMessages(message: string): string | null {
   const normalized = normalizeAssistantCommand(message)
+
+  // If the ask is plainly about email (or another non-iMessage channel) and
+  // gives no iMessage/text signal, it isn't a read-thread request — let it fall
+  // through to the agent loop, which can search Gmail. Guards the "did <X> send"
+  // pattern against "check my email — did anyone send me anything about X".
+  const mentionsEmail = /\b(?:e-?mails?|inbox(?:es)?|gmail)\b/i.test(normalized)
+  const mentionsTextChannel = /\b(?:imessages?|texts?|texted|texting|sms|dms?|message[sd]?|messaging)\b/i.test(normalized)
+  if (mentionsEmail && !mentionsTextChannel) {
+    return null
+  }
+
   const patterns = [
     // verb-led: read/show/pull up/access/list out/give me/get me ... messages|texts|... with|from X
     // (run-up class excludes only . and ! so a mid-sentence "?" — e.g. "my imessages? if so,
     // list out messages from Alan" — doesn't sever the verb from the noun; name stops at .?!)
     /\b(?:read|show(?:\s+me)?|pull up|see|check|look at|find|search|access|list(?:\s+out)?|give me|get me|grab|fetch)\b[^.!]*\b(?:messages?|texts?|imessages?|conversations?|threads?|chats?|dms?)\b\s+(?:with|from)\s+(?<name>[^.?!]+)/i,
-    /^(?:what did|what'd|what has|what's)\s+(?<name>.+?)\s+(?:say|said|text|texted|message|messaged|tell|told|send|sent|been saying|been texting)\b/i,
+    new RegExp(
+      `^(?:what did|what'd|what has|what's)\\s+(?<name>${NON_CONTACT_SUBJECT}.+?)\\s+(?:say|said|text|texted|message|messaged|tell|told|send|sent|been saying|been texting)\\b`,
+      "i",
+    ),
     /^(?:messages?|texts?|imessages?|conversations?|threads?|chats?)\s+(?:with|from)\s+(?<name>.+)$/i,
-    /\bdid\s+(?<name>(?!you\b|i\b|we\b|they\b)[a-z].+?)\s+(?:say|text|message|mention|send)\b/i,
+    new RegExp(`\\bdid\\s+(?<name>${NON_CONTACT_SUBJECT}[a-z].+?)\\s+(?:say|text|message|mention|send)\\b`, "i"),
     // "any|new ... messages|texts|word from X"
     /\b(?:any|anything|new)\b[^.!]*\b(?:messages?|texts?|imessages?|word)\b\s+(?:with|from)\s+(?<name>[^.?!]+)/i,
   ]
@@ -191,7 +213,12 @@ function parseActivityLog(
 }
 
 function isExternalWriteCommand(message: string) {
-  return /\b(sync|write|push|publish|send|export|mirror|delete|remove|cancel|move|reschedule|invite|email)\b/i.test(message) &&
+  // NOTE: "email" is deliberately NOT a write verb here — it is overwhelmingly a
+  // NOUN in these messages ("search my Gmail for my most recent email"), and
+  // matching it hijacked read/search questions into the unsupported-external-write
+  // path instead of letting the agent loop search Gmail. A genuine "send an email
+  // …" request still trips this via the "send" verb.
+  return /\b(sync|write|push|publish|send|export|mirror|delete|remove|cancel|move|reschedule|invite)\b/i.test(message) &&
     /\b(google|calendar|gcal|gmail|notion|external)\b/i.test(message)
 }
 

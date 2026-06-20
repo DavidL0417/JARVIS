@@ -1,13 +1,12 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 
-import { mapTaskRowToTask, mapTaskToUpdate, TASK_SELECT } from "@/lib/data/mappers"
-import { markCanvasTaskComplete } from "@/lib/sources/canvas-completion"
-import { archiveNotionPageForTask, syncNotionTaskCompletion, syncNotionTaskFields } from "@/lib/sources/notion-completion"
+import { archiveNotionPageForTask } from "@/lib/sources/notion-completion"
 import {
   isAuthenticationRequiredError,
   requireAuthenticatedUser,
 } from "@/lib/supabase/auth"
+import { applyTaskUpdate } from "@/lib/tasks/mutations"
 import {
   deleteTaskResponseSchema,
   taskMutationResponseSchema,
@@ -47,70 +46,21 @@ export async function PATCH(
   try {
     const { adminClient, user } = await requireAuthenticatedUser()
 
-    const updatePayload = {
-      ...mapTaskToUpdate(parsedBody.data),
-      updated_at: new Date().toISOString(),
-    }
+    const result = await applyTaskUpdate({
+      adminClient,
+      userId: user.id,
+      taskId: parsedTaskId.data,
+      fields: parsedBody.data,
+    })
 
-    if (parsedBody.data.status === "completed" || parsedBody.data.status === "todo") {
-      const { error: deleteScheduleEventsError } = await adminClient
-        .from("schedule_events")
-        .delete()
-        .eq("user_id", user.id)
-        .eq("task_id", parsedTaskId.data)
-        .eq("source", "task")
-
-      if (deleteScheduleEventsError) {
-        throw new Error(deleteScheduleEventsError.message)
-      }
-    }
-
-    const { data, error } = await adminClient
-      .from("tasks")
-      .update(updatePayload)
-      .eq("id", parsedTaskId.data)
-      .eq("user_id", user.id)
-      .select(TASK_SELECT)
-      .maybeSingle<TaskRow>()
-
-    if (error) {
-      throw new Error(error.message)
-    }
-
-    if (!data) {
+    if (!result.ok) {
       return NextResponse.json({ error: "Task not found." }, { status: 404 })
-    }
-
-    const externalWrite =
-      parsedBody.data.status === "completed"
-        ? await markCanvasTaskComplete({
-            adminClient,
-            userId: user.id,
-            task: data,
-          })
-        : null
-
-    // Notion two-way write-back: reflect completion / reopen on the linked Notion
-    // page. Side effect only (the externalWrite response contract is Canvas-shaped)
-    // and best-effort, so a Notion hiccup never fails the task update.
-    if (parsedBody.data.status === "completed" || parsedBody.data.status === "todo") {
-      await syncNotionTaskCompletion({
-        adminClient,
-        userId: user.id,
-        task: data,
-        completed: parsedBody.data.status === "completed",
-      }).catch(() => null)
-    }
-
-    // Push title/deadline edits to the linked Notion page (best-effort side effect).
-    if (parsedBody.data.title !== undefined || parsedBody.data.deadline !== undefined) {
-      await syncNotionTaskFields({ adminClient, userId: user.id, task: data }).catch(() => null)
     }
 
     const responsePayload: TaskMutationResponse = {
       success: true,
-      task: mapTaskRowToTask(data),
-      externalWrite,
+      task: result.task,
+      externalWrite: result.externalWrite,
     }
 
     const parsedResponse = taskMutationResponseSchema.safeParse(responsePayload)
