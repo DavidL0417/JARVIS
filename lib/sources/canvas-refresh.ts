@@ -202,11 +202,14 @@ function taskFieldsForCandidate(candidate: CanvasTaskCandidate, userId: string, 
 
 async function fetchExistingCanvasCandidates(userId: string) {
   const adminClient = createSupabaseAdminClient()
+  // Include `dismissed` rows. A still-live Canvas assignment whose dedup key was
+  // retired to `dismissed` (auto-approve-only cleanup, or a prior prune) must be
+  // RECLAIMED via the update branch of upsertCanvasTaskCandidate — re-inserting it
+  // would collide with the cross-status unique key and throw, failing the refresh.
   const { data, error } = await adminClient
     .from("source_candidates")
     .select(SOURCE_CANDIDATE_SELECT)
     .eq("user_id", userId)
-    .neq("status", "dismissed")
     .returns<SourceCandidateRow[]>()
 
   if (error) {

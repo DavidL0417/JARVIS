@@ -6,6 +6,16 @@ const FEEDBACK_ACTION = "calendar.feedback_observed"
 const FEEDBACK_SOURCE = "google_calendar_feedback"
 const LOOKBACK_DAYS = 14
 
+// Calendar feedback-learning is DISABLED (2026-06-19, David's call). The loop
+// records change_logs observations and, after >=2 similar edits in 14d, writes a
+// pending `preference` source_candidate — but preference candidates land in the
+// auto-approve-only pipeline (Option A) with no consumer, so it learns into a
+// void (0 preference rows ever produced in prod). Gated at the call site in
+// lib/google-calendar-events.ts so the function logic stays intact + tested and
+// re-enabling is a one-line flip once a preference consumer exists.
+// TODO(jarvis-sync): build a consumer for preference candidates, then re-enable.
+export const CALENDAR_FEEDBACK_LEARNING_ENABLED = false
+
 function minutesBetween(start: string, end: string) {
   return Math.max(0, Math.round((new Date(end).getTime() - new Date(start).getTime()) / 60_000))
 }
