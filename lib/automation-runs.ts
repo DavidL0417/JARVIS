@@ -8,6 +8,8 @@ export type AutomationRunKind =
   | "plan_build"
   | "reconciliation"
   | "deadline_inference"
+  | "morning_digest"
+  | "evening_digest"
 
 export type AutomationRunStatus = "completed" | "skipped_paused" | "skipped_idle" | "failed"
 
