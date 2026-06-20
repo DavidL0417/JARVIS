@@ -82,6 +82,10 @@ const memoryDedupGateMigration = readFileSync(
   "supabase/migrations/20260615180000_memory_dedup_gate.sql",
   "utf8",
 )
+const imessageOutboxMigration = readFileSync(
+  "supabase/migrations/20260620204130_imessage_outbox.sql",
+  "utf8",
+)
 
 describe("production Supabase migration", () => {
   it("keeps OAuth tokens outside public tables", () => {
@@ -312,6 +316,27 @@ describe("production Supabase migration", () => {
     expect(canvasExtensionSyncCourseMigration).toContain("'sync_course'")
     expect(canvasExtensionSyncCourseMigration).toContain("canvas_extension_commands_type_check")
     expect(canvasExtensionSyncCourseMigration).not.toContain("disable row level security")
+  })
+
+  it("creates the iMessage outbox as an operator-only queue with RLS, dedup, and atomic CAS claim", () => {
+    expect(imessageOutboxMigration).toContain("create table public.imessage_outbox")
+    expect(imessageOutboxMigration).toContain("alter table public.imessage_outbox enable row level security;")
+    expect(imessageOutboxMigration).toContain("imessage_outbox_select_own")
+    expect(imessageOutboxMigration).toContain("revoke all on public.imessage_outbox from anon, authenticated;")
+    // Drift-proof idempotency: one scheduled message per (user, dedup_key).
+    expect(imessageOutboxMigration).toContain("create unique index imessage_outbox_dedup")
+    expect(imessageOutboxMigration).toContain("where dedup_key is not null;")
+    // The claim is the correct atomic CAS (SETOF), never the Canvas select-then-update race.
+    expect(imessageOutboxMigration).toContain(
+      "create function public.claim_next_imessage_outbox_command(p_user_id uuid, p_worker text)",
+    )
+    expect(imessageOutboxMigration).toContain("returns setof public.imessage_outbox")
+    expect(imessageOutboxMigration).toContain("for update skip locked")
+    expect(imessageOutboxMigration).toContain(
+      "revoke all on function public.claim_next_imessage_outbox_command(uuid, text) from anon, authenticated;",
+    )
+    expect(imessageOutboxMigration).not.toContain("disable row level security")
+    expect(imessageOutboxMigration).not.toContain("access_token")
   })
 
   it("stores Canvas extension page markdown content with RLS and no credentials", () => {

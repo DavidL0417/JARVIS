@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  launchd agent TEMPLATE for the iMessage send-daemon's SERVE loop (cloud → you).
+
+  DO NOT install this until the first `serve --allow-send` run has been done
+  supervised and verified clean (the guardrail) — this loop sends LIVE iMessages.
+  The process needs Automation permission to control Messages.app (System Settings →
+  Privacy & Security → Automation), granted on the first supervised run.
+
+  Install (after a clean supervised run):
+    1. Replace every __PLACEHOLDER__ below (absolute paths + the operator secret).
+    2. cp to ~/Library/LaunchAgents/com.jarvis.imessage-send.plist
+    3. launchctl load -w ~/Library/LaunchAgents/com.jarvis.imessage-send.plist
+  Logs land in /tmp; check them after load. Unload: launchctl unload -w <path>.
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.jarvis.imessage-send</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>__PYTHON3__</string>           <!-- e.g. /usr/bin/python3 -->
+        <string>__JARVIS_REPO__/scripts/imessage/send-daemon.py</string>
+        <string>serve</string>
+        <string>--allow-send</string>
+    </array>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>JARVIS_APP_URL</key>
+        <string>__JARVIS_APP_URL__</string>     <!-- e.g. https://mydearestjarvis.vercel.app -->
+        <key>IMESSAGE_INGEST_SECRET</key>
+        <string>__IMESSAGE_INGEST_SECRET__</string>
+    </dict>
+
+    <key>RunAtLoad</key>
+    <true/>
+    <!-- KeepAlive restarts the long-poll loop if it ever exits. -->
+    <key>KeepAlive</key>
+    <true/>
+    <key>ThrottleInterval</key>
+    <integer>10</integer>
+
+    <key>StandardOutPath</key>
+    <string>/tmp/com.jarvis.imessage-send.out.log</string>
+    <key>StandardErrorPath</key>
+    <string>/tmp/com.jarvis.imessage-send.err.log</string>
+</dict>
+</plist>
