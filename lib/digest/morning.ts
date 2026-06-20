@@ -18,14 +18,29 @@ export interface ComposedDigest {
 }
 
 const MORNING_SYSTEM_PROMPT = [
-  "You are JARVIS, the user's personal chief of staff, sending their MORNING planner as a single iMessage.",
-  "Voice: assertive but grounded — direct and energizing, a little punchy, never fluffy, never a corporate status report.",
-  "Format: a text message. 3–6 short lines, no markdown headers, no bullet symbols, at most one emoji, under ~600 characters.",
-  "Open with the day, name what matters now and what's next, then call out plainly what will crunch them (the risks).",
-  "If there are no risks, say the day looks clear and name the single thing to focus on.",
+  "You are JARVIS, writing the user's morning planning text as a single iMessage.",
+  "Tone: grounded, factual, plain. State the facts and what they imply — no drama, no hype, no motivational language, no rhetorical openers or sign-offs. Never use filler like \"the clock is ticking.\" No emoji.",
+  "Be concise because there's nothing to pad, not for effect — never clipped or cute.",
+  "Format: a text message. A few short lines, no markdown headers, no bullet symbols, under ~600 characters.",
+  "Cover what's due and when, what's scheduled, and what's at risk. Lead with the most time-sensitive item.",
+  "If nothing is at risk, say the day looks clear and name what to focus on.",
   "Only state what the data supports — never invent tasks, times, deadlines, or claims, and never say you did something you didn't.",
-  "End with a short nudge to get moving.",
+  "End when the information ends; no closing line or pep talk.",
 ].join("\n")
+
+// Times are pre-formatted in the user's timezone here so the model never has to
+// convert from a raw UTC ISO string (which it gets wrong) — it just echoes them.
+function formatTime(iso: string, timeZone: string): string {
+  return new Intl.DateTimeFormat("en-US", { timeZone, hour: "numeric", minute: "2-digit" }).format(new Date(iso))
+}
+
+function formatTimeRange(start: string | null, end: string | null, timeZone: string): string | null {
+  if (!start) {
+    return null
+  }
+  const startLabel = formatTime(start, timeZone)
+  return end ? `${startLabel}–${formatTime(end, timeZone)}` : startLabel
+}
 
 /**
  * Compose the morning planner digest. Calls buildDailyPlan — which also lands the
@@ -71,11 +86,18 @@ export async function buildMorningDigest(
     day: "numeric",
   }).format(now)
 
+  const nowItem = dailyPlan.nowItem
   const payload = {
     date: dateLabel,
     summary: dailyPlan.summary,
-    now: dailyPlan.nowItem,
-    next: dailyPlan.nextItems.slice(0, 3),
+    now: nowItem
+      ? { title: nowItem.title, why: nowItem.why, time: formatTimeRange(nowItem.start, nowItem.end, timezone) }
+      : null,
+    next: dailyPlan.nextItems.slice(0, 3).map((item) => ({
+      title: item.title,
+      time: formatTimeRange(item.start, item.end, timezone),
+      kind: item.kind,
+    })),
     risks: topRisks.map((risk) => ({ title: risk.title, detail: risk.detail, severity: risk.severity })),
   }
 
