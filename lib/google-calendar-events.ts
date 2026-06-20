@@ -13,7 +13,7 @@ import {
 } from "@/lib/supabase/google-calendar-integration"
 import { createSupabaseAdminClient } from "@/lib/supabase/server"
 import { pruneExpiredMirroredEvents } from "@/lib/supabase/schedule-events"
-import { recordGoogleCalendarTaskFeedback } from "@/lib/sources/calendar-feedback"
+import { CALENDAR_FEEDBACK_LEARNING_ENABLED, recordGoogleCalendarTaskFeedback } from "@/lib/sources/calendar-feedback"
 import { TASKS_CALENDAR_ID } from "@/lib/task-calendar-constants"
 import { loadUserTimezone } from "@/lib/data/user-timezone"
 import { zonedDateStartUtc } from "@/lib/time/zoned"
@@ -745,7 +745,9 @@ export async function syncGoogleCalendarEventsForUser(userId: string): Promise<G
       .flatMap((result) => (result.status === "fulfilled" ? result.value : []))
       .sort((left, right) => new Date(left.start).getTime() - new Date(right.start).getTime())
 
-    await recordGoogleCalendarTaskFeedback(userId, events)
+    if (CALENDAR_FEEDBACK_LEARNING_ENABLED) {
+      await recordGoogleCalendarTaskFeedback(userId, events)
+    }
     const persistenceResult = await persistGoogleEvents({
       userId,
       events,
