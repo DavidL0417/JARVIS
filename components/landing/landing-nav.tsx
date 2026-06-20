@@ -26,7 +26,7 @@ export function LandingNav() {
   return (
     <header
       data-scrolled={scrolled}
-      className="sticky top-0 z-30 flex h-14 items-center justify-between px-[var(--landing-px)] transition-colors"
+      className="sticky top-0 z-30 h-14 transition-colors"
       style={{
         backgroundColor: scrolled ? "color-mix(in oklab, var(--background) 88%, transparent)" : "transparent",
         backdropFilter: scrolled ? "blur(12px)" : "none",
@@ -34,6 +34,7 @@ export function LandingNav() {
         borderBottom: scrolled ? "1px solid var(--rule)" : "1px solid transparent",
       }}
     >
+      <div className="mx-auto flex h-full w-full max-w-[1200px] items-center justify-between px-6 md:px-10">
       <a
         href="#top"
         data-bloom-shield
@@ -59,6 +60,7 @@ export function LandingNav() {
           Join waitlist
         </a>
       </nav>
+      </div>
     </header>
   )
 }
