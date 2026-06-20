@@ -20,13 +20,12 @@ import { useEffect, useRef } from "react"
 const MAX_PARTICLES = 12000
 const PARTICLE_DENSITY = 0.007 // particles per CSS px² (keeps visual density ~constant)
 const TRAIL_FADE = 0.93 // persistence → streaks smear into continuous rivers of light
-const BASE_ALPHA = 0.42 // bright per-streak; accumulation + bloom build glowing rivers
+const BASE_ALPHA = 0.5 // bright per-streak; accumulation + bloom build glowing rivers
 const MAX_DPR = 1.25 // cap backing resolution; softer (glowier) + far cheaper than retina
 
 // Copper light added over graphite; overlaps + bloom go toward hot copper.
 const STREAM: [number, number, number] = [1.0, 0.58, 0.32]
-const GRAPHITE: [number, number, number] = [0.082, 0.075, 0.063]
-
+const GRAPHITE: [number, number, number] = [0.026, 0.023, 0.018]
 const QUAD_VS = `#version 300 es
 layout(location=0) in vec2 a_quad;
 out vec2 v_uv;
@@ -65,7 +64,7 @@ void main(){
   vec3 light = core + g1 * (0.42 / 8.0) + g2 * (0.3 / 8.0); // two-ring bloom
   vec3 col = u_bg + light;
   float d = distance(v_uv, vec2(0.5));
-  col *= 0.72 + 0.28 * smoothstep(1.15, 0.2, d);
+  col *= 0.6 + 0.4 * smoothstep(0.95, 0.15, d);
   col += (hash(v_uv * u_res + u_seed) - 0.5) * (1.0 / 255.0); // dither
   o = vec4(col, 1.0);
 }`
@@ -230,17 +229,11 @@ export function ScrollAmbient() {
     let hasPointer = false
 
     const spawn = (i: number, stagger: boolean) => {
-      // Most streaks are BORN in a tight disk at the cursor so they emit FROM it;
-      // a few seed uniformly so the far field never goes fully dark.
-      if (curX >= 0 && Math.random() < 0.5) {
-        const a = Math.random() * Math.PI * 2
-        const r = Math.sqrt(Math.random()) * Math.max(bw, bh) * 0.015
-        px[i] = curX + Math.cos(a) * r
-        py[i] = curY + Math.sin(a) * r
-      } else {
-        px[i] = Math.random() * bw
-        py[i] = Math.random() * bh
-      }
+      // Uniform seeding → even density, so the flow stays smooth with no ribbon, ring,
+      // or void. The cursor's effect is brightness only (the comet in step), which
+      // keeps the interaction completely artifact-free.
+      px[i] = Math.random() * bw
+      py[i] = Math.random() * bh
       ppx[i] = px[i]
       ppy[i] = py[i]
       maxLife[i] = 5 + Math.random() * 8
@@ -303,16 +296,15 @@ export function ScrollAmbient() {
     const step = (dt: number) => {
       const speed = (2.0 + sp * 2.2) * (dt * 60)
       const md = Math.max(bw, bh)
-      const baseAng = 0.9 + 0.35 * Math.sin(t * 0.025) // overall drift, gently swaying
+      // Centered nearer horizontal so the field reads side-to-side, not just top-to-bottom.
+      const baseAng = 0.5 + 0.4 * Math.sin(t * 0.03)
       for (let i = 0; i < count; i++) {
         life[i] -= dt
         if (life[i] <= 0) spawn(i, false)
         const x = px[i]
         const y = py[i]
-        // One smooth, laminar flow everywhere — a low-amplitude direction field, so it
-        // gently undulates but can never wind into a vortex. The cursor is not a force
-        // here: it's where streaks are BORN (see spawn) and where they're brightest
-        // (see fall), so they emit from the pointer and flow off into the current.
+        // One smooth, low-amplitude laminar flow everywhere — even density, so it can
+        // never form a ribbon, ring, or vortex.
         const flowAng =
           baseAng + 0.5 * Math.sin(x * 0.0015 + t * 0.05) + 0.4 * Math.sin(y * 0.0018 - t * 0.045)
         const vx = Math.cos(flowAng)
@@ -327,14 +319,17 @@ export function ScrollAmbient() {
           px[i] = nx
           py[i] = ny
         }
+        // A soft round spotlight centered on the pointer: brightest directly under the
+        // cursor and fading out smoothly in every direction, so it reads as a lit spot —
+        // not a diagonal tail, and not a ringed disc with a hole in the middle.
         const dxc = x - curX
         const dyc = y - curY
-        const rl = Math.sqrt(dxc * dxc + dyc * dyc)
+        const r = md * 0.07 // spotlight radius
+        // Lifted floor → the ambient field (away from the cursor) stays bright, so the
+        // cursor reads as a gentle emphasis rather than the only lit thing. Balance.
+        const fall = 0.6 + 0.55 * Math.exp(-(dxc * dxc + dyc * dyc) / (r * r))
         const lp = life[i] / maxLife[i]
         const env = Math.sin(Math.max(0, Math.min(1, lp)) * Math.PI)
-        // Bright tight core right at the cursor + a softer halo, fading to a dim
-        // ambient floor — so the streaks clearly originate AT the pointer.
-        const fall = 0.25 + 0.5 * Math.exp(-rl / (md * 0.22)) + 0.6 * Math.exp(-rl / (md * 0.06))
         const alpha = env * BASE_ALPHA * weight[i] * fall
         const o = i * 6
         segData[o] = ppx[i]
