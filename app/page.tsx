@@ -25,12 +25,10 @@ const problemHeading =
 
 const problemCopy = [
   "The reading is in Canvas. A reply you owe is buried in Gmail. Half a plan sits in Notion. None of them talk to each other, so you do — in your head, at 1am, hoping you didn't forget the one that actually mattered.",
-  "That low background hum of what-am-I-missing isn't a character flaw. It's what happens when a dozen apps quietly make you the thing that connects them.",
+  "That dread of what-am-I-missing is what happens when a dozen apps force you to connect them together.",
 ]
 
 const progressHeading = "Imagine not being the one who has to remember."
-const progressLede =
-  "Same week, same deadlines — but the part where you carry all of it just… stops being your job."
 
 const progressLines = [
   { k: "01", t: "A night out with friends, with nothing humming in the back of your head." },
@@ -46,7 +44,7 @@ const steps = [
     number: "01",
     title: "Connect what you already use.",
     detail:
-      "Canvas, Gmail, Notion, Google Calendar — Jarvis plugs into wherever your obligations already live. Nothing to type in by hand, nothing to keep tidy.",
+      "Canvas, Gmail, Notion, Google Calendar — Jarvis plugs into wherever your obligations already live. Minimal setup, zero overhead.",
   },
   {
     number: "02",
@@ -133,14 +131,9 @@ export default function LandingPage() {
           <section id="section-progress" className="border-t border-[var(--rule)] py-[clamp(56px,7vw,104px)]">
             <div className={CONTAINER}>
               <SectionHead index="03" label="what changes" meta="the payoff" />
-              <div className="mt-[clamp(28px,4vw,56px)] grid grid-cols-1 items-end gap-[clamp(16px,3vw,40px)] lg:grid-cols-12">
-                <h2 className="landing-display text-[clamp(1.9rem,3.8vw,3rem)] font-semibold leading-[1.04] text-foreground lg:col-span-7">
-                  {progressHeading}
-                </h2>
-                <p className="text-[clamp(0.95rem,1.2vw,1.05rem)] leading-[1.55] text-muted-foreground lg:col-span-4 lg:col-start-9">
-                  {progressLede}
-                </p>
-              </div>
+              <h2 className="landing-display mt-[clamp(28px,4vw,56px)] max-w-[20ch] text-[clamp(1.9rem,3.8vw,3rem)] font-semibold leading-[1.04] text-foreground">
+                {progressHeading}
+              </h2>
 
               <ul className="mt-[clamp(32px,4vw,56px)] grid grid-cols-1 gap-px overflow-hidden rounded-sm bg-[var(--rule)] sm:grid-cols-2 lg:grid-cols-4">
                 {progressLines.map((line) => (
@@ -206,7 +199,7 @@ export default function LandingPage() {
                 <div className="lg:col-span-8">
                   <Refrain lines={refrains} />
                 </div>
-                <p className="self-end text-[clamp(0.95rem,1.2vw,1.05rem)] leading-[1.55] text-muted-foreground lg:col-span-4">
+                <p className="self-center text-[clamp(0.95rem,1.2vw,1.05rem)] leading-[1.55] text-muted-foreground lg:col-span-4">
                   No dashboards to maintain, no prompts to write. You connect your accounts once and it
                   runs in the background — the way a real assistant would.
                 </p>
