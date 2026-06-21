@@ -52,6 +52,12 @@ const DEFAULT_PREFERENCES: UserPreferences = {
   preferredCheckInMode: "quiet",
   calendarId: null,
   plannerHorizonDays: 28,
+  morningDigestEnabled: true,
+  eveningDigestEnabled: true,
+  morningDigestTime: "08:30",
+  eveningDigestTime: "18:30",
+  quietHoursStart: null,
+  quietHoursEnd: null,
 }
 
 export interface AssistantRuntimeContext {

@@ -22,6 +22,12 @@ export const updatePreferencesRequestSchema = z
     preferredCheckInMode: preferredCheckInModeSchema.optional(),
     calendarId: nullableTrimmedTextSchema.optional(),
     plannerHorizonDays: z.number().int().min(7).max(56).optional(),
+    morningDigestEnabled: z.boolean().optional(),
+    eveningDigestEnabled: z.boolean().optional(),
+    morningDigestTime: hhmmSchema.optional(),
+    eveningDigestTime: hhmmSchema.optional(),
+    quietHoursStart: hhmmSchema.nullable().optional(),
+    quietHoursEnd: hhmmSchema.nullable().optional(),
   })
   .refine((value) => Object.keys(value).length > 0, {
     message: "At least one preference field must be provided.",

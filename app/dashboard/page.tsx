@@ -31,7 +31,7 @@ import { RailSheet } from "@/components/dashboard/rail-sheet"
 import { MemoryWorkbench } from "@/components/dashboard/memory-workbench/memory-workbench"
 import { NeedsYouPanel } from "@/components/dashboard/needs-you-panel"
 import { PlanBasisDisclosure } from "@/components/dashboard/plan-basis-disclosure"
-import { SettingsPanel } from "@/components/dashboard/settings-panel"
+import { SettingsSheet, type SettingsCategory } from "@/components/dashboard/settings-sheet"
 import { SecretaryOverlay } from "@/components/dashboard/secretary-overlay"
 import { SourceSetupPanel } from "@/components/dashboard/source-setup-panel"
 import { TaskManager } from "@/components/dashboard/task-manager"
@@ -258,6 +258,7 @@ export default function DashboardPage() {
   const [sourcesSheetOpen, setSourcesSheetOpen] = useState(false)
   const [memorySheetOpen, setMemorySheetOpen] = useState(false)
   const [settingsSheetOpen, setSettingsSheetOpen] = useState(false)
+  const [settingsCategory, setSettingsCategory] = useState<SettingsCategory>("proactivity")
   const [automationPaused, setAutomationPaused] = useState(false)
   const [secretaryOpen, setSecretaryOpen] = useState(false)
   const [plannerStatus, setPlannerStatus] = useState<PlannerUiStatus>("Idle")
@@ -758,7 +759,10 @@ export default function DashboardPage() {
                     <TooltipTrigger asChild>
                       <button
                         type="button"
-                        onClick={() => setSettingsSheetOpen(true)}
+                        onClick={() => {
+                          setSettingsCategory("automations")
+                          setSettingsSheetOpen(true)
+                        }}
                         aria-label="Automations paused"
                         className="flex h-7 items-center gap-1.5 rounded-sm border border-copper/50 bg-copper-soft px-2 text-[11px] uppercase text-copper"
                       >
@@ -831,14 +835,13 @@ export default function DashboardPage() {
           {dashboard ? <MemoryWorkbench onChanged={() => loadDashboard(true)} /> : null}
         </RailSheet>
 
-        <RailSheet
-          isOpen={settingsSheetOpen}
-          onClose={() => setSettingsSheetOpen(false)}
-          title="Settings"
-          width="narrow"
-        >
-          <SettingsPanel onChanged={() => void refreshPauseStatus()} />
-        </RailSheet>
+        <SettingsSheet
+          open={settingsSheetOpen}
+          onOpenChange={setSettingsSheetOpen}
+          category={settingsCategory}
+          onCategoryChange={setSettingsCategory}
+          onChanged={() => void refreshPauseStatus()}
+        />
 
         <SecretaryOverlay
           isOpen={secretaryOpen}

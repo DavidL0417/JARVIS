@@ -232,12 +232,18 @@ export function ScrollAmbient() {
     let hasPointer = false
 
     const spawn = (i: number, stagger: boolean) => {
-      // Lean seeding toward the top-left inflow corner. The field drifts down-right, so
-      // a uniform seed starves the top-left; pow(>1) pushes spawns up-and-left so streaks
-      // come from across the whole screen, top-left included. Smooth (no hard edge), so
-      // still no ribbon/ring/void.
-      px[i] = bw * Math.pow(Math.random(), 1.4)
-      py[i] = bh * Math.pow(Math.random(), 1.4)
+      if (stagger) {
+        // Initial fill is uniform, so the page loads as an even field — no clumped
+        // top-left "block" drifting down while the sim settles on first paint.
+        px[i] = Math.random() * bw
+        py[i] = Math.random() * bh
+      } else {
+        // Respawns lean toward the top-left inflow corner (the field drifts down-right,
+        // so a uniform respawn would starve it). pow(>1) is smooth, so the top-left fills
+        // in gently after load — no ribbon/ring/void, and no block.
+        px[i] = bw * Math.pow(Math.random(), 1.4)
+        py[i] = bh * Math.pow(Math.random(), 1.4)
+      }
       ppx[i] = px[i]
       ppy[i] = py[i]
       maxLife[i] = 5 + Math.random() * 8

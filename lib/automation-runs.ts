@@ -11,7 +11,12 @@ export type AutomationRunKind =
   | "morning_digest"
   | "evening_digest"
 
-export type AutomationRunStatus = "completed" | "skipped_paused" | "skipped_idle" | "failed"
+export type AutomationRunStatus =
+  | "completed"
+  | "skipped_paused"
+  | "skipped_idle"
+  | "skipped_quiet_hours"
+  | "failed"
 
 export interface AutomationRunSummary {
   id: string

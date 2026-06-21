@@ -30,7 +30,20 @@ function buildDefaultPreferences(userId: string): UserPreferences {
     preferredCheckInMode: "quiet",
     calendarId: null,
     plannerHorizonDays: 28,
+    morningDigestEnabled: true,
+    eveningDigestEnabled: true,
+    morningDigestTime: "08:30",
+    eveningDigestTime: "18:30",
+    quietHoursStart: null,
+    quietHoursEnd: null,
   }
+}
+
+// Nullable fields use an explicit-undefined check (not `??`) so a request can
+// clear them back to null — `?? existing` would treat an intentional null as
+// "keep the old value", making availability fields and quiet hours un-clearable.
+function patchNullable<T>(update: T | null | undefined, existing: T | null): T | null {
+  return update === undefined ? existing : update
 }
 
 function mergePreferences(
@@ -40,19 +53,25 @@ function mergePreferences(
   return {
     userId: existing.userId,
     timezone: updates.timezone ?? existing.timezone,
-    sleepPattern: updates.sleepPattern ?? existing.sleepPattern,
-    peakEnergyWindow: updates.peakEnergyWindow ?? existing.peakEnergyWindow,
-    procrastinationPattern: updates.procrastinationPattern ?? existing.procrastinationPattern,
+    sleepPattern: patchNullable(updates.sleepPattern, existing.sleepPattern),
+    peakEnergyWindow: patchNullable(updates.peakEnergyWindow, existing.peakEnergyWindow),
+    procrastinationPattern: patchNullable(updates.procrastinationPattern, existing.procrastinationPattern),
     workdayStart: updates.workdayStart ?? existing.workdayStart,
     workdayEnd: updates.workdayEnd ?? existing.workdayEnd,
     defaultTaskDurationMinutes:
       updates.defaultTaskDurationMinutes ?? existing.defaultTaskDurationMinutes,
     breakDurationMinutes: updates.breakDurationMinutes ?? existing.breakDurationMinutes,
     preferredFocusBlockMinutes:
-      updates.preferredFocusBlockMinutes ?? existing.preferredFocusBlockMinutes,
+      patchNullable(updates.preferredFocusBlockMinutes, existing.preferredFocusBlockMinutes),
     preferredCheckInMode: updates.preferredCheckInMode ?? existing.preferredCheckInMode,
-    calendarId: updates.calendarId ?? existing.calendarId,
+    calendarId: patchNullable(updates.calendarId, existing.calendarId),
     plannerHorizonDays: updates.plannerHorizonDays ?? existing.plannerHorizonDays,
+    morningDigestEnabled: updates.morningDigestEnabled ?? existing.morningDigestEnabled,
+    eveningDigestEnabled: updates.eveningDigestEnabled ?? existing.eveningDigestEnabled,
+    morningDigestTime: updates.morningDigestTime ?? existing.morningDigestTime,
+    eveningDigestTime: updates.eveningDigestTime ?? existing.eveningDigestTime,
+    quietHoursStart: patchNullable(updates.quietHoursStart, existing.quietHoursStart),
+    quietHoursEnd: patchNullable(updates.quietHoursEnd, existing.quietHoursEnd),
   }
 }
 
@@ -145,9 +164,7 @@ export async function PUT(request: Request) {
     const { data, error } = await adminClient
       .from("preferences")
       .upsert(mapPreferencesToUpsert(mergedPreferences), { onConflict: "user_id" })
-      .select(
-        "id, user_id, timezone, sleep_pattern, peak_energy_window, procrastination_pattern, workday_start, workday_end, default_task_duration_minutes, break_duration_minutes, preferred_focus_block_minutes, preferred_checkin_mode, calendar_id, created_at, updated_at",
-      )
+      .select(PREFERENCES_SELECT)
       .single<UserPreferencesRow>()
 
     if (error || !data) {

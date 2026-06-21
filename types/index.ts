@@ -65,6 +65,12 @@ export interface UserPreferencesRow {
   preferred_checkin_mode: PreferredCheckInMode
   calendar_id: string | null
   planner_horizon_days: number | null
+  morning_digest_enabled: boolean
+  evening_digest_enabled: boolean
+  morning_digest_time: string
+  evening_digest_time: string
+  quiet_hours_start: string | null
+  quiet_hours_end: string | null
   created_at: string
   updated_at: string
 }
@@ -370,6 +376,12 @@ export interface UserPreferences {
   preferredCheckInMode: PreferredCheckInMode
   calendarId: string | null
   plannerHorizonDays: number
+  morningDigestEnabled: boolean
+  eveningDigestEnabled: boolean
+  morningDigestTime: string
+  eveningDigestTime: string
+  quietHoursStart: string | null
+  quietHoursEnd: string | null
 }
 
 export interface UserCalendar {
@@ -876,6 +888,12 @@ export interface UpdatePreferencesRequest {
   preferredCheckInMode?: PreferredCheckInMode
   calendarId?: string | null
   plannerHorizonDays?: number
+  morningDigestEnabled?: boolean
+  eveningDigestEnabled?: boolean
+  morningDigestTime?: string
+  eveningDigestTime?: string
+  quietHoursStart?: string | null
+  quietHoursEnd?: string | null
 }
 
 export interface PreferencesResponse {

@@ -5,6 +5,7 @@ import { useEffect } from "react"
 import { X } from "lucide-react"
 
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
+import { cn } from "@/lib/utils"
 
 const RAIL_SHEET_WIDTHS = {
   narrow: 420,
@@ -16,12 +17,15 @@ export function RailSheet({
   onClose,
   title,
   width = "narrow",
+  padded = true,
   children,
 }: {
   isOpen: boolean
   onClose: () => void
   title: string
   width?: keyof typeof RAIL_SHEET_WIDTHS
+  /** When false the body fills flush (no padding, no scroll) so children own the layout — e.g. a two-pane settings surface. */
+  padded?: boolean
   children: ReactNode
 }) {
   const widthPx = RAIL_SHEET_WIDTHS[width]
@@ -75,7 +79,9 @@ export function RailSheet({
             </Tooltip>
           </header>
 
-          <div className="rail-scroll min-h-0 flex-1 overflow-y-auto px-4 py-4">{children}</div>
+          <div className={cn("min-h-0 flex-1", padded ? "rail-scroll overflow-y-auto px-4 py-4" : "overflow-hidden")}>
+            {children}
+          </div>
         </div>
       </aside>
     </>
