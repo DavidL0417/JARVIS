@@ -1,3 +1,5 @@
+import Link from "next/link"
+
 import { LiveClock } from "@/components/landing/live-clock"
 
 export function LandingFooter() {
@@ -22,6 +24,14 @@ export function LandingFooter() {
           >
             davidxizhenliu@gmail.com
           </a>
+          <span className="flex items-center gap-3">
+            <Link href="/privacy" className="transition-opacity hover:opacity-70">
+              Privacy
+            </Link>
+            <Link href="/terms" className="transition-opacity hover:opacity-70">
+              Terms
+            </Link>
+          </span>
           <span className="num uppercase tracking-[0.12em]">© 2026 Jarvis · built solo by David Liu</span>
         </div>
       </div>
