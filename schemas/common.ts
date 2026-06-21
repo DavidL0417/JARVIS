@@ -65,6 +65,12 @@ export const userPreferencesSchema = z.object({
   preferredCheckInMode: preferredCheckInModeSchema,
   calendarId: z.string().min(1).nullable(),
   plannerHorizonDays: z.number().int().min(7).max(56),
+  morningDigestEnabled: z.boolean(),
+  eveningDigestEnabled: z.boolean(),
+  morningDigestTime: z.string().regex(hhmmPattern, "Expected HH:MM time"),
+  eveningDigestTime: z.string().regex(hhmmPattern, "Expected HH:MM time"),
+  quietHoursStart: z.string().regex(hhmmPattern, "Expected HH:MM time").nullable(),
+  quietHoursEnd: z.string().regex(hhmmPattern, "Expected HH:MM time").nullable(),
 })
 
 export const taskSchema = z.object({

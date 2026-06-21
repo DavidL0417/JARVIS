@@ -1,14 +1,15 @@
 import { NextResponse } from "next/server"
 
 import { recordAutomationRun } from "@/lib/automation-runs"
-import { loadUserTimezone } from "@/lib/data/user-timezone"
-import { DIGEST_DEFAULTS } from "@/lib/digest/config"
+import { loadUserPreferences } from "@/lib/data/preferences"
+import { resolveDigestConfig } from "@/lib/digest/config"
 import { buildMorningDigest } from "@/lib/digest/morning"
-import { isDigestDue, localDayKey } from "@/lib/digest/schedule"
+import { isDigestDue, isWithinQuietHours, localDayKey } from "@/lib/digest/schedule"
 import { enqueueOutboxMessage } from "@/lib/imessage/outbox"
 import { deliverPendingOutbox } from "@/lib/imessage/transport/deliver"
 import { getAutomationSettings, isAutomationPaused } from "@/lib/supabase/automation-settings"
 import { createSupabaseAdminClient } from "@/lib/supabase/server"
+import { DEFAULT_TIMEZONE } from "@/lib/time/zoned"
 
 export const runtime = "nodejs"
 // The morning branch calls buildDailyPlan (reconcile + source refresh + planner
@@ -41,10 +42,13 @@ export async function GET(request: Request) {
 
   const adminClient = createSupabaseAdminClient()
   const now = new Date()
-  const config = DIGEST_DEFAULTS
 
   try {
-    const timezone = await loadUserTimezone(operatorUserId)
+    // Per-user digest config (enable flags, send times, quiet hours) with a
+    // per-field fallback to the system defaults when no preferences row exists.
+    const preferences = await loadUserPreferences(operatorUserId, adminClient)
+    const timezone = preferences?.timezone ?? DEFAULT_TIMEZONE
+    const config = resolveDigestConfig(preferences)
     const settings = await getAutomationSettings(operatorUserId, adminClient)
     const paused = isAutomationPaused(settings, now)
 
@@ -89,6 +93,21 @@ export async function GET(request: Request) {
         adminClient,
       })
       return NextResponse.json({ success: true, kind, skipped: "paused" })
+    }
+
+    // Quiet hours: a "don't text me" window layered on top of pause. Suppresses
+    // today's send without recomputing the digest; the per-day dedup key still
+    // guarantees at-most-once if the window ends inside the catch-up tail.
+    if (isWithinQuietHours({ now, timeZone: timezone, startHm: config.quietHoursStart, endHm: config.quietHoursEnd })) {
+      await recordAutomationRun({
+        userId: operatorUserId,
+        kind,
+        status: "skipped_quiet_hours",
+        summary: `Within quiet hours (${config.quietHoursStart}–${config.quietHoursEnd}).`,
+        startedAt,
+        adminClient,
+      })
+      return NextResponse.json({ success: true, kind, skipped: "quiet_hours" })
     }
 
     try {

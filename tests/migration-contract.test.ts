@@ -86,6 +86,10 @@ const imessageOutboxMigration = readFileSync(
   "supabase/migrations/20260620204130_imessage_outbox.sql",
   "utf8",
 )
+const digestPreferencesMigration = readFileSync(
+  "supabase/migrations/20260621120000_digest_proactivity_preferences.sql",
+  "utf8",
+)
 
 describe("production Supabase migration", () => {
   it("keeps OAuth tokens outside public tables", () => {
@@ -337,6 +341,26 @@ describe("production Supabase migration", () => {
     )
     expect(imessageOutboxMigration).not.toContain("disable row level security")
     expect(imessageOutboxMigration).not.toContain("access_token")
+  })
+
+  it("adds per-user digest preferences and widens the automation_runs audit constraints", () => {
+    // Additive, idempotent preference columns on the existing `preferences` table.
+    expect(digestPreferencesMigration).toContain("alter table public.preferences")
+    expect(digestPreferencesMigration).toContain("add column if not exists morning_digest_enabled boolean not null default true")
+    expect(digestPreferencesMigration).toContain("add column if not exists evening_digest_enabled boolean not null default true")
+    expect(digestPreferencesMigration).toContain("add column if not exists morning_digest_time text not null default '08:30'")
+    expect(digestPreferencesMigration).toContain("add column if not exists evening_digest_time text not null default '18:30'")
+    expect(digestPreferencesMigration).toContain("add column if not exists quiet_hours_start text")
+    expect(digestPreferencesMigration).toContain("add column if not exists quiet_hours_end text")
+    // Digest run logging was being rejected by the un-widened kind constraint; fix it.
+    expect(digestPreferencesMigration).toContain("automation_runs_kind_check")
+    expect(digestPreferencesMigration).toContain("'morning_digest'")
+    expect(digestPreferencesMigration).toContain("'evening_digest'")
+    expect(digestPreferencesMigration).toContain("automation_runs_status_check")
+    expect(digestPreferencesMigration).toContain("'skipped_quiet_hours'")
+    // Widening only — no destructive ops or credential leakage.
+    expect(digestPreferencesMigration).not.toContain("disable row level security")
+    expect(digestPreferencesMigration).not.toContain("drop column")
   })
 
   it("stores Canvas extension page markdown content with RLS and no credentials", () => {

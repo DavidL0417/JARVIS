@@ -52,7 +52,7 @@ import type {
 
 export const USER_PROFILE_SELECT = "id, email, name, avatar_url, created_at, updated_at"
 export const PREFERENCES_SELECT =
-  "id, user_id, timezone, sleep_pattern, peak_energy_window, procrastination_pattern, workday_start, workday_end, default_task_duration_minutes, break_duration_minutes, preferred_focus_block_minutes, preferred_checkin_mode, calendar_id, planner_horizon_days, created_at, updated_at"
+  "id, user_id, timezone, sleep_pattern, peak_energy_window, procrastination_pattern, workday_start, workday_end, default_task_duration_minutes, break_duration_minutes, preferred_focus_block_minutes, preferred_checkin_mode, calendar_id, planner_horizon_days, morning_digest_enabled, evening_digest_enabled, morning_digest_time, evening_digest_time, quiet_hours_start, quiet_hours_end, created_at, updated_at"
 export const TASK_SELECT =
   "id, user_id, title, description, deadline, duration_minutes, priority, status, scheduled_for, created_at, updated_at, is_immutable, all_day, calendar_id, tags, course, category, source_snapshot_id, source_candidate_id, plan_id, external_task_id, last_synced_from, inferred_deadline, inferred_deadline_reason, inferred_deadline_dismissed"
 export const SCHEDULE_EVENT_SELECT =
@@ -449,6 +449,12 @@ export function mapPreferencesRowToPreferences(row: UserPreferencesRow | null): 
     preferredCheckInMode: row.preferred_checkin_mode,
     calendarId: normalizeNullableText(row.calendar_id),
     plannerHorizonDays: row.planner_horizon_days ?? 28,
+    morningDigestEnabled: row.morning_digest_enabled ?? true,
+    eveningDigestEnabled: row.evening_digest_enabled ?? true,
+    morningDigestTime: normalizeTimeValue(row.morning_digest_time, "08:30"),
+    eveningDigestTime: normalizeTimeValue(row.evening_digest_time, "18:30"),
+    quietHoursStart: normalizeNullableText(row.quiet_hours_start),
+    quietHoursEnd: normalizeNullableText(row.quiet_hours_end),
   }
 }
 
@@ -467,6 +473,12 @@ export function mapPreferencesToUpsert(preferences: UserPreferences): UserPrefer
     preferred_checkin_mode: preferences.preferredCheckInMode,
     calendar_id: normalizeNullableText(preferences.calendarId),
     planner_horizon_days: preferences.plannerHorizonDays,
+    morning_digest_enabled: preferences.morningDigestEnabled,
+    evening_digest_enabled: preferences.eveningDigestEnabled,
+    morning_digest_time: preferences.morningDigestTime,
+    evening_digest_time: preferences.eveningDigestTime,
+    quiet_hours_start: normalizeNullableText(preferences.quietHoursStart),
+    quiet_hours_end: normalizeNullableText(preferences.quietHoursEnd),
   }
 }
 

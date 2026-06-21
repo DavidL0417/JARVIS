@@ -54,3 +54,32 @@ export function isDigestDue(input: {
   const target = parseHmToMinutes(input.targetHm)
   return current >= target && current < target + input.maxCatchupMinutes
 }
+
+/**
+ * True when the user's current local time falls inside the quiet-hours window —
+ * a "don't text me" gate layered on top of pause. Null start/end means no quiet
+ * hours (never suppressed). The window may wrap past midnight: when start > end
+ * (e.g. 22:00–07:00) it spans the night, so membership is `current >= start ||
+ * current < end`. The window is half-open [start, end); a zero-length window
+ * (start === end) is treated as off.
+ */
+export function isWithinQuietHours(input: {
+  now: Date
+  timeZone: string
+  startHm: string | null
+  endHm: string | null
+}): boolean {
+  if (!input.startHm || !input.endHm) {
+    return false
+  }
+  const current = localMinutesOfDay(input.now, input.timeZone)
+  const start = parseHmToMinutes(input.startHm)
+  const end = parseHmToMinutes(input.endHm)
+  if (start === end) {
+    return false
+  }
+  if (start < end) {
+    return current >= start && current < end
+  }
+  return current >= start || current < end
+}
