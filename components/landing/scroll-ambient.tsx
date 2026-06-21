@@ -63,8 +63,11 @@ void main(){
   }
   vec3 light = core + g1 * (0.42 / 8.0) + g2 * (0.3 / 8.0); // two-ring bloom
   vec3 col = u_bg + light;
-  float d = distance(v_uv, vec2(0.5));
-  col *= 0.6 + 0.4 * smoothstep(0.95, 0.15, d);
+  // Brightest at the top-left; eases gently out toward the right and the bottom, so
+  // the field reads as drifting in from the top-left and filling the whole screen.
+  float fadeR = smoothstep(0.30, 1.05, v_uv.x);       // grows toward the right edge
+  float fadeB = smoothstep(0.30, 1.05, 1.0 - v_uv.y); // grows toward the bottom edge
+  col *= 1.0 - 0.30 * fadeR - 0.26 * fadeB;
   col += (hash(v_uv * u_res + u_seed) - 0.5) * (1.0 / 255.0); // dither
   o = vec4(col, 1.0);
 }`
@@ -229,11 +232,12 @@ export function ScrollAmbient() {
     let hasPointer = false
 
     const spawn = (i: number, stagger: boolean) => {
-      // Uniform seeding → even density, so the flow stays smooth with no ribbon, ring,
-      // or void. The cursor's effect is brightness only (the comet in step), which
-      // keeps the interaction completely artifact-free.
-      px[i] = Math.random() * bw
-      py[i] = Math.random() * bh
+      // Lean seeding toward the top-left inflow corner. The field drifts down-right, so
+      // a uniform seed starves the top-left; pow(>1) pushes spawns up-and-left so streaks
+      // come from across the whole screen, top-left included. Smooth (no hard edge), so
+      // still no ribbon/ring/void.
+      px[i] = bw * Math.pow(Math.random(), 1.4)
+      py[i] = bh * Math.pow(Math.random(), 1.4)
       ppx[i] = px[i]
       ppy[i] = py[i]
       maxLife[i] = 5 + Math.random() * 8
