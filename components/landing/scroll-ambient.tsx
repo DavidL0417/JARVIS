@@ -44,8 +44,7 @@ const introField = (s: number) => {
   if (s < 0.3) return 0
   if (s < 1.5) return smoothstep01((s - 0.3) / 1.2) // gather into the dot
   if (s < 3.0) return 1 // hold (the dot morphs into the J here)
-  if (s < 3.7) return 1 - 1.5 * smoothstep01((s - 3.0) / 0.7) // release: +1 → -0.5
-  if (s < 4.9) return -0.5 + 0.5 * smoothstep01((s - 3.7) / 1.2) // bloom eases back to 0
+  if (s < 4.6) return 1 - smoothstep01((s - 3.0) / 1.6) // release: melt evenly back into the flow
   return 0
 }
 // Dot (0) morphing into the J (1).
@@ -91,11 +90,13 @@ void main(){
   }
   vec3 light = core + g1 * (0.42 / 8.0) + g2 * (0.3 / 8.0); // two-ring bloom
   vec3 col = u_bg + light;
-  // Brightest at the top-left; eases gently out toward the right and the bottom, so
-  // the field reads as drifting in from the top-left and filling the whole screen.
-  float fadeR = smoothstep(0.30, 1.05, v_uv.x);       // grows toward the right edge
-  float fadeB = smoothstep(0.30, 1.05, 1.0 - v_uv.y); // grows toward the bottom edge
-  col *= 1.0 - 0.30 * fadeR - 0.26 * fadeB;
+  // Equal, soft black margin on all four edges — pixel-based so the margin is the same
+  // width on every side regardless of aspect. Balanced fade, even visual weight.
+  vec2 pxc = v_uv * u_res;
+  float mg = 110.0; // edge-feather width, in backing pixels
+  float ex = smoothstep(0.0, mg, pxc.x) * smoothstep(0.0, mg, u_res.x - pxc.x);
+  float ey = smoothstep(0.0, mg, pxc.y) * smoothstep(0.0, mg, u_res.y - pxc.y);
+  col *= 0.05 + 0.95 * ex * ey;
   col += (hash(v_uv * u_res + u_seed) - 0.5) * (1.0 / 255.0); // dither
   o = vec4(col, 1.0);
 }`
@@ -266,18 +267,11 @@ export function ScrollAmbient() {
     let hasPointer = false
 
     const spawn = (i: number, stagger: boolean) => {
-      if (stagger) {
-        // Initial fill is uniform, so the page loads as an even field — no clumped
-        // top-left "block" drifting down while the sim settles on first paint.
-        px[i] = Math.random() * bw
-        py[i] = Math.random() * bh
-      } else {
-        // Respawns lean toward the top-left inflow corner (the field drifts down-right,
-        // so a uniform respawn would starve it). pow(>1) is smooth, so the top-left fills
-        // in gently after load — no ribbon/ring/void, and no block.
-        px[i] = bw * Math.pow(Math.random(), 1.4)
-        py[i] = bh * Math.pow(Math.random(), 1.4)
-      }
+      // Uniform seeding everywhere → even density with no directional bias. (A top-left
+      // lean would pile freshly-born — and therefore invisible, since the life-fade starts
+      // at 0 — particles into one corner, which reads as a dark "block"/corner artifact.)
+      px[i] = Math.random() * bw
+      py[i] = Math.random() * bh
       ppx[i] = px[i]
       ppy[i] = py[i]
       maxLife[i] = 5 + Math.random() * 8
