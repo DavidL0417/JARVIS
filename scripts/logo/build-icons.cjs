@@ -81,6 +81,31 @@ async function pngFromHtml(page, html, w, h) {
   return page.screenshot()
 }
 
+// Pack PNG buffers into a PNG-embedded .ico (multi-resolution). Browsers and
+// Google/Vercel fetchers that request /favicon.ico directly read this.
+function buildIco(pngs) {
+  const header = Buffer.alloc(6)
+  header.writeUInt16LE(0, 0) // reserved
+  header.writeUInt16LE(1, 2) // type: 1 = icon
+  header.writeUInt16LE(pngs.length, 4)
+  let offset = 6 + pngs.length * 16
+  const entries = []
+  for (const { size, buf } of pngs) {
+    const e = Buffer.alloc(16)
+    e.writeUInt8(size >= 256 ? 0 : size, 0) // width (0 = 256)
+    e.writeUInt8(size >= 256 ? 0 : size, 1) // height
+    e.writeUInt8(0, 2) // palette count
+    e.writeUInt8(0, 3) // reserved
+    e.writeUInt16LE(1, 4) // color planes
+    e.writeUInt16LE(32, 6) // bits per pixel
+    e.writeUInt32LE(buf.length, 8)
+    e.writeUInt32LE(offset, 12)
+    entries.push(e)
+    offset += buf.length
+  }
+  return Buffer.concat([header, ...entries, ...pngs.map((p) => p.buf)])
+}
+
 ;(async () => {
   const preview = process.argv.includes('--preview')
   const outDir = preview ? '/tmp' : path.join(__dirname, '..', '..', 'public')
@@ -96,11 +121,23 @@ async function pngFromHtml(page, html, w, h) {
     console.log('wrote', p, buf.length, 'bytes')
   }
 
-  if (preview) {
+  const writeFavicon = async () => {
+    const sizes = [16, 32, 48]
+    const pngs = []
+    for (const s of sizes) pngs.push({ size: s, buf: await pngFromSvg(page, markSvg(s), s, s) })
+    const p = path.join(__dirname, '..', '..', 'public', 'favicon.ico')
+    fs.writeFileSync(p, buildIco(pngs))
+    console.log('wrote', p, '(16/32/48)')
+  }
+
+  if (process.argv.includes('--ico-only')) {
+    await writeFavicon()
+  } else if (preview) {
     write('jarvis-preview-180.png', await pngFromSvg(page, markSvg(180), 180, 180))
     write('jarvis-preview-32.png', await pngFromSvg(page, markSvg(32), 32, 32))
     write('jarvis-preview-og.png', await pngFromHtml(page, ogHtml(), 1200, 630))
   } else {
+    await writeFavicon()
     fs.writeFileSync(path.join(outDir, 'icon.svg'), ICON_SVG)
     console.log('wrote', path.join(outDir, 'icon.svg'))
     write('apple-icon.png', await pngFromSvg(page, markSvg(180), 180, 180))
