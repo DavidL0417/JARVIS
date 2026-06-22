@@ -53,6 +53,12 @@ const introMorph = (s: number) => {
   if (s < 2.5) return smoothstep01((s - 1.6) / 0.9)
   return 1
 }
+// Release dispersal pulse: breaks the mark apart in place so it dissolves into the
+// streams instead of sliding off as a coherent shape.
+const introScatter = (s: number) => {
+  if (s < 3.0 || s >= 4.6) return 0
+  return Math.sin(((s - 3.0) / 1.6) * Math.PI)
+}
 const QUAD_VS = `#version 300 es
 layout(location=0) in vec2 a_quad;
 out vec2 v_uv;
@@ -93,10 +99,10 @@ void main(){
   // Equal, soft black margin on all four edges — pixel-based so the margin is the same
   // width on every side regardless of aspect. Balanced fade, even visual weight.
   vec2 pxc = v_uv * u_res;
-  float mg = 110.0; // edge-feather width, in backing pixels
+  float mg = 90.0; // edge-feather width, in backing pixels
   float ex = smoothstep(0.0, mg, pxc.x) * smoothstep(0.0, mg, u_res.x - pxc.x);
   float ey = smoothstep(0.0, mg, pxc.y) * smoothstep(0.0, mg, u_res.y - pxc.y);
-  col *= 0.05 + 0.95 * ex * ey;
+  col *= 0.46 + 0.54 * ex * ey; // gentle thin-out at the edges (suggests a border, not a black bar)
   col += (hash(v_uv * u_res + u_seed) - 0.5) * (1.0 / 255.0); // dither
   o = vec4(col, 1.0);
 }`
@@ -376,15 +382,14 @@ export function ScrollAmbient() {
       const baseAng = 0.5 + 0.4 * Math.sin(t * 0.03)
       // Convergence intro state. g settles to 0 once the intro is over, so the loop falls
       // back to the original ambient path with no extra cost.
-      const g = introField(introT) // + pull onto the mark, - bloom outward, 0 = pure flow
+      const gather = introField(introT) // pull-to-mark strength: gather → hold → release fade
       const morph = introMorph(introT) // dot (0) → J (1)
-      const gather = g > 0 ? g : 0
-      const shaped = g < 0 ? -g : g
-      const active = shaped > 0.001
+      const scatter = introScatter(introT) // release dispersal pulse
+      const active = gather > 0.001 || scatter > 0.001
       const fx = bw * FOCAL_X
       const fy = bh * FOCAL_Y
       const pull = 0.16 * (dt * 60)
-      const push = md * 0.02 * (dt * 60)
+      const scatterPush = md * 0.003 * (dt * 60)
       const jit = md * 0.004
       for (let i = 0; i < count; i++) {
         life[i] -= dt * (1 - gather) // freeze ageing while gathered onto the mark
@@ -398,27 +403,23 @@ export function ScrollAmbient() {
         let nx = x + Math.cos(flowAng) * speed
         let ny = y + Math.sin(flowAng) * speed
         if (active) {
-          let sx: number
-          let sy: number
-          if (g > 0) {
+          if (gather > 0.001) {
             // Pull toward the mark: a tight dot (morph=0) that opens into the J (morph=1),
             // with a tiny shimmer so settled streaks keep drawing and feel alive.
             const tdx = fx + djx[i]
             const tdy = fy + djy[i]
             const ttx = tdx + (fx + jtx[i] - tdx) * morph + Math.sin(t * 3.1 + i * 0.7) * jit
             const tty = tdy + (fy + jty[i] - tdy) * morph + Math.cos(t * 2.6 + i * 0.9) * jit
-            sx = x + (ttx - x) * pull
-            sy = y + (tty - y) * pull
-          } else {
-            // Release: bloom outward from the focal point, back into the flow.
-            const odx = x - fx
-            const ody = y - fy
-            const od = Math.sqrt(odx * odx + ody * ody) || 1
-            sx = x + (odx / od) * push
-            sy = y + (ody / od) * push
+            nx = nx * (1 - gather) + (x + (ttx - x) * pull) * gather
+            ny = ny * (1 - gather) + (y + (tty - y) * pull) * gather
           }
-          nx = nx * (1 - shaped) + sx * shaped
-          ny = ny * (1 - shaped) + sy * shaped
+          if (scatter > 0.001) {
+            // Break the mark apart in place, evenly in all directions (golden-angle per
+            // particle), so it dissolves into the streams instead of sliding off as a J.
+            const sa = i * 2.39996323
+            nx += Math.cos(sa) * scatterPush * scatter
+            ny += Math.sin(sa) * scatterPush * scatter
+          }
         }
         if (nx < -20 || nx > bw + 20 || ny < -20 || ny > bh + 20) {
           spawn(i, false)
