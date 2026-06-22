@@ -38,21 +38,17 @@ const smoothstep01 = (x: number) => {
   const c = Math.max(0, Math.min(1, x))
   return c * c * (3 - 2 * c)
 }
-// Gather strength over intro seconds: 0 = pure flow, +1 = pull onto the mark,
-// negative = bloom outward on release.
-const introField = (s: number) => {
-  if (s < 0.3) return 0
-  if (s < 1.5) return smoothstep01((s - 0.3) / 1.2) // gather into the dot
-  if (s < 3.0) return 1 // hold (the dot morphs into the J here)
-  if (s < 4.6) return 1 - smoothstep01((s - 3.0) / 1.6) // release: melt evenly back into the flow
-  return 0
-}
 // Dot (0) morphing into the J (1).
 const introMorph = (s: number) => {
   if (s < 1.6) return 0
   if (s < 2.5) return smoothstep01((s - 1.6) / 0.9)
   return 1
 }
+// Intro phase boundaries (seconds): gather → hold → release → done.
+const INTRO_GATHER = 0.3
+const INTRO_HOLD = 1.5
+const INTRO_RELEASE = 3.0
+const INTRO_END = 4.7
 const QUAD_VS = `#version 300 es
 layout(location=0) in vec2 a_quad;
 out vec2 v_uv;
@@ -93,10 +89,10 @@ void main(){
   // Equal, soft black margin on all four edges — pixel-based so the margin is the same
   // width on every side regardless of aspect. Balanced fade, even visual weight.
   vec2 pxc = v_uv * u_res;
-  float mg = 110.0; // edge-feather width, in backing pixels
+  float mg = 90.0; // edge-feather width, in backing pixels
   float ex = smoothstep(0.0, mg, pxc.x) * smoothstep(0.0, mg, u_res.x - pxc.x);
   float ey = smoothstep(0.0, mg, pxc.y) * smoothstep(0.0, mg, u_res.y - pxc.y);
-  col *= 0.05 + 0.95 * ex * ey;
+  col *= 0.46 + 0.54 * ex * ey; // gentle thin-out at the edges (suggests a border, not a black bar)
   col += (hash(v_uv * u_res + u_seed) - 0.5) * (1.0 / 255.0); // dither
   o = vec4(col, 1.0);
 }`
@@ -366,6 +362,7 @@ export function ScrollAmbient() {
     let sp = 0
     let t = 0
     let introT = 0 // seconds since the live loop started (drives the convergence intro)
+    let prevRelProg = -1 // previous-frame release progress, for one-shot peel-off detection
     let last = 0
     let raf = 0
 
@@ -376,18 +373,39 @@ export function ScrollAmbient() {
       const baseAng = 0.5 + 0.4 * Math.sin(t * 0.03)
       // Convergence intro state. g settles to 0 once the intro is over, so the loop falls
       // back to the original ambient path with no extra cost.
-      const g = introField(introT) // + pull onto the mark, - bloom outward, 0 = pure flow
       const morph = introMorph(introT) // dot (0) → J (1)
-      const gather = g > 0 ? g : 0
-      const shaped = g < 0 ? -g : g
-      const active = shaped > 0.001
+      // Intro phases. gatherRamp drives the gather→hold bond; during release each particle
+      // peels off at its own staggered time and respawns into the field, so the J erodes in
+      // place and the streams refill — no clump that can drift/fall.
+      const gatherRamp =
+        introT < INTRO_GATHER
+          ? 0
+          : introT < INTRO_HOLD
+            ? smoothstep01((introT - INTRO_GATHER) / (INTRO_HOLD - INTRO_GATHER))
+            : 1
+      const intro = introT < INTRO_END
+      const releasing = introT >= INTRO_RELEASE && introT < INTRO_END
+      const relProg = (introT - INTRO_RELEASE) / (INTRO_END - INTRO_RELEASE)
       const fx = bw * FOCAL_X
       const fy = bh * FOCAL_Y
       const pull = 0.16 * (dt * 60)
-      const push = md * 0.02 * (dt * 60)
       const jit = md * 0.004
       for (let i = 0; i < count; i++) {
-        life[i] -= dt * (1 - gather) // freeze ageing while gathered onto the mark
+        // This particle's bond to the mark: 1 = held on the mark, 0 = free in the flow.
+        let mark = 0
+        if (intro) {
+          if (releasing) {
+            const thr = (i * 0.618033988749895) % 1 // even, low-discrepancy peel-off order
+            if (relProg >= thr) {
+              if (prevRelProg < thr) spawn(i, true) // peel off into the field, exactly once
+            } else {
+              mark = 1
+            }
+          } else {
+            mark = gatherRamp
+          }
+        }
+        life[i] -= dt * (1 - mark) // freeze ageing while bonded to the mark
         if (life[i] <= 0) spawn(i, false)
         const x = px[i]
         const y = py[i]
@@ -397,28 +415,15 @@ export function ScrollAmbient() {
           baseAng + 0.5 * Math.sin(x * 0.0015 + t * 0.05) + 0.4 * Math.sin(y * 0.0018 - t * 0.045)
         let nx = x + Math.cos(flowAng) * speed
         let ny = y + Math.sin(flowAng) * speed
-        if (active) {
-          let sx: number
-          let sy: number
-          if (g > 0) {
-            // Pull toward the mark: a tight dot (morph=0) that opens into the J (morph=1),
-            // with a tiny shimmer so settled streaks keep drawing and feel alive.
-            const tdx = fx + djx[i]
-            const tdy = fy + djy[i]
-            const ttx = tdx + (fx + jtx[i] - tdx) * morph + Math.sin(t * 3.1 + i * 0.7) * jit
-            const tty = tdy + (fy + jty[i] - tdy) * morph + Math.cos(t * 2.6 + i * 0.9) * jit
-            sx = x + (ttx - x) * pull
-            sy = y + (tty - y) * pull
-          } else {
-            // Release: bloom outward from the focal point, back into the flow.
-            const odx = x - fx
-            const ody = y - fy
-            const od = Math.sqrt(odx * odx + ody * ody) || 1
-            sx = x + (odx / od) * push
-            sy = y + (ody / od) * push
-          }
-          nx = nx * (1 - shaped) + sx * shaped
-          ny = ny * (1 - shaped) + sy * shaped
+        if (mark > 0.001) {
+          // Pull toward the mark: a tight dot (morph=0) that opens into the J (morph=1),
+          // with a tiny shimmer so settled streaks keep drawing and feel alive.
+          const tdx = fx + djx[i]
+          const tdy = fy + djy[i]
+          const ttx = tdx + (fx + jtx[i] - tdx) * morph + Math.sin(t * 3.1 + i * 0.7) * jit
+          const tty = tdy + (fy + jty[i] - tdy) * morph + Math.cos(t * 2.6 + i * 0.9) * jit
+          nx = nx * (1 - mark) + (x + (ttx - x) * pull) * mark
+          ny = ny * (1 - mark) + (y + (tty - y) * pull) * mark
         }
         if (nx < -20 || nx > bw + 20 || ny < -20 || ny > bh + 20) {
           spawn(i, false)
@@ -435,9 +440,9 @@ export function ScrollAmbient() {
         const r = md * 0.07 // spotlight radius
         const fall = 0.6 + 0.55 * Math.exp(-(dxc * dxc + dyc * dyc) / (r * r))
         const lp = life[i] / maxLife[i]
-        // While gathered, override the life-fade so the mark reads as one bright shape.
-        const env = Math.sin(Math.max(0, Math.min(1, lp)) * Math.PI) * (1 - gather) + gather
-        const alpha = env * BASE_ALPHA * weight[i] * fall * (1 + gather * 0.3)
+        // While bonded to the mark, override the life-fade so it reads as one bright shape.
+        const env = Math.sin(Math.max(0, Math.min(1, lp)) * Math.PI) * (1 - mark) + mark
+        const alpha = env * BASE_ALPHA * weight[i] * fall * (1 + mark * 0.3)
         const o = i * 6
         segData[o] = ppx[i]
         segData[o + 1] = ppy[i]
@@ -446,6 +451,7 @@ export function ScrollAmbient() {
         segData[o + 4] = py[i]
         segData[o + 5] = alpha
       }
+      prevRelProg = relProg // remember for next frame's one-shot peel-off detection
     }
 
     const renderOnce = () => {
