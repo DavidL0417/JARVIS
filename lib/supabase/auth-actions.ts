@@ -4,6 +4,26 @@ import type { GoogleCalendarSyncResponse } from "@/types"
 import { GOOGLE_SOURCE_SCOPES } from "@/lib/google-oauth"
 import { tryCreateSupabaseBrowserClient } from "@/lib/supabase/client"
 
+// A single in-flight guard shared by every OAuth entry point on the page.
+//
+// PKCE stores a one-time code_verifier in a single cookie that signInWithOAuth
+// OVERWRITES on every call. If a second OAuth redirect starts before the server
+// exchanges the first code (e.g. an impatient re-click, or the landing Sign in
+// and a dashboard authorize firing across a transition), it clobbers the
+// verifier and the exchange fails with GoTrue "code challenge does not match
+// previously saved code verifier" — which dumps the user back on the Site URL
+// (the home page). The per-component pending flags don't catch cross-component
+// races; this module-level flag does. It is intentionally left set on success
+// because the page is navigating away to Google; a full page (re)load — including
+// a bfcache restore via pageshow — clears it so legitimate retries still work.
+let oauthRedirectInFlight = false
+
+if (typeof window !== "undefined") {
+  window.addEventListener("pageshow", () => {
+    oauthRedirectInFlight = false
+  })
+}
+
 export class GoogleCalendarAuthorizationError extends Error {
   constructor(message = "Google Calendar needs authorization.") {
     super(message)
@@ -40,9 +60,15 @@ function getAuthRedirectTo(nextPath?: string) {
 }
 
 export async function startGoogleSignInRedirect(nextPath = "/dashboard") {
+  if (oauthRedirectInFlight) {
+    return
+  }
+  oauthRedirectInFlight = true
+
   const supabase = tryCreateSupabaseBrowserClient()
 
   if (!supabase) {
+    oauthRedirectInFlight = false
     throw new Error("Supabase auth is not configured.")
   }
 
@@ -54,14 +80,21 @@ export async function startGoogleSignInRedirect(nextPath = "/dashboard") {
   })
 
   if (error) {
+    oauthRedirectInFlight = false
     throw new Error(error.message)
   }
 }
 
 export async function startGoogleSourceAuthorizationRedirect(nextPath?: string) {
+  if (oauthRedirectInFlight) {
+    return
+  }
+  oauthRedirectInFlight = true
+
   const supabase = tryCreateSupabaseBrowserClient()
 
   if (!supabase) {
+    oauthRedirectInFlight = false
     throw new Error("Supabase auth is not configured.")
   }
 
@@ -79,6 +112,7 @@ export async function startGoogleSourceAuthorizationRedirect(nextPath?: string) 
   })
 
   if (error) {
+    oauthRedirectInFlight = false
     throw new Error(error.message)
   }
 }
