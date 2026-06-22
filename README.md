@@ -63,12 +63,12 @@ The public schema uses RLS on every public table. OAuth tokens live in `app_priv
 
 Apply migrations through Supabase CLI or the connected Supabase project tooling. Do not hand-edit production schema outside migrations.
 
-Auth is Google OAuth through Supabase SSR cookies. Set Supabase Auth Site URL to the production app URL and allow `/auth/callback` for production, localhost, and any Vercel preview URLs you intend to test. The sign-in client builds `redirectTo` from `window.location.origin`, so a browser that starts on `http://localhost:3001` must be allowed to return to `http://localhost:3001/auth/callback`, while production returns to `https://mydearestjarvis.vercel.app/auth/callback`.
+Auth is Google OAuth through Supabase SSR cookies. Set Supabase Auth Site URL to the production app URL and allow `/auth/callback` for production, localhost, and any Vercel preview URLs you intend to test. The sign-in client builds `redirectTo` from `window.location.origin`, so a browser that starts on `http://localhost:3001` must be allowed to return to `http://localhost:3001/auth/callback`, while production returns to `https://secretaryjarvis.com/auth/callback`.
 
 Recommended Supabase Auth URL Configuration:
 
-- Site URL: `https://mydearestjarvis.vercel.app`
-- Redirect URLs: `https://mydearestjarvis.vercel.app/auth/callback`, `http://localhost:3000/**`, `http://localhost:3001/**`, `http://localhost:3002/**`, `http://localhost:3003/**`
+- Site URL: `https://secretaryjarvis.com`
+- Redirect URLs: `https://secretaryjarvis.com/**`, `http://localhost:3000/**`, `http://localhost:3001/**`, `http://localhost:3002/**`, `http://localhost:3003/**`
 
 For Vercel previews, Supabase supports wildcard allow-list entries such as `https://*-<team-or-account-slug>.vercel.app/**`; the callback must return to the same browser origin that started the PKCE flow.
 Enable both Google Calendar API and Gmail API on the Google Cloud project behind `GOOGLE_CLIENT_ID`; OAuth can succeed even while Gmail API calls are blocked at the project level.

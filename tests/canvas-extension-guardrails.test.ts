@@ -45,7 +45,7 @@ describe("Canvas extension guardrails", () => {
 
   it("normalizes JARVIS setup page URLs to the app origin", () => {
     expect(normalizeJarvisAppBaseUrl("http://localhost:3001/dashboard/canvas-extension")).toBe("http://localhost:3001")
-    expect(normalizeJarvisAppBaseUrl("https://mydearestjarvis.vercel.app/dashboard/canvas-extension")).toBe("https://mydearestjarvis.vercel.app")
+    expect(normalizeJarvisAppBaseUrl("https://secretaryjarvis.com/dashboard/canvas-extension")).toBe("https://secretaryjarvis.com")
   })
 
   it("allows any localhost/127.0.0.1 dev port for pairing", () => {
@@ -61,7 +61,7 @@ describe("Canvas extension guardrails", () => {
 
   it("uses portless Chrome host permission patterns", () => {
     expect(appHostPermissionPattern("http://localhost:3001/dashboard/canvas-extension")).toBe("http://localhost/*")
-    expect(appHostPermissionPattern("https://mydearestjarvis.vercel.app/dashboard/canvas-extension")).toBe("https://mydearestjarvis.vercel.app/*")
+    expect(appHostPermissionPattern("https://secretaryjarvis.com/dashboard/canvas-extension")).toBe("https://secretaryjarvis.com/*")
   })
 
   it("allows captured same-origin Canvas links", () => {

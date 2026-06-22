@@ -126,7 +126,7 @@ message bodies.
 3. **Curate the allowlist** in the dashboard: Sources → iMessage (operator-only).
 4. **Run the reader on the Mac** (Full Disk Access required):
    ```sh
-   IMESSAGE_INGEST_SECRET=… JARVIS_APP_URL=https://mydearestjarvis.vercel.app \
+   IMESSAGE_INGEST_SECRET=… JARVIS_APP_URL=https://secretaryjarvis.com \
      node scripts/imessage/read-chat-db.mjs --since-days 7
    ```
    A cursor at `~/.jarvis/imessage-cursor.json` makes re-runs incremental. Use

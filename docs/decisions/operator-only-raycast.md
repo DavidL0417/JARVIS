@@ -108,7 +108,7 @@ operator's own use. It must **not** be generalized to other users.
 3. **Install `sqlcipher`** on the Mac: `brew install sqlcipher`.
 4. **Run the reader on the Mac:**
    ```sh
-   RAYCAST_INGEST_SECRET=… JARVIS_APP_URL=https://mydearestjarvis.vercel.app \
+   RAYCAST_INGEST_SECRET=… JARVIS_APP_URL=https://secretaryjarvis.com \
      python3 scripts/raycast/push-notes.py
    ```
    Use `--dry-run` to preview the parsed payload without sending. Schedule it
