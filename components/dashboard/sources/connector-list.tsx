@@ -12,6 +12,7 @@ import {
   ListChecks,
   Mail,
   MessageSquare,
+  ScrollText,
   StickyNote,
 } from "lucide-react"
 
@@ -63,10 +64,17 @@ export const CONNECTOR_DEFINITIONS: ConnectorDefinition[] = [
   {
     id: "canvas",
     title: "Canvas",
-    group: "tasks_courses",
+    group: "school",
     icon: GraduationCap,
     summary: "Import planner items from Canvas and sync completed planner items back.",
     beta: true,
+  },
+  {
+    id: "syllabus",
+    title: "Syllabus",
+    group: "school",
+    icon: ScrollText,
+    summary: "Upload your course syllabuses. JARVIS reads each one and pulls out graded deadlines and exam dates.",
   },
   {
     id: "apple_reminders",
@@ -78,10 +86,10 @@ export const CONNECTOR_DEFINITIONS: ConnectorDefinition[] = [
   },
   {
     id: "manual",
-    title: "Manual context",
+    title: "Files",
     group: "files",
     icon: FileUp,
-    summary: "Upload or paste one-off source material.",
+    summary: "Upload one-off files (PDF, image, or text) as ad-hoc context for planning.",
   },
   {
     id: "todoist",
@@ -158,11 +166,12 @@ export type ConnectorGroupKey = ConnectorDefinition["group"]
 // with the `group` values on CONNECTOR_DEFINITIONS above.
 export const CONNECTOR_GROUPS: { key: ConnectorGroupKey; label: string }[] = [
   { key: "calendar", label: "Calendar" },
-  { key: "tasks_courses", label: "Tasks & Courses" },
+  { key: "school", label: "School" },
+  { key: "tasks_courses", label: "Tasks" },
   { key: "work_context", label: "Work Context" },
-  { key: "files", label: "Files" },
   { key: "operator", label: "Operator" },
   { key: "developing", label: "In Development" },
+  { key: "files", label: "Manual context" },
 ]
 
 export function ConnectorRow({

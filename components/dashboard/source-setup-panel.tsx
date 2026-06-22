@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import {
   ArrowUpRight,
   BookOpen,
@@ -15,7 +15,6 @@ import {
   Mail,
   RefreshCw,
   Save,
-  Upload,
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -30,7 +29,6 @@ import {
   InputGroupAddon,
   InputGroupButton,
   InputGroupInput,
-  InputGroupTextarea,
 } from "@/components/ui/input-group"
 import {
   APPLE_CALDAV_SERVER_URL,
@@ -52,6 +50,7 @@ import {
   InfoLine,
   InlineError,
   LedgerStrip,
+  SourceFileList,
 } from "@/components/dashboard/sources/shared"
 import type {
   ActionPayload,
@@ -133,7 +132,6 @@ export function SourceSetupPanel({
   const [selectedId, setSelectedId] = useState<SourcePanelId | null>(null)
   // Source groups render as collapsible drawers, all collapsed by default.
   const [openGroups, setOpenGroups] = useState<Set<ConnectorGroupKey>>(() => new Set<ConnectorGroupKey>())
-  const [pasteText, setPasteText] = useState("")
   const [notionDatabaseInput, setNotionDatabaseInput] = useState(notionConnector.selectedSourceId ?? "")
   const [canvasBaseUrlInput, setCanvasBaseUrlInput] = useState(canvasConnector.selectedSourceId ?? "")
   const [canvasTokenInput, setCanvasTokenInput] = useState("")
@@ -184,7 +182,7 @@ export function SourceSetupPanel({
   }, [calDavConnector.account])
 
   function stateForConnector(connector: ConnectorDefinition): ConnectorState {
-    if (connector.id === "manual") {
+    if (connector.id === "manual" || connector.id === "syllabus") {
       return "manual"
     }
 
@@ -284,29 +282,6 @@ export function SourceSetupPanel({
       setStatus("error")
       setErrorMessage(error instanceof Error ? error.message : "Source action failed.")
     }
-  }
-
-  async function handlePaste() {
-    const text = pasteText.trim()
-
-    if (!text) {
-      return
-    }
-
-    await runAction(async () => {
-      const response = await fetch("/api/sources/paste", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          source: "manual",
-          label: "Quick context paste",
-          text,
-        }),
-      })
-
-      await readJson(response, "Paste extraction failed.")
-      setPasteText("")
-    })
   }
 
   async function handleUpload(file: File | null | undefined) {
@@ -528,6 +503,45 @@ export function SourceSetupPanel({
     }
   }
 
+  // The Syllabus and Files screens are the same upload path with different framing.
+  // Both post to /api/sources/upload as a "manual" source and share the uploaded
+  // file list; only the surrounding copy differs.
+  function renderUploadIntake(connector: ConnectorDefinition, state: ConnectorState, hint: ReactNode) {
+    return (
+      <div className="flex min-w-0 flex-col gap-5">
+        <DetailHeader connector={connector} state={state} />
+        <div className="flex flex-col gap-3">
+          <div className="flex flex-wrap items-center gap-3">
+            <ActionButton
+              icon={FileUp}
+              label={busy ? "Uploading…" : "Upload file"}
+              onClick={() => fileInputRef.current?.click()}
+              disabled={busy}
+            />
+            {busy ? (
+              <span className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                <Loader2 className="h-3 w-3 animate-spin text-copper" aria-hidden="true" />
+                Reading and extracting
+              </span>
+            ) : null}
+          </div>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".pdf,image/png,image/jpeg,image/webp,text/plain,text/markdown,.txt,.md"
+            className="hidden"
+            onChange={(event) => {
+              void handleUpload(event.target.files?.[0])
+              event.currentTarget.value = ""
+            }}
+          />
+          {hint}
+        </div>
+        <SourceFileList files={sourceFiles} />
+      </div>
+    )
+  }
+
   function renderDetail() {
     if (!selectedConnector) {
       return null
@@ -539,49 +553,25 @@ export function SourceSetupPanel({
       return <DevelopingDetail connector={selectedConnector} state={state} />
     }
 
+    if (selectedConnector.id === "syllabus") {
+      return renderUploadIntake(
+        selectedConnector,
+        state,
+        <p className="max-w-[58ch] text-[12px] leading-5 text-muted-foreground">
+          One file per course works best — PDF, image, or text. JARVIS reads each syllabus and turns graded items
+          and exam dates into review candidates. Re-upload anytime a syllabus changes.
+        </p>,
+      )
+    }
+
     if (selectedConnector.id === "manual") {
-      return (
-        <div className="flex min-w-0 flex-col gap-5">
-          <DetailHeader connector={selectedConnector} state={state} />
-          <div className="flex flex-col gap-3">
-            <div>
-              <ActionButton icon={FileUp} label="Upload source" onClick={() => fileInputRef.current?.click()} disabled={busy} />
-            </div>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".pdf,image/png,image/jpeg,image/webp,text/plain,text/markdown,.txt,.md"
-              className="hidden"
-              onChange={(event) => {
-                void handleUpload(event.target.files?.[0])
-                event.currentTarget.value = ""
-              }}
-            />
-            <FieldGroup className="gap-3">
-              <Field className="gap-2">
-                <FieldLabel className="text-[12px]">Paste Context</FieldLabel>
-                <InputGroup className="min-w-0 rounded-sm border-rule bg-secondary/20">
-                  <InputGroupTextarea
-                    value={pasteText}
-                    onChange={(event) => setPasteText(event.target.value)}
-                    placeholder="Paste a syllabus chunk, club note, or loose task list."
-                    rows={5}
-                    disabled={busy}
-                  />
-                  <InputGroupAddon align="block-end" className="justify-between border-t border-rule">
-                    <FieldDescription className="text-[11px]">
-                      {pasteText.trim().length.toLocaleString()} chars
-                    </FieldDescription>
-                    <InputGroupButton onClick={handlePaste} disabled={busy || pasteText.trim().length === 0}>
-                      <Upload aria-hidden="true" />
-                      Extract
-                    </InputGroupButton>
-                  </InputGroupAddon>
-                </InputGroup>
-              </Field>
-            </FieldGroup>
-          </div>
-        </div>
+      return renderUploadIntake(
+        selectedConnector,
+        state,
+        <p className="max-w-[58ch] text-[12px] leading-5 text-muted-foreground">
+          Drop in any one-off file (PDF, image, notes, or text). JARVIS extracts tasks and deadlines it finds and
+          adds them as review candidates.
+        </p>,
       )
     }
 

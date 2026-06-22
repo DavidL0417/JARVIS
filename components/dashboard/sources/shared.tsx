@@ -1,6 +1,6 @@
 "use client"
 
-import { AlertTriangle } from "lucide-react"
+import { AlertTriangle, FileText } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -10,6 +10,8 @@ import type {
   SourceConnector,
   SourceConnectorId,
   SourceConnectorStatus,
+  SourceFileStatus,
+  SourceFileSummary,
   SourceSnapshotSummary,
 } from "@/types"
 
@@ -22,6 +24,7 @@ export type SourcePanelId =
   | "gmail"
   | "notion"
   | "canvas"
+  | "syllabus"
   | "apple_reminders"
   | "manual"
   | "todoist"
@@ -43,7 +46,7 @@ export type ConnectorState = SourceConnectorStatus | "manual" | "developing" | "
 export type ConnectorDefinition = {
   id: SourcePanelId
   title: string
-  group: "calendar" | "tasks_courses" | "work_context" | "files" | "developing" | "operator"
+  group: "calendar" | "school" | "tasks_courses" | "work_context" | "files" | "developing" | "operator"
   icon: LucideIcon
   summary: string
   beta?: boolean
@@ -288,6 +291,68 @@ export function LedgerStrip({
             )}
           >
             {item.label}
+          </span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function formatFileSize(bytes: number) {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+function fileStatusTone(status: SourceFileStatus) {
+  if (status === "processed" || status === "ready") return "text-emerald-300"
+  if (status === "failed") return "text-destructive"
+  return "text-muted-foreground"
+}
+
+function fileStatusLabel(status: SourceFileStatus) {
+  if (status === "processed") return "parsed"
+  if (status === "ready") return "ready"
+  return status
+}
+
+// A read-only list of uploaded source files, shared by the Syllabus and Files
+// upload screens. There is no delete endpoint yet, so this is display-only.
+export function SourceFileList({
+  files,
+  emptyLabel = "No files uploaded yet.",
+}: {
+  files: SourceFileSummary[]
+  emptyLabel?: string
+}) {
+  if (files.length === 0) {
+    return (
+      <div className="rounded-sm border border-dashed border-rule/70 px-3 py-6 text-center">
+        <p className="text-[12px] text-muted-foreground">{emptyLabel}</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex min-w-0 flex-col">
+      <div className="flex items-center justify-between border-b border-rule pb-2">
+        <span className="eyebrow text-muted-foreground">Uploaded</span>
+        <span className="num text-[10px] tabular-nums text-muted-foreground">{files.length}</span>
+      </div>
+      {files.map((file) => (
+        <div key={file.id} className="flex min-w-0 items-start gap-3 border-b border-rule/60 py-2 last:border-b-0">
+          <FileText className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" strokeWidth={1.75} aria-hidden="true" />
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-[12px] font-medium text-foreground">{file.fileName}</p>
+            <p className="num text-[10px] uppercase tracking-[0.08em] text-muted-foreground">
+              {formatFileSize(file.sizeBytes)} &middot; {formatCapturedAt(file.createdAt)}
+            </p>
+            {file.status === "failed" && file.errorMessage ? (
+              <p className="mt-0.5 text-[10px] leading-4 text-destructive [overflow-wrap:anywhere]">{file.errorMessage}</p>
+            ) : null}
+          </div>
+          <span className={cn("shrink-0 text-[10px] uppercase tracking-[0.12em]", fileStatusTone(file.status))}>
+            {fileStatusLabel(file.status)}
           </span>
         </div>
       ))}
