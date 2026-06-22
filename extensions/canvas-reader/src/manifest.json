@@ -16,7 +16,7 @@
       "matches": [
         "http://localhost/*",
         "http://127.0.0.1/*",
-        "https://mydearestjarvis.vercel.app/*"
+        "https://secretaryjarvis.com/*"
       ],
       "js": ["app-bridge.js"],
       "run_at": "document_idle"
@@ -27,13 +27,13 @@
     "matches": [
       "http://localhost/*",
       "http://127.0.0.1/*",
-      "https://mydearestjarvis.vercel.app/*"
+      "https://secretaryjarvis.com/*"
     ]
   },
   "host_permissions": [
     "http://localhost/*",
     "http://127.0.0.1/*",
-    "https://mydearestjarvis.vercel.app/*",
+    "https://secretaryjarvis.com/*",
     "https://*/*"
   ]
 }
