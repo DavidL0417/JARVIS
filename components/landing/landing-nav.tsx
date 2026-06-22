@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState } from "react"
 
-import { JarvisMark } from "@/components/landing/jarvis-mark"
 import { SignInLink } from "@/components/landing/sign-in-link"
 import { useMagneticPull } from "@/hooks/use-magnetic-pull"
 
@@ -39,17 +38,14 @@ export function LandingNav() {
       <a
         href="#top"
         data-bloom-shield
-        className="landing-display group inline-flex items-center gap-2 text-[16px] font-semibold leading-none text-foreground"
+        className="landing-display group inline-flex items-baseline gap-0.5 text-[16px] font-semibold leading-none text-foreground"
         style={{ letterSpacing: "-0.03em" }}
       >
-        <JarvisMark className="h-[18px] w-[14.6px] shrink-0" />
-        <span className="inline-flex items-baseline gap-0.5">
-          <span>Jarvis</span>
-          <span
-            className="inline-block h-1 w-1 translate-y-[-2px] rounded-full bg-[var(--copper)] transition-transform group-hover:scale-110"
-            aria-hidden="true"
-          />
-        </span>
+        <span>Jarvis</span>
+        <span
+          className="inline-block h-1 w-1 translate-y-[-2px] rounded-full bg-[var(--copper)] transition-transform group-hover:scale-110"
+          aria-hidden="true"
+        />
       </a>
 
       <nav className="flex items-center gap-5">

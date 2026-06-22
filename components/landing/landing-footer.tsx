@@ -1,6 +1,5 @@
 import Link from "next/link"
 
-import { JarvisMark } from "@/components/landing/jarvis-mark"
 import { LiveClock } from "@/components/landing/live-clock"
 
 export function LandingFooter() {
@@ -8,15 +7,12 @@ export function LandingFooter() {
     <footer className="mt-[clamp(96px,12vw,180px)] border-t border-[var(--rule)] pb-[clamp(28px,4vw,48px)] pt-[clamp(28px,4vw,52px)]">
       <div className="flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
         <div className="flex flex-col gap-2">
-          <span className="landing-display inline-flex items-center gap-2 text-[15px] font-semibold text-foreground" style={{ letterSpacing: "-0.03em" }}>
-            <JarvisMark className="h-4 w-[13px] shrink-0" />
-            <span className="inline-flex items-baseline gap-0.5">
-              <span>Jarvis</span>
-              <span
-                className="inline-block h-1 w-1 translate-y-[-2px] rounded-full bg-[var(--copper)]"
-                aria-hidden="true"
-              />
-            </span>
+          <span className="landing-display inline-flex items-baseline gap-0.5 text-[15px] font-semibold text-foreground" style={{ letterSpacing: "-0.03em" }}>
+            <span>Jarvis</span>
+            <span
+              className="inline-block h-1 w-1 translate-y-[-2px] rounded-full bg-[var(--copper)]"
+              aria-hidden="true"
+            />
           </span>
           <LiveClock />
         </div>
