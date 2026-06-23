@@ -20,13 +20,25 @@ export const metadata: Metadata = {
   },
 }
 
-const problemHeading =
-  "It's not that you're behind. It's that you're the only thing holding it together."
+const familiarHeading = "Sounds familiar?"
 
-const problemCopy = [
-  "The reading is in Canvas. A reply you owe is buried in Gmail. Half a plan sits in Notion. None of them talk to each other, so you do — in your head, at 1am, hoping you didn't forget the one that actually mattered.",
-  "That dread of what-am-I-missing is what happens when a dozen apps force you to connect them together.",
+// Three quick recognition hooks — the secondary clusters (C2, C1, C4).
+const strugglingMoments = [
+  // C2 — failure-triggered, stop being reactive
+  "You found out the night before. It was in Canvas the whole time.",
+  // C1 — be a better student for college
+  "Every term starts with a fresh planner. By week three, it's blank.",
+  // C4 — the text-to-calendar leak
+  "A meeting got set over text and never made it to your calendar.",
 ]
+
+// The crescendo — C3 (focus cluster) as the cumulative 1am weight everyone feels.
+const familiarParagraph =
+  "The reading is in Canvas. A reply you owe is buried in Gmail. Half a plan sits in Notion. None of them talk to each other, so you do — in your head, at 1am, hoping you didn't forget the one that actually mattered."
+
+// One answer for all of it — the universal job: it already read everything, so you don't hold it.
+const familiarSolution =
+  "Already read all of it — Canvas, Gmail, Notion, iMessages, your calendar — before you opened the app. It hands you the next thing to do, so you stop being the one holding it together."
 
 const progressHeading = "Imagine not being the one who has to remember."
 
@@ -107,20 +119,41 @@ export default function LandingPage() {
       </section>
 
       <div className="relative z-10">
-        {/* 02 — The struggling moment (push) */}
+        {/* 02 — The struggling moment (push): per-cluster recognition → one answer */}
         <SectionReveal as="section">
           <section id="section-problem" className="border-t border-[var(--rule)] py-[clamp(56px,7vw,104px)]">
             <div className={CONTAINER}>
-              <SectionHead index="02" label="the part no one sees" meta="the struggle" />
-              <div className="mt-[clamp(28px,4vw,56px)] grid grid-cols-1 gap-[clamp(24px,4vw,56px)] lg:grid-cols-12">
-                <h2 className="landing-display text-[clamp(1.9rem,3.8vw,3rem)] font-semibold leading-[1.05] text-foreground lg:col-span-7">
-                  {problemHeading}
-                </h2>
-                <div className="space-y-5 text-[clamp(1rem,1.3vw,1.125rem)] leading-[1.6] text-foreground/80 lg:col-span-5">
-                  {problemCopy.map((paragraph) => (
-                    <p key={paragraph}>{paragraph}</p>
+              <SectionHead index="02" label="the struggle" meta="the answer" />
+              <h2 className="landing-display mt-[clamp(28px,4vw,56px)] text-[clamp(1.9rem,3.8vw,3rem)] font-semibold leading-[1.05] text-foreground">
+                {familiarHeading}
+              </h2>
+
+              {/* recognition (left) crescendos into the cumulative narrative (right) */}
+              <div className="mt-[clamp(28px,4vw,52px)] grid grid-cols-1 gap-[clamp(28px,5vw,72px)] lg:grid-cols-12 lg:items-start">
+                <ul className="space-y-[clamp(14px,1.8vw,22px)] lg:col-span-5">
+                  {strugglingMoments.map((moment) => (
+                    <li
+                      key={moment}
+                      className="flex gap-4 text-[clamp(1.05rem,1.5vw,1.3rem)] font-medium leading-[1.3] text-foreground/90"
+                    >
+                      <span
+                        aria-hidden="true"
+                        className="mt-[0.5em] h-[6px] w-[6px] shrink-0 rotate-45 bg-[var(--copper)]"
+                      />
+                      <span>{moment}</span>
+                    </li>
                   ))}
-                </div>
+                </ul>
+                <p className="text-[clamp(1.15rem,1.7vw,1.5rem)] leading-[1.5] text-foreground lg:col-span-7">
+                  {familiarParagraph}
+                </p>
+              </div>
+
+              <div className="mt-[clamp(32px,4.5vw,60px)] border-t border-[var(--rule)] pt-[clamp(24px,3vw,40px)]">
+                <p className="landing-mark text-[10.5px] text-[var(--copper)]">Jarvis</p>
+                <p className="mt-3 max-w-[60ch] text-[clamp(1.15rem,1.9vw,1.6rem)] font-medium leading-[1.3] text-foreground">
+                  {familiarSolution}
+                </p>
               </div>
             </div>
           </section>
