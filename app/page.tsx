@@ -30,16 +30,19 @@ const progressLines = [
   { k: "04", t: "You stop being the app that has to run all your other apps." },
 ]
 
-const capabilitiesHeading = "What it actually does."
+// 03 — most days: the quiet background competence (rendered as toggles)
+const everydayHeading = "Most of the time, you won't notice it."
+const everydayLede =
+  "The quiet, unglamorous work — handled in the background, before it ever becomes your problem."
 
-const capabilities = [
+const everydayCapabilities = [
   {
     number: "01",
     title: "Reads everything you already use.",
     detail:
       "Canvas, Gmail, Notion, your calendar — all pulled into one place and kept current, without you asking.",
     body:
-      "Anyone can sync calendars and deadlines. But Jarvis holds the other context — the opportunities you texted in passing to friends, your half-formed reminders, your regrade requests to professors — so it's working from the full version of your life, and never a to-do list you have to keep alive yourself.",
+      "Anyone can sync calendars and deadlines. But Jarvis, like a true secretary, holds the other context too — the opportunities you texted in passing to friends, your half-formed reminders, your regrade requests to professors — so it understands the full picture, never a to-do list.",
   },
   {
     number: "02",
@@ -51,28 +54,22 @@ const capabilities = [
     example: {
       label: "For example",
       lines: [
-        "You mention you're dropping your bike at the shop for the week.",
-        "Jarvis already knows you bike between classes — so it loosens tomorrow's schedule on its own. You'll be on foot, and the ten-minute hops across campus are now twenty. Nothing double-books, and you never had to think about it.",
+        "Three lines into a Canvas announcement, the midterm quietly moves up two days.",
+        "You'd have skimmed past it — Jarvis didn't. Because it already holds your calendar, it catches what the change actually breaks: the new date lands on the morning you're running your club's event, and the study group you'd booked is now a day too late. It flags the collision a week out, while there's still time to move.",
       ],
     },
   },
-  {
-    number: "03",
-    title: "Hands you the next thing to do.",
-    detail:
-      "Open Jarvis and the next 30–90 minutes are already decided — no planning, no triage. What's urgent surfaces while there's still time, not the night before.",
-    body:
-      "And when something big lands, it reads the situation, figures out what it affects, and hands you a plan with the tradeoffs already laid out — the decision stays yours, but the thinking is done.",
-    example: {
-      label: "For example",
-      lines: [
-        "A friend texts: his mom passed. The funeral's next weekend, a few hours away.",
-        "Before you've even worked out what to say back, Jarvis has mapped what going means — leave Friday, back Sunday, which runs into the problem set due that night and your Saturday shift.",
-        "So it hands you the tradeoffs, not a decision: move the problem set to Wednesday, ask someone to cover the shift, and the trip costs you nothing else. Your midterm prep on Monday stays untouched.",
-        "You didn't plan any of it. You just got to be there for your friend.",
-      ],
-    },
-  },
+]
+
+// 04 — when it counts: the agentic peak, shown open (not a toggle)
+const momentHeading = "And when it counts, it's already there."
+const momentLede =
+  "When something big lands, it reads the situation, figures out what it affects, and hands you a plan with the tradeoffs already laid out — the decision stays yours, but the thinking is done."
+const momentScenario = [
+  "A friend texts: his mom passed. The funeral's next weekend, a few hours away.",
+  "Before you've even worked out what to say back, Jarvis has mapped what going means — leave Friday, back Sunday, which runs into the problem set due that night and your Saturday shift.",
+  "So it builds the whole plan and has it waiting: the email to your professor pushing the deadline, the message asking a coworker to cover Saturday's shift, your readings reshuffled and Monday's midterm prep protected, the travel time already on your calendar. Every piece drafted — nothing sent without you — so you approve what fits and change what doesn't.",
+  "You didn't plan any of it. You just got to be there for your friend.",
 ]
 
 const refrains = [
@@ -151,25 +148,73 @@ export default function LandingPage() {
           </section>
         </SectionReveal>
 
-        {/* 03 — What it does (capabilities rolled in from the removed struggle section) */}
+        {/* 03 — Most days: quiet background competence (reads + builds; toggles) */}
         <SectionReveal as="section">
           <section id="section-does" className="border-t border-[var(--rule)] py-[clamp(56px,7vw,104px)]">
             <div className={CONTAINER}>
-              <SectionHead index="03" label="what it does" meta="the work" />
-              <h2 className="landing-display mt-[clamp(24px,3vw,44px)] max-w-[22ch] text-[clamp(1.9rem,3.8vw,3rem)] font-semibold leading-[1.04] text-foreground">
-                {capabilitiesHeading}
+              <SectionHead index="03" label="most days" meta="quiet" />
+              <h2 className="landing-display mt-[clamp(24px,3vw,44px)] max-w-[18ch] text-[clamp(1.9rem,3.8vw,3rem)] font-semibold leading-[1.04] text-foreground">
+                {everydayHeading}
               </h2>
+              <p className="mt-5 max-w-[52ch] text-[clamp(1rem,1.3vw,1.125rem)] leading-[1.55] text-foreground/70">
+                {everydayLede}
+              </p>
 
-              <CapabilityList items={capabilities} />
+              <CapabilityList items={everydayCapabilities} />
             </div>
           </section>
         </SectionReveal>
 
-        {/* 04 — What it isn't (anxiety reduction) — scroll fade-in */}
+        {/* 04 — When it counts: the agentic peak, funeral shown open (not a toggle) */}
+        <SectionReveal as="section">
+          <section id="section-moment" className="border-t border-[var(--rule)] py-[clamp(64px,8vw,124px)]">
+            <div className={CONTAINER}>
+              <SectionHead index="04" label="when it counts" meta="the moment" />
+              <h2 className="landing-display mt-[clamp(28px,4vw,56px)] max-w-[16ch] text-[clamp(2.1rem,4.4vw,3.4rem)] font-semibold leading-[1.02] text-foreground">
+                {momentHeading}
+              </h2>
+              <p className="mt-5 max-w-[58ch] text-[clamp(1.05rem,1.4vw,1.2rem)] leading-[1.55] text-foreground/75">
+                {momentLede}
+              </p>
+
+              <div className="mt-[clamp(36px,5vw,64px)] max-w-[760px] rounded-sm bg-[var(--panel)]/60 p-[clamp(24px,4vw,52px)]">
+                <div className="space-y-[clamp(16px,2.4vw,26px)]">
+                  {momentScenario.map((line, i) => {
+                    const isLast = i === momentScenario.length - 1
+                    if (isLast) {
+                      return (
+                        <p
+                          key={i}
+                          className="landing-display border-t border-[var(--rule)] pt-[clamp(16px,2.4vw,26px)] text-[clamp(1.4rem,2.6vw,2.1rem)] font-semibold leading-[1.15] text-foreground"
+                        >
+                          {line}
+                        </p>
+                      )
+                    }
+                    return (
+                      <p
+                        key={i}
+                        className={
+                          i === 0
+                            ? "text-[clamp(1.15rem,1.9vw,1.5rem)] font-medium leading-[1.4] text-foreground"
+                            : "max-w-[64ch] text-[clamp(1rem,1.3vw,1.12rem)] leading-[1.65] text-foreground/75"
+                        }
+                      >
+                        {line}
+                      </p>
+                    )
+                  })}
+                </div>
+              </div>
+            </div>
+          </section>
+        </SectionReveal>
+
+        {/* 05 — What it isn't (anxiety reduction) — scroll fade-in */}
         <SectionReveal as="section">
           <section id="section-not" className="border-t border-[var(--rule)] py-[clamp(56px,7vw,104px)]">
             <div className={CONTAINER}>
-              <SectionHead index="04" label="what it isn&rsquo;t" meta="no catch" />
+              <SectionHead index="05" label="what it isn&rsquo;t" meta="no catch" />
               <div className="mt-[clamp(28px,4vw,56px)] grid grid-cols-1 gap-[clamp(20px,4vw,56px)] lg:grid-cols-12">
                 <div className="lg:col-span-8">
                   <Refrain lines={refrains} />
@@ -183,11 +228,11 @@ export default function LandingPage() {
           </section>
         </SectionReveal>
 
-        {/* 05 — Early access */}
+        {/* 06 — Early access */}
         <SectionReveal as="section">
           <section id="section-cta" className="border-t border-[var(--rule)] py-[clamp(72px,9vw,140px)]">
             <div className={CONTAINER}>
-              <SectionHead index="05" label="early access · hand-built" meta="join" />
+              <SectionHead index="06" label="early access · hand-built" meta="join" />
               <div className="mt-[clamp(28px,4vw,56px)] grid grid-cols-1 items-end gap-[clamp(32px,5vw,72px)] lg:grid-cols-12">
                 <div id="waitlist" className="scroll-mt-24 lg:col-span-7">
                   <h2 className="landing-final-phrase landing-display max-w-[16ch] text-[clamp(2.2rem,5vw,3.8rem)] font-semibold leading-[1.0] text-foreground">

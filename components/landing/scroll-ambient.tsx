@@ -17,15 +17,22 @@ import { useEffect, useRef } from "react"
  * is unavailable or the user prefers reduced motion.
  */
 
-const MAX_PARTICLES = 12000
-const PARTICLE_DENSITY = 0.007 // particles per CSS px² (keeps visual density ~constant)
+const MAX_PARTICLES = 14000
+const PARTICLE_DENSITY = 0.008 // particles per CSS px² (keeps visual density ~constant)
+// Off-screen staging margin (fraction of viewport): respawned particles are born this far
+// past the upstream (left/top) edges so their fade-in happens off-screen — they cross INTO
+// view already lit, giving the left/top real volume instead of a dim fresh-spawn dead zone.
+const UPSTREAM_MARGIN = 0.1
 const TRAIL_FADE = 0.93 // persistence → streaks smear into continuous rivers of light
 const BASE_ALPHA = 0.5 // bright per-streak; accumulation + bloom build glowing rivers
 const MAX_DPR = 1.25 // cap backing resolution; softer (glowier) + far cheaper than retina
 
-// Copper light added over graphite; overlaps + bloom go toward hot copper.
+// Copper light added over the base; overlaps + bloom go toward hot copper.
 const STREAM: [number, number, number] = [1.0, 0.58, 0.32]
-const GRAPHITE: [number, number, number] = [0.026, 0.023, 0.018]
+// MUST equal the page `--background` (oklch(0.145 0.006 60) → sRGB rgb(16,13,10)).
+// The canvas floor IS the page background: every non-streak pixel matches the rest
+// of the site, so there is no darker "frame" where the streaks thin out.
+const GRAPHITE: [number, number, number] = [0.063, 0.051, 0.039]
 
 // --- Convergence intro: on load the signals gather to a dot, the dot morphs into the
 // "J", then it blooms back into the ambient flow. The whole thing is driven by
@@ -37,6 +44,12 @@ const MARK_SIZE = 0.42 // "J" height as a fraction of the smaller viewport dimen
 const smoothstep01 = (x: number) => {
   const c = Math.max(0, Math.min(1, x))
   return c * c * (3 - 2 * c)
+}
+// smoothstep(e0,e1,x): 0 below e0, 1 above e1, smooth between. Used for the per-particle
+// spatial edge envelope (taper-in on the upstream edges, taper-out/despawn on the downstream).
+const sstep = (e0: number, e1: number, x: number) => {
+  const t = Math.max(0, Math.min(1, (x - e0) / (e1 - e0)))
+  return t * t * (3 - 2 * t)
 }
 // Dot (0) morphing into the J (1).
 const introMorph = (s: number) => {
@@ -85,14 +98,14 @@ void main(){
     g2 += texture(u_tex, v_uv + OFF[i] * r2).rgb;
   }
   vec3 light = core + g1 * (0.42 / 8.0) + g2 * (0.3 / 8.0); // two-ring bloom
-  vec3 col = u_bg + light;
-  // Equal, soft black margin on all four edges — pixel-based so the margin is the same
-  // width on every side regardless of aspect. Balanced fade, even visual weight.
+  // Taper the STREAK LIGHT toward every edge — not the base floor. The streaks run
+  // up close to the border and fade out only in a thin final band, leaving the base
+  // (= page background) behind. No darkened frame, minimal dead space at the edges.
   vec2 pxc = v_uv * u_res;
-  float mg = 90.0; // edge-feather width, in backing pixels
+  float mg = 18.0; // thin bloom-cleanup feather; the per-particle envelope does the real taper
   float ex = smoothstep(0.0, mg, pxc.x) * smoothstep(0.0, mg, u_res.x - pxc.x);
   float ey = smoothstep(0.0, mg, pxc.y) * smoothstep(0.0, mg, u_res.y - pxc.y);
-  col *= 0.46 + 0.54 * ex * ey; // gentle thin-out at the edges (suggests a border, not a black bar)
+  vec3 col = u_bg + light * ex * ey;
   col += (hash(v_uv * u_res + u_seed) - 0.5) * (1.0 / 255.0); // dither
   o = vec4(col, 1.0);
 }`
@@ -263,15 +276,30 @@ export function ScrollAmbient() {
     let hasPointer = false
 
     const spawn = (i: number, stagger: boolean) => {
-      // Uniform seeding everywhere → even density with no directional bias. (A top-left
-      // lean would pile freshly-born — and therefore invisible, since the life-fade starts
-      // at 0 — particles into one corner, which reads as a dark "block"/corner artifact.)
-      px[i] = Math.random() * bw
-      py[i] = Math.random() * bh
+      maxLife[i] = 5 + Math.random() * 8
+      if (stagger) {
+        // Initial seeding / reseed: uniform on-screen at random life phases, so the field
+        // starts full and evenly lit with no directional bias.
+        px[i] = Math.random() * bw
+        py[i] = Math.random() * bh
+        life[i] = Math.random() * maxLife[i]
+      } else {
+        // Steady-state recycle: the flow runs right+down, so re-enter from the UPSTREAM
+        // edges (left ~60% / top ~40%, matching the flow's right:down ratio), born just
+        // OFF-screen. The fade-in then happens off-screen and the particle crosses into
+        // view already lit → the left/top carry real volume instead of dim fresh spawns.
+        // Born most of the way through fade-in so it's bright by the time it's on-screen.
+        if (Math.random() < 0.6) {
+          px[i] = -Math.random() * bw * UPSTREAM_MARGIN
+          py[i] = Math.random() * bh
+        } else {
+          px[i] = Math.random() * bw
+          py[i] = -Math.random() * bh * UPSTREAM_MARGIN
+        }
+        life[i] = (0.82 + 0.12 * Math.random()) * maxLife[i]
+      }
       ppx[i] = px[i]
       ppy[i] = py[i]
-      maxLife[i] = 5 + Math.random() * 8
-      life[i] = stagger ? Math.random() * maxLife[i] : maxLife[i]
       weight[i] = 0.55 + Math.random() * 0.9
     }
 
@@ -425,7 +453,14 @@ export function ScrollAmbient() {
           nx = nx * (1 - mark) + (x + (ttx - x) * pull) * mark
           ny = ny * (1 - mark) + (y + (tty - y) * pull) * mark
         }
-        if (nx < -20 || nx > bw + 20 || ny < -20 || ny > bh + 20) {
+        // Recycle once a particle leaves: promptly off the downstream (right/bottom) edges,
+        // but allow it to live out in the off-screen upstream margin where it was born.
+        if (
+          nx > bw + 20 ||
+          ny > bh + 20 ||
+          nx < -bw * (UPSTREAM_MARGIN + 0.04) ||
+          ny < -bh * (UPSTREAM_MARGIN + 0.04)
+        ) {
           spawn(i, false)
         } else {
           ppx[i] = x
@@ -437,12 +472,26 @@ export function ScrollAmbient() {
         // cursor and fading out smoothly in every direction, so it reads as a lit spot.
         const dxc = x - curX
         const dyc = y - curY
-        const r = md * 0.07 // spotlight radius
-        const fall = 0.6 + 0.55 * Math.exp(-(dxc * dxc + dyc * dyc) / (r * r))
+        const r = md * 0.16 // spotlight radius — broad + soft so the field stays even
+        // High floor, gentle lift: near-uniform brightness everywhere (balanced field),
+        // with only a subtle warm rise under the cursor — no tight bright blob to clump.
+        const fall = 0.88 + 0.2 * Math.exp(-(dxc * dxc + dyc * dyc) / (r * r))
         const lp = life[i] / maxLife[i]
         // While bonded to the mark, override the life-fade so it reads as one bright shape.
         const env = Math.sin(Math.max(0, Math.min(1, lp)) * Math.PI) * (1 - mark) + mark
-        const alpha = env * BASE_ALPHA * weight[i] * fall * (1 + mark * 0.3)
+        // Spatial edge envelope — the streaks' own "spawn-in / despawn-out". A gentle
+        // taper-IN over the upstream edges (left/top, ~5%) and a wider taper-OUT toward
+        // the downstream edges (right/bottom, ~14%), so streaks dissolve gradually before
+        // the border rather than hitting a wall. (=1 anywhere off these bands, incl. the
+        // mark at centre, so the intro is untouched.)
+        const nxp = x / bw
+        const nyp = y / bh
+        const spatial =
+          sstep(0, 0.05, nxp) *
+          sstep(0, 0.05, nyp) *
+          (1 - sstep(0.86, 1.0, nxp)) *
+          (1 - sstep(0.86, 1.0, nyp))
+        const alpha = env * BASE_ALPHA * weight[i] * fall * spatial * (1 + mark * 0.3)
         const o = i * 6
         segData[o] = ppx[i]
         segData[o + 1] = ppy[i]
@@ -508,8 +557,9 @@ export function ScrollAmbient() {
       // Source follows the pointer; with no pointer (touch / idle) it gently roams
       // so the field still breathes.
       if (!hasPointer) {
-        tgtX = bw * (0.5 + 0.3 * Math.sin(t * 0.07))
-        tgtY = bh * (0.5 + 0.26 * Math.cos(t * 0.053))
+        // Stay near center with a small idle drift — never wander into a corner.
+        tgtX = bw * (0.5 + 0.16 * Math.sin(t * 0.07))
+        tgtY = bh * (0.5 + 0.13 * Math.cos(t * 0.053))
       }
       curX += (tgtX - curX) * Math.min(1, dt * 5)
       curY += (tgtY - curY) * Math.min(1, dt * 5)
@@ -562,6 +612,7 @@ export function ScrollAmbient() {
   return (
     <>
       <canvas ref={canvasRef} aria-hidden="true" className="scroll-ambient-canvas" />
+      <div aria-hidden="true" className="scroll-ambient-edge" />
       <div aria-hidden="true" className="scroll-progress" />
     </>
   )

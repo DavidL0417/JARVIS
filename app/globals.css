@@ -380,6 +380,20 @@ body {
     var(--background);
 }
 
+/* Subtle gray edge-light along the top and left — a soft sheen catching those two
+   edges (as in the earliest revision), fading inward over a short distance. Sits
+   above the canvas (z-0) but below page content; desaturated so it reads as light
+   on the border, not a colored wash. */
+.scroll-ambient-edge {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background:
+    linear-gradient(180deg, oklch(0.82 0.006 60 / 0.09), transparent 14%),
+    linear-gradient(90deg, oklch(0.82 0.006 60 / 0.07), transparent 12%);
+}
+
 /* Thin scroll-progress bar at the very top — copper fill scales with --sp. */
 .scroll-progress {
   position: fixed;
