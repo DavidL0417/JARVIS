@@ -6,7 +6,7 @@ import { DashboardPreview } from "@/components/landing/dashboard-preview"
 import { WaitlistForm } from "@/components/landing/waitlist-form"
 
 const HERO_SUBHEAD =
-  "Jarvis reads your Canvas, Gmail, Notion, and calendar, then hands you the next thing to do. No setup, no check-ins, no mental tabs left open."
+  "The reading is in Canvas. A reply you owe is buried in Gmail. Half a plan sits in Notion. None of them talk to each other, so you do — in your head, at 1am, hoping you didn't forget the one that actually mattered."
 
 const SOURCES = ["Canvas", "Gmail", "Notion", "Google Calendar"]
 
@@ -64,7 +64,7 @@ export function LandingHero() {
             </h1>
 
             <p
-              className="hero-reveal mt-8 max-w-[50ch] text-[clamp(1rem,1.4vw,1.125rem)] leading-[1.5] text-foreground/75"
+              className="hero-reveal mt-8 max-w-[54ch] text-[clamp(1rem,1.4vw,1.125rem)] leading-[1.55] text-foreground/80"
               style={{ transitionDelay: "260ms" }}
             >
               {HERO_SUBHEAD}

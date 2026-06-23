@@ -1,5 +1,6 @@
 import type { Metadata } from "next"
 
+import { CapabilityList } from "@/components/landing/capability-list"
 import { LandingFooter } from "@/components/landing/landing-footer"
 import { LandingHero } from "@/components/landing/landing-hero"
 import { LandingNav } from "@/components/landing/landing-nav"
@@ -20,26 +21,6 @@ export const metadata: Metadata = {
   },
 }
 
-const familiarHeading = "Sounds familiar?"
-
-// Three quick recognition hooks — the secondary clusters (C2, C1, C4).
-const strugglingMoments = [
-  // C2 — failure-triggered, stop being reactive
-  "You found out the night before. It was in Canvas the whole time.",
-  // C1 — be a better student for college
-  "Every term starts with a fresh planner. By week three, it's blank.",
-  // C4 — the text-to-calendar leak
-  "A meeting got set over text and never made it to your calendar.",
-]
-
-// The crescendo — C3 (focus cluster) as the cumulative 1am weight everyone feels.
-const familiarParagraph =
-  "The reading is in Canvas. A reply you owe is buried in Gmail. Half a plan sits in Notion. None of them talk to each other, so you do — in your head, at 1am, hoping you didn't forget the one that actually mattered."
-
-// One answer for all of it — the universal job: it already read everything, so you don't hold it.
-const familiarSolution =
-  "Already read all of it — Canvas, Gmail, Notion, iMessages, your calendar — before you opened the app. It hands you the next thing to do, so you stop being the one holding it together."
-
 const progressHeading = "Imagine not being the one who has to remember."
 
 const progressLines = [
@@ -49,26 +30,48 @@ const progressLines = [
   { k: "04", t: "You stop being the app that has to run all your other apps." },
 ]
 
-const howHeading = "You don't set it up. It sets itself up."
+const capabilitiesHeading = "What it actually does."
 
-const steps = [
+const capabilities = [
   {
     number: "01",
-    title: "Connect what you already use.",
+    title: "Reads everything you already use.",
     detail:
-      "Canvas, Gmail, Notion, Google Calendar — Jarvis plugs into wherever your obligations already live. Minimal setup, zero overhead.",
+      "Canvas, Gmail, Notion, your calendar — all pulled into one place and kept current, without you asking.",
+    body:
+      "Anyone can sync calendars and deadlines. But Jarvis holds the other context — the opportunities you texted in passing to friends, your half-formed reminders, your regrade requests to professors — so it's working from the full version of your life, and never a to-do list you have to keep alive yourself.",
   },
   {
     number: "02",
-    title: "It builds the whole picture.",
+    title: "Builds the whole picture.",
     detail:
-      "Every deadline, every thread, every change — pulled together and kept current without you asking. It reads what you'd otherwise have to read yourself.",
+      "Every deadline, every thread, every change, connected — so nothing important is hiding in an app you forgot to open.",
+    body:
+      "Most tools keep your information in separate boxes. Jarvis connects them, so one change quietly updates everything it touches — including things you'd never think to link yourself.",
+    example: {
+      label: "For example",
+      lines: [
+        "You mention you're dropping your bike at the shop for the week.",
+        "Jarvis already knows you bike between classes — so it loosens tomorrow's schedule on its own. You'll be on foot, and the ten-minute hops across campus are now twenty. Nothing double-books, and you never had to think about it.",
+      ],
+    },
   },
   {
     number: "03",
-    title: "You just start.",
+    title: "Hands you the next thing to do.",
     detail:
-      "Open Jarvis and the next 30–90 minutes are already decided. No planning, no triage, no staring at a blank list wondering where to begin.",
+      "Open Jarvis and the next 30–90 minutes are already decided — no planning, no triage. What's urgent surfaces while there's still time, not the night before.",
+    body:
+      "And when something big lands, it reads the situation, figures out what it affects, and hands you a plan with the tradeoffs already laid out — the decision stays yours, but the thinking is done.",
+    example: {
+      label: "For example",
+      lines: [
+        "A friend texts: his mom passed. The funeral's next weekend, a few hours away.",
+        "Before you've even worked out what to say back, Jarvis has mapped what going means — leave Friday, back Sunday, which runs into the problem set due that night and your Saturday shift.",
+        "So it hands you the tradeoffs, not a decision: move the problem set to Wednesday, ask someone to cover the shift, and the trip costs you nothing else. Your midterm prep on Monday stays untouched.",
+        "You didn't plan any of it. You just got to be there for your friend.",
+      ],
+    },
   },
 ]
 
@@ -119,51 +122,11 @@ export default function LandingPage() {
       </section>
 
       <div className="relative z-10">
-        {/* 02 — The struggling moment (push): per-cluster recognition → one answer */}
-        <SectionReveal as="section">
-          <section id="section-problem" className="border-t border-[var(--rule)] py-[clamp(56px,7vw,104px)]">
-            <div className={CONTAINER}>
-              <SectionHead index="02" label="the struggle" meta="the answer" />
-              <h2 className="landing-display mt-[clamp(28px,4vw,56px)] text-[clamp(1.9rem,3.8vw,3rem)] font-semibold leading-[1.05] text-foreground">
-                {familiarHeading}
-              </h2>
-
-              {/* recognition (left) crescendos into the cumulative narrative (right) */}
-              <div className="mt-[clamp(28px,4vw,52px)] grid grid-cols-1 gap-[clamp(28px,5vw,72px)] lg:grid-cols-12 lg:items-start">
-                <ul className="space-y-[clamp(14px,1.8vw,22px)] lg:col-span-5">
-                  {strugglingMoments.map((moment) => (
-                    <li
-                      key={moment}
-                      className="flex gap-4 text-[clamp(1.05rem,1.5vw,1.3rem)] font-medium leading-[1.3] text-foreground/90"
-                    >
-                      <span
-                        aria-hidden="true"
-                        className="mt-[0.5em] h-[6px] w-[6px] shrink-0 rotate-45 bg-[var(--copper)]"
-                      />
-                      <span>{moment}</span>
-                    </li>
-                  ))}
-                </ul>
-                <p className="text-[clamp(1.15rem,1.7vw,1.5rem)] leading-[1.5] text-foreground lg:col-span-7">
-                  {familiarParagraph}
-                </p>
-              </div>
-
-              <div className="mt-[clamp(32px,4.5vw,60px)] border-t border-[var(--rule)] pt-[clamp(24px,3vw,40px)]">
-                <p className="landing-mark text-[10.5px] text-[var(--copper)]">Jarvis</p>
-                <p className="mt-3 max-w-[60ch] text-[clamp(1.15rem,1.9vw,1.6rem)] font-medium leading-[1.3] text-foreground">
-                  {familiarSolution}
-                </p>
-              </div>
-            </div>
-          </section>
-        </SectionReveal>
-
-        {/* 03 — The progress (magnetism / the after) */}
+        {/* 02 — The progress (magnetism / the after) */}
         <SectionReveal as="section">
           <section id="section-progress" className="border-t border-[var(--rule)] py-[clamp(56px,7vw,104px)]">
             <div className={CONTAINER}>
-              <SectionHead index="03" label="what changes" meta="the payoff" />
+              <SectionHead index="02" label="what changes" meta="the payoff" />
               <h2 className="landing-display mt-[clamp(28px,4vw,56px)] max-w-[20ch] text-[clamp(1.9rem,3.8vw,3rem)] font-semibold leading-[1.04] text-foreground">
                 {progressHeading}
               </h2>
@@ -188,64 +151,43 @@ export default function LandingPage() {
           </section>
         </SectionReveal>
 
-        {/* 04 — How it works */}
+        {/* 03 — What it does (capabilities rolled in from the removed struggle section) */}
         <SectionReveal as="section">
-          <section id="section-how" className="border-t border-[var(--rule)] py-[clamp(56px,7vw,104px)]">
+          <section id="section-does" className="border-t border-[var(--rule)] py-[clamp(56px,7vw,104px)]">
             <div className={CONTAINER}>
-              <SectionHead index="04" label="how it works" meta="3 steps" />
+              <SectionHead index="03" label="what it does" meta="the work" />
               <h2 className="landing-display mt-[clamp(24px,3vw,44px)] max-w-[22ch] text-[clamp(1.9rem,3.8vw,3rem)] font-semibold leading-[1.04] text-foreground">
-                {howHeading}
+                {capabilitiesHeading}
               </h2>
 
-              <ol className="mt-[clamp(32px,4vw,56px)] divide-y divide-[var(--rule)] border-y border-[var(--rule)]">
-                {steps.map((step) => (
-                  <li
-                    key={step.number}
-                    className="grid grid-cols-[auto_1fr] gap-x-[clamp(20px,4vw,64px)] gap-y-2 py-[clamp(24px,3vw,36px)] md:grid-cols-[110px_minmax(0,5fr)_minmax(0,7fr)]"
-                  >
-                    <span
-                      className="landing-display num text-[clamp(1.8rem,3.2vw,2.6rem)] font-light leading-none text-[var(--copper)]"
-                      aria-hidden="true"
-                      style={{ letterSpacing: "-0.02em" }}
-                    >
-                      {step.number}
-                    </span>
-                    <h3 className="max-w-[24ch] self-center text-[clamp(1.1rem,1.7vw,1.4rem)] font-semibold leading-[1.2] text-foreground">
-                      {step.title}
-                    </h3>
-                    <p className="col-span-2 max-w-[60ch] text-[clamp(0.95rem,1.25vw,1.05rem)] leading-[1.6] text-foreground/70 md:col-span-1 md:col-start-3 md:row-start-1 md:self-center">
-                      {step.detail}
-                    </p>
-                  </li>
-                ))}
-              </ol>
+              <CapabilityList items={capabilities} />
             </div>
           </section>
         </SectionReveal>
 
-        {/* 05 — What it isn't (anxiety reduction) — scroll fade-in */}
+        {/* 04 — What it isn't (anxiety reduction) — scroll fade-in */}
         <SectionReveal as="section">
           <section id="section-not" className="border-t border-[var(--rule)] py-[clamp(56px,7vw,104px)]">
             <div className={CONTAINER}>
-              <SectionHead index="05" label="what it isn&rsquo;t" meta="no catch" />
+              <SectionHead index="04" label="what it isn&rsquo;t" meta="no catch" />
               <div className="mt-[clamp(28px,4vw,56px)] grid grid-cols-1 gap-[clamp(20px,4vw,56px)] lg:grid-cols-12">
                 <div className="lg:col-span-8">
                   <Refrain lines={refrains} />
                 </div>
                 <p className="self-center text-[clamp(0.95rem,1.2vw,1.05rem)] leading-[1.55] text-muted-foreground lg:col-span-4">
-                  No dashboards to maintain, no prompts to write. You connect your accounts once and it
-                  runs in the background — the way a real assistant would.
+                  It doesn&rsquo;t wait for instructions or hand you a blank chat box to fill in. It already
+                  knows your week — you just decide what to act on.
                 </p>
               </div>
             </div>
           </section>
         </SectionReveal>
 
-        {/* 06 — Early access */}
+        {/* 05 — Early access */}
         <SectionReveal as="section">
           <section id="section-cta" className="border-t border-[var(--rule)] py-[clamp(72px,9vw,140px)]">
             <div className={CONTAINER}>
-              <SectionHead index="06" label="early access · hand-built" meta="join" />
+              <SectionHead index="05" label="early access · hand-built" meta="join" />
               <div className="mt-[clamp(28px,4vw,56px)] grid grid-cols-1 items-end gap-[clamp(32px,5vw,72px)] lg:grid-cols-12">
                 <div id="waitlist" className="scroll-mt-24 lg:col-span-7">
                   <h2 className="landing-final-phrase landing-display max-w-[16ch] text-[clamp(2.2rem,5vw,3.8rem)] font-semibold leading-[1.0] text-foreground">
