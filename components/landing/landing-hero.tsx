@@ -57,7 +57,7 @@ export function LandingHero() {
               style={{ transitionDelay: "150ms" }}
             >
               Stop holding your whole life{" "}
-              <span data-bloom-dim className="landing-keyword hero-keyword-reveal">
+              <span data-intro-underline data-bloom-dim className="landing-keyword hero-keyword-reveal">
                 in your head
               </span>
               .

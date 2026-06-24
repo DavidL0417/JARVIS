@@ -33,12 +33,19 @@ const STREAM: [number, number, number] = [1.0, 0.58, 0.32]
 // different tone. Uniform everywhere → no darker "frame"; the streaks add light on top.
 const GRAPHITE: [number, number, number] = [0.03, 0.024, 0.019]
 
-// --- Convergence intro: on load the signals gather to a dot, the dot morphs into the
-// "J", then it blooms back into the ambient flow. The whole thing is driven by
-// introField()/introMorph() over a few seconds; afterwards it's the same ambient field.
-const FOCAL_X = 0.5 // mark centre, as a fraction of the viewport
-const FOCAL_Y = 0.4
-const MARK_SIZE = 0.42 // "J" height as a fraction of the smaller viewport dimension
+// --- Intro: on load most of the signal field gathers into a copper UNDERLINE that draws itself
+// (left→right) beneath the "in your head" keyword, holds a beat, then dissolves back into the
+// ambient flow. Driven by the INTRO_* phases + introT below. The underline span is read from the
+// DOM ([data-intro-underline]) so it tracks the real keyword; falls back to a centred segment.
+const FOCAL_X = 0.5 // fallback segment centre, as a fraction of the viewport
+const FOCAL_Y = 0.5
+const BOND_FRACTION = 0.5 // fraction of particles that gather into the underline (the rest keep flowing,
+// so the field never empties out and there's little to re-populate when the line evaporates)
+// Brightness of the gathered streaks forming the underline (per-particle, additive). Spread along a
+// LINE rather than a point, so the light never concentrates enough to clip / blow out.
+const BOND_BRIGHT = 0.5
+// Soft width (in draw-progress units) of the underline's left→right "drawing" leading edge.
+const DRAW_SOFT = 0.2
 
 const smoothstep01 = (x: number) => {
   const c = Math.max(0, Math.min(1, x))
@@ -50,17 +57,13 @@ const sstep = (e0: number, e1: number, x: number) => {
   const t = Math.max(0, Math.min(1, (x - e0) / (e1 - e0)))
   return t * t * (3 - 2 * t)
 }
-// Dot (0) morphing into the J (1).
-const introMorph = (s: number) => {
-  if (s < 1.6) return 0
-  if (s < 2.5) return smoothstep01((s - 1.6) / 0.9)
-  return 1
-}
-// Intro phase boundaries (seconds): gather → hold → release → done.
-const INTRO_GATHER = 0.3
-const INTRO_HOLD = 1.5
-const INTRO_RELEASE = 3.0
-const INTRO_END = 4.7
+// Intro phase boundaries (seconds): delay → draw → hold → evaporate → done. The field flows plainly
+// for ~0.5s, then the lines gather into the underline (drawing left→right), hold it lit, then it
+// fades to nothing IN PLACE (each particle recycles into the flow once invisible — it never falls).
+const INTRO_GATHER = 0.5 // ~0.5s of plain ambient field before the underline starts drawing
+const INTRO_HOLD = 1.6 // underline fully drawn by here
+const INTRO_RELEASE = 2.1 // begins evaporating in place
+const INTRO_END = 3.0
 const QUAD_VS = `#version 300 es
 layout(location=0) in vec2 a_quad;
 out vec2 v_uv;
@@ -255,12 +258,11 @@ export function ScrollAmbient() {
     const life = new Float32Array(MAX_PARTICLES)
     const maxLife = new Float32Array(MAX_PARTICLES)
     const weight = new Float32Array(MAX_PARTICLES)
-    // Convergence targets, stored as offsets from the focal point: the "J" shape, plus a
-    // tight dot-cluster offset used during the gather-in phase.
-    const jtx = new Float32Array(MAX_PARTICLES)
-    const jty = new Float32Array(MAX_PARTICLES)
-    const djx = new Float32Array(MAX_PARTICLES)
-    const djy = new Float32Array(MAX_PARTICLES)
+    // Per-particle underline targets: position along the segment (0→1, left→right) + a small
+    // vertical jitter so the bar has a little thickness. Rebuilt on resize.
+    const uline = new Float32Array(MAX_PARTICLES)
+    const vjit = new Float32Array(MAX_PARTICLES)
+    const freed = new Uint8Array(MAX_PARTICLES) // set once a line particle has evaporated → pure ambient
     let count = MAX_PARTICLES // active particles, set by area in resize()
     let curX = -1 // smoothed light source the streaks radiate from (backing px)
     let curY = -1
@@ -269,6 +271,26 @@ export function ScrollAmbient() {
     let lastNX = 0.5 // last pointer position, normalized to the viewport
     let lastNY = 0.5
     let hasPointer = false
+
+    // Underline segment (backing px): spans the width of the "in your head" keyword, just below it.
+    // Read from the DOM so it tracks the real keyword; falls back to a centred segment if absent.
+    let ulX0 = bw * (FOCAL_X - 0.12)
+    let ulX1 = bw * (FOCAL_X + 0.12)
+    let ulY = bh * FOCAL_Y
+    const markEl = document.querySelector<HTMLElement>("[data-intro-underline]")
+    const computeUnderline = () => {
+      const dpr = Math.min(window.devicePixelRatio || 1, MAX_DPR)
+      const r = markEl?.getBoundingClientRect()
+      if (r && r.width > 0) {
+        ulX0 = r.left * dpr
+        ulX1 = r.right * dpr
+        ulY = (r.bottom + 6) * dpr // a few px below the keyword box
+      } else {
+        ulX0 = bw * (FOCAL_X - 0.12)
+        ulX1 = bw * (FOCAL_X + 0.12)
+        ulY = bh * FOCAL_Y
+      }
+    }
 
     const spawn = (i: number, stagger: boolean) => {
       maxLife[i] = 5 + Math.random() * 8
@@ -298,39 +320,13 @@ export function ScrollAmbient() {
       weight[i] = 0.55 + Math.random() * 0.9
     }
 
-    // Sample the "J" glyph into per-particle targets (offsets from the focal point), plus a
-    // tight dot-cluster offset for the gather-in phase. Rebuilt on resize.
+    // Per-particle underline targets: spread uniformly along the segment (0→1) with a small vertical
+    // jitter so the bar has a little thickness. Rebuilt on resize.
     const buildTargets = () => {
       const md = Math.min(bw, bh)
-      const sizePx = md * MARK_SIZE
-      const S = 200
-      const oc = document.createElement("canvas")
-      oc.width = S
-      oc.height = S
-      const octx = oc.getContext("2d")
-      const pts: Array<[number, number]> = []
-      if (octx) {
-        octx.fillStyle = "#fff"
-        octx.font = `800 ${Math.round(S * 0.92)}px "Arial Black", "Helvetica Neue", Arial, sans-serif`
-        octx.textAlign = "center"
-        octx.textBaseline = "middle"
-        octx.fillText("J", S / 2, S / 2)
-        const d = octx.getImageData(0, 0, S, S).data
-        for (let yy = 0; yy < S; yy += 2) {
-          for (let xx = 0; xx < S; xx += 2) {
-            if (d[(yy * S + xx) * 4 + 3] > 100) pts.push([xx / S - 0.5, yy / S - 0.5])
-          }
-        }
-      }
-      if (pts.length === 0) pts.push([0, 0])
       for (let i = 0; i < count; i++) {
-        const p = pts[(Math.random() * pts.length) | 0]
-        jtx[i] = p[0] * sizePx
-        jty[i] = p[1] * sizePx
-        const a = Math.random() * Math.PI * 2
-        const rr = Math.sqrt(Math.random()) * md * 0.018
-        djx[i] = Math.cos(a) * rr
-        djy[i] = Math.sin(a) * rr
+        uline[i] = Math.random()
+        vjit[i] = (Math.random() - 0.5) * md * 0.006
       }
     }
 
@@ -361,7 +357,9 @@ export function ScrollAmbient() {
       curX = tgtX
       curY = tgtY
       for (let i = 0; i < count; i++) spawn(i, true)
+      freed.fill(0)
       buildTargets()
+      computeUnderline()
       measureScroll()
       onScroll()
     }
@@ -385,7 +383,6 @@ export function ScrollAmbient() {
     let sp = 0
     let t = 0
     let introT = 0 // seconds since the live loop started (drives the convergence intro)
-    let prevRelProg = -1 // previous-frame release progress, for one-shot peel-off detection
     let last = 0
     let raf = 0
 
@@ -398,13 +395,9 @@ export function ScrollAmbient() {
       // Centered nearer horizontal so the field reads side-to-side, not just top-to-bottom.
       // Sweeps fast enough that the overall lean visibly drifts (not a frozen dead side).
       const baseAng = 0.5 + 0.4 * Math.sin(t * 0.16)
-      // Convergence intro state. g settles to 0 once the intro is over, so the loop falls
-      // back to the original ambient path with no extra cost.
-      const morph = introMorph(introT) // dot (0) → J (1)
-      // Intro phases. gatherRamp drives the gather→hold bond; during release each particle
-      // peels off at its own staggered time and respawns into the field, so the J erodes in
-      // place and the streams refill — no clump that can drift/fall.
-      const gatherRamp =
+      // Intro phases. drawProg sweeps 0→1 across the draw window — it's the left→right "draw"
+      // position of the underline. On release each bonded particle evaporates in place (see below).
+      const drawProg =
         introT < INTRO_GATHER
           ? 0
           : introT < INTRO_HOLD
@@ -413,34 +406,46 @@ export function ScrollAmbient() {
       const intro = introT < INTRO_END
       const releasing = introT >= INTRO_RELEASE && introT < INTRO_END
       const relProg = (introT - INTRO_RELEASE) / (INTRO_END - INTRO_RELEASE)
-      const fx = bw * FOCAL_X
-      const fy = bh * FOCAL_Y
-      const pull = 0.16 * (dt * 60)
-      const jit = md * 0.004
+      const pull = 0.18 * (dt * 60)
+      const jit = md * 0.003
       for (let i = 0; i < count; i++) {
-        // This particle's bond to the mark: 1 = held on the mark, 0 = free in the flow.
+        // Bond into the underline: 1 = settled on the line, 0 = free in the flow. Only a fraction
+        // participates (the rest keep flowing). The bond switches on left→right as the draw sweeps
+        // past this particle's spot. On release the particle fades to nothing IN PLACE (evapFade),
+        // then recycles into the flow once invisible — so the line evaporates where it is, never falls.
         let mark = 0
-        if (intro) {
+        let evapFade = 1
+        if (intro && !freed[i] && (i * 0.7548776662 + 0.123) % 1 < BOND_FRACTION) {
+          const g = smoothstep01((drawProg * (1 + DRAW_SOFT) - uline[i]) / DRAW_SOFT)
           if (releasing) {
-            const thr = (i * 0.618033988749895) % 1 // even, low-discrepancy peel-off order
-            if (relProg >= thr) {
-              if (prevRelProg < thr) spawn(i, true) // peel off into the field, exactly once
+            const ev = 0.55 + 0.4 * ((i * 0.61803398875) % 1) // per-particle evaporate point (relProg)
+            if (relProg >= ev) {
+              freed[i] = 1
+              // Recycle scattered across the screen and INVISIBLE (life at max → env starts at 0), so the
+              // field re-populates as a gradual, dispersed fade-up — never a batch of lines arriving from
+              // the upstream edge at once.
+              px[i] = Math.random() * bw
+              py[i] = Math.random() * bh
+              ppx[i] = px[i]
+              ppy[i] = py[i]
+              maxLife[i] = 5 + Math.random() * 8
+              life[i] = maxLife[i]
+              weight[i] = 0.55 + Math.random() * 0.9
             } else {
-              mark = 1
+              mark = g
+              evapFade = 1 - smoothstep01((relProg - (ev - 0.4)) / 0.4) // fade in place before recycling
             }
           } else {
-            mark = gatherRamp
+            mark = g
           }
         }
         life[i] -= dt * (1 - mark) // freeze ageing while bonded to the mark
         if (life[i] <= 0) spawn(i, false)
         const x = px[i]
         const y = py[i]
-        // A few layered currents weave into bright THREADS (where the flow converges),
-        // separated by darker LANES (where it diverges) — and the whole pattern drifts
-        // and morphs at a visible pace, so a lane is never a fixed dead spot: it sweeps
-        // across and reorganizes over ~20–30s. Net drift stays right+down (the streams
-        // keep entering from the upstream edges), so the field stays balanced over time.
+        // A few layered currents weave into bright THREADS (where the flow converges), separated
+        // by darker LANES (where it diverges) — the whole pattern drifts so a lane is never a
+        // fixed dead spot. Net drift stays right+down (streams enter from the upstream edges).
         const flowAng =
           baseAng +
           0.55 * Math.sin(x * 0.0016 + t * 0.23) +
@@ -449,17 +454,14 @@ export function ScrollAmbient() {
         let nx = x + Math.cos(flowAng) * speed
         let ny = y + Math.sin(flowAng) * speed
         if (mark > 0.001) {
-          // Pull toward the mark: a tight dot (morph=0) that opens into the J (morph=1),
-          // with a tiny shimmer so settled streaks keep drawing and feel alive.
-          const tdx = fx + djx[i]
-          const tdy = fy + djy[i]
-          const ttx = tdx + (fx + jtx[i] - tdx) * morph + Math.sin(t * 3.1 + i * 0.7) * jit
-          const tty = tdy + (fy + jty[i] - tdy) * morph + Math.cos(t * 2.6 + i * 0.9) * jit
+          // Steer onto this particle's spot along the underline segment, with a tiny shimmer so the
+          // line stays alive. As mark fades on release, it eases back into the flow.
+          const ttx = ulX0 + (ulX1 - ulX0) * uline[i] + Math.sin(t * 3.1 + i * 0.7) * jit
+          const tty = ulY + vjit[i] + Math.cos(t * 2.6 + i * 0.9) * jit
           nx = nx * (1 - mark) + (x + (ttx - x) * pull) * mark
           ny = ny * (1 - mark) + (y + (tty - y) * pull) * mark
         }
-        // Recycle once a particle leaves: promptly off the downstream (right/bottom) edges,
-        // but allow it to live out in the off-screen upstream margin where it was born.
+        // Recycle once a particle leaves the edges.
         if (
           nx > bw + 20 ||
           ny > bh + 20 ||
@@ -484,18 +486,14 @@ export function ScrollAmbient() {
         const lp = life[i] / maxLife[i]
         // While bonded to the mark, override the life-fade so it reads as one bright shape.
         const env = Math.sin(Math.max(0, Math.min(1, lp)) * Math.PI) * (1 - mark) + mark
-        // No spatial edge envelope: the field runs at full density to all four edges, so
-        // there is no darker rim/vignette. Balance comes from the upstream respawn + the
-        // morphing flow, not from tapering the edges.
-        // Thread/lane contrast: gather the streaks into brighter THREADS separated by
-        // darker LANES. The band runs roughly ALONG the flow (so it reads as flowing
-        // threads, not cross-hatching) and its phase drifts in time, so the lanes sweep
-        // and morph with the currents — a lane is a moving gap, never a fixed dead spot.
-        // band² broadens + darkens the lanes and narrows the bright cores → distinct gaps.
+        // Thread/lane contrast: gather the streaks into brighter THREADS separated by darker LANES.
+        // The band runs roughly ALONG the flow and its phase drifts in time, so the lanes sweep and
+        // morph with the currents — a lane is a moving gap, never a fixed dead spot.
         const band = 0.5 + 0.5 * Math.sin(y * 0.0024 - x * 0.0014 + t * 0.22)
         const lane = 0.06 + 1.04 * band * band // deep dark lanes ↔ brighter-than-full thread cores
-        const thread = lane + (1 - lane) * mark // → 1 while bonded to the mark (intro J stays solid)
-        const alpha = env * BASE_ALPHA * weight[i] * fall * thread * topBoost * (1 + mark * 0.3)
+        const thread = lane + (1 - lane) * mark // → 1 while bonded to the line (the underline reads solid)
+        const alpha =
+          env * BASE_ALPHA * weight[i] * fall * thread * topBoost * (1 - mark * (1 - BOND_BRIGHT)) * evapFade
         const o = i * 6
         segData[o] = ppx[i]
         segData[o + 1] = ppy[i]
@@ -504,7 +502,6 @@ export function ScrollAmbient() {
         segData[o + 4] = py[i]
         segData[o + 5] = alpha
       }
-      prevRelProg = relProg // remember for next frame's one-shot peel-off detection
     }
 
     const renderOnce = () => {
@@ -557,6 +554,9 @@ export function ScrollAmbient() {
       last = now
       t += dt
       introT += dt
+      // Track the keyword through the draw + hold: the hero headline reveals/settles on load and can
+      // scroll, so re-read the underline span until the dissolve (cheap — one element, ~2s only).
+      if (introT < INTRO_RELEASE) computeUnderline()
       sp += (spTarget - sp) * Math.min(1, dt * 4)
       // Source follows the pointer; with no pointer (touch / idle) it gently roams
       // so the field still breathes.
