@@ -320,6 +320,20 @@ export function ScrollAmbient() {
       weight[i] = 0.55 + Math.random() * 0.9
     }
 
+    // Retire a line particle back into the flow: scattered across the screen and INVISIBLE (life at
+    // max → env starts at 0), so it fades up gradually and dispersed — no batch, no edge front. Used
+    // both when the line evaporates normally and when the intro is dismissed by a scroll.
+    const recycleScattered = (i: number) => {
+      freed[i] = 1
+      px[i] = Math.random() * bw
+      py[i] = Math.random() * bh
+      ppx[i] = px[i]
+      ppy[i] = py[i]
+      maxLife[i] = 5 + Math.random() * 8
+      life[i] = maxLife[i]
+      weight[i] = 0.55 + Math.random() * 0.9
+    }
+
     // Per-particle underline targets: spread uniformly along the segment (0→1) with a small vertical
     // jitter so the bar has a little thickness. Rebuilt on resize.
     const buildTargets = () => {
@@ -383,6 +397,7 @@ export function ScrollAmbient() {
     let sp = 0
     let t = 0
     let introT = 0 // seconds since the live loop started (drives the convergence intro)
+    let introDismissed = false // set if the user scrolls mid-intro → bail out cleanly (see frame())
     let last = 0
     let raf = 0
 
@@ -416,27 +431,24 @@ export function ScrollAmbient() {
         let mark = 0
         let evapFade = 1
         if (intro && !freed[i] && (i * 0.7548776662 + 0.123) % 1 < BOND_FRACTION) {
-          const g = smoothstep01((drawProg * (1 + DRAW_SOFT) - uline[i]) / DRAW_SOFT)
-          if (releasing) {
-            const ev = 0.55 + 0.4 * ((i * 0.61803398875) % 1) // per-particle evaporate point (relProg)
-            if (relProg >= ev) {
-              freed[i] = 1
-              // Recycle scattered across the screen and INVISIBLE (life at max → env starts at 0), so the
-              // field re-populates as a gradual, dispersed fade-up — never a batch of lines arriving from
-              // the upstream edge at once.
-              px[i] = Math.random() * bw
-              py[i] = Math.random() * bh
-              ppx[i] = px[i]
-              ppy[i] = py[i]
-              maxLife[i] = 5 + Math.random() * 8
-              life[i] = maxLife[i]
-              weight[i] = 0.55 + Math.random() * 0.9
+          if (introDismissed) {
+            // User scrolled mid-intro: the line's anchor (the keyword) is sliding off-screen, so
+            // scatter the bonded particles back into the flow now — otherwise they'd chase the
+            // off-screen target and pile bright converging trails into a wedge at the edge.
+            recycleScattered(i)
+          } else {
+            const g = smoothstep01((drawProg * (1 + DRAW_SOFT) - uline[i]) / DRAW_SOFT)
+            if (releasing) {
+              const ev = 0.55 + 0.4 * ((i * 0.61803398875) % 1) // per-particle evaporate point (relProg)
+              if (relProg >= ev) {
+                recycleScattered(i) // faded out → dispersed fade-up, no batch from the edge
+              } else {
+                mark = g
+                evapFade = 1 - smoothstep01((relProg - (ev - 0.4)) / 0.4) // fade in place before recycling
+              }
             } else {
               mark = g
-              evapFade = 1 - smoothstep01((relProg - (ev - 0.4)) / 0.4) // fade in place before recycling
             }
-          } else {
-            mark = g
           }
         }
         life[i] -= dt * (1 - mark) // freeze ageing while bonded to the mark
@@ -554,9 +566,13 @@ export function ScrollAmbient() {
       last = now
       t += dt
       introT += dt
-      // Track the keyword through the draw + hold: the hero headline reveals/settles on load and can
-      // scroll, so re-read the underline span until the dissolve (cheap — one element, ~2s only).
-      if (introT < INTRO_RELEASE) computeUnderline()
+      // If the user scrolls while the intro is still running, bail out: the underline is anchored to
+      // the keyword, which is now sliding off-screen, so dismiss it (the bonded particles scatter back
+      // into the flow in step()) rather than chase the off-screen anchor into a bright edge wedge.
+      if (!introDismissed && introT < INTRO_END && window.scrollY > 40) introDismissed = true
+      // Track the keyword through the draw + hold (headline reveals/settles on load). Stop once
+      // dismissed so we don't keep re-reading a scrolled-away anchor.
+      if (introT < INTRO_RELEASE && !introDismissed) computeUnderline()
       sp += (spTarget - sp) * Math.min(1, dt * 4)
       // Source follows the pointer; with no pointer (touch / idle) it gently roams
       // so the field still breathes.
