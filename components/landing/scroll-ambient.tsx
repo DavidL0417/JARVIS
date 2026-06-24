@@ -566,13 +566,14 @@ export function ScrollAmbient() {
       last = now
       t += dt
       introT += dt
-      // If the user scrolls while the intro is still running, bail out: the underline is anchored to
-      // the keyword, which is now sliding off-screen, so dismiss it (the bonded particles scatter back
-      // into the flow in step()) rather than chase the off-screen anchor into a bright edge wedge.
-      if (!introDismissed && introT < INTRO_END && window.scrollY > 40) introDismissed = true
-      // Track the keyword through the draw + hold (headline reveals/settles on load). Stop once
-      // dismissed so we don't keep re-reading a scrolled-away anchor.
-      if (introT < INTRO_RELEASE && !introDismissed) computeUnderline()
+      // Re-read the keyword every frame so the underline FOLLOWS page scroll (and the headline's
+      // load-in settle) — it stays glued to "in your head" as the page moves. Only once the keyword
+      // scrolls off the top of the viewport do we retire it: its particles scatter back into the flow
+      // in step() rather than chase the off-screen anchor into a bright edge wedge.
+      if (introT < INTRO_END && !introDismissed) {
+        computeUnderline()
+        if (ulY < 0) introDismissed = true
+      }
       sp += (spTarget - sp) * Math.min(1, dt * 4)
       // Source follows the pointer; with no pointer (touch / idle) it gently roams
       // so the field still breathes.
