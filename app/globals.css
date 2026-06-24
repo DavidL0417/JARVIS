@@ -227,7 +227,7 @@ body {
   /* Cooled to match the real app's graphite (hue 60, low chroma); copper is the
      only warmth, exactly like the dashboard. This also makes the embedded
      dashboard preview sit natively instead of clashing with a warm page. */
-  --background: oklch(0.145 0.006 60);
+  --background: oklch(0.1 0.006 55);
   --paper: oklch(0.965 0.010 80);
   --foreground: oklch(0.965 0.010 80);
   --panel: oklch(0.185 0.006 60);
@@ -467,6 +467,44 @@ body {
 
 @media (prefers-reduced-motion: reduce) {
   [data-visible="true"] .cta-accent-phrase {
+    animation: none;
+  }
+}
+
+/* Capability accordion ("what it actually does") — native <details> disclosure */
+.cap-details > summary {
+  list-style: none;
+}
+.cap-details > summary::-webkit-details-marker {
+  display: none;
+}
+.cap-plus-icon {
+  transition:
+    rotate 300ms cubic-bezier(0.16, 1, 0.3, 1),
+    color 200ms ease,
+    border-color 200ms ease;
+}
+.cap-details[open] .cap-plus-icon {
+  rotate: 45deg;
+}
+.cap-details[open] .cap-reveal {
+  animation: capability-reveal 320ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+@keyframes capability-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cap-plus-icon {
+    transition: none;
+  }
+  .cap-details[open] .cap-reveal {
     animation: none;
   }
 }

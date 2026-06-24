@@ -1,5 +1,6 @@
 import type { Metadata } from "next"
 
+import { CapabilityList } from "@/components/landing/capability-list"
 import { LandingFooter } from "@/components/landing/landing-footer"
 import { LandingHero } from "@/components/landing/landing-hero"
 import { LandingNav } from "@/components/landing/landing-nav"
@@ -20,14 +21,6 @@ export const metadata: Metadata = {
   },
 }
 
-const problemHeading =
-  "It's not that you're behind. It's that you're the only thing holding it together."
-
-const problemCopy = [
-  "The reading is in Canvas. A reply you owe is buried in Gmail. Half a plan sits in Notion. None of them talk to each other, so you do — in your head, at 1am, hoping you didn't forget the one that actually mattered.",
-  "That dread of what-am-I-missing is what happens when a dozen apps force you to connect them together.",
-]
-
 const progressHeading = "Imagine not being the one who has to remember."
 
 const progressLines = [
@@ -37,27 +30,47 @@ const progressLines = [
   { k: "04", t: "You stop being the app that has to run all your other apps." },
 ]
 
-const howHeading = "You don't set it up. It sets itself up."
+// 03 — most days: the quiet background competence (rendered as toggles)
+const everydayHeading = "Most of the time, you won't notice it."
+const everydayLede =
+  "The quiet, unglamorous work — handled in the background, before it ever becomes your problem."
 
-const steps = [
+const everydayCapabilities = [
   {
     number: "01",
-    title: "Connect what you already use.",
+    title: "Reads everything you already use.",
     detail:
-      "Canvas, Gmail, Notion, Google Calendar — Jarvis plugs into wherever your obligations already live. Minimal setup, zero overhead.",
+      "Canvas, Gmail, Notion, GCal, iMessages, Reminders, etc. — all pulled into one place and kept current, without you asking.",
+    body:
+      "Anyone can sync calendars and deadlines. But Jarvis, like a true secretary, holds the other context too — the opportunities you texted in passing to friends, your half-formed reminders, your regrade requests to professors — so it understands the full picture, never a to-do list.",
   },
   {
     number: "02",
-    title: "It builds the whole picture.",
+    title: "Builds the whole picture.",
     detail:
-      "Every deadline, every thread, every change — pulled together and kept current without you asking. It reads what you'd otherwise have to read yourself.",
+      "Every deadline, every thread, every change, connected — so nothing important is hiding in an app you forgot to open.",
+    body:
+      "Most tools keep your information in separate boxes. Jarvis connects them, so one change quietly updates everything it touches — including things you'd never think to link yourself.",
+    example: {
+      label: "For example",
+      lines: [
+        "Your professor emails that the midterm's been moved to a hall across campus.",
+        "Jarvis checks it against your schedule and catches what you wouldn't: your 11am class lets out ten minutes before, on the far side of campus. It flags that you won't make it in time — a week out, not at 10:55.",
+      ],
+    },
   },
-  {
-    number: "03",
-    title: "You just start.",
-    detail:
-      "Open Jarvis and the next 30–90 minutes are already decided. No planning, no triage, no staring at a blank list wondering where to begin.",
-  },
+]
+
+// 04 — when it counts: the agentic peak, shown open (not a toggle)
+const momentHeading = "And when it counts, it's already there."
+const momentLede =
+  "When something big lands, it reads the situation, figures out what it affects, and hands you a plan with the tradeoffs already laid out — the decision stays yours, but the thinking is done."
+const momentScenario = [
+  "A friend texts: his mom passed. The funeral's next weekend, a few hours away.",
+  "Before you've even worked out what to say back, Jarvis has mapped what going means — leave Friday, back Sunday, which runs into the problem set due that night and your Saturday shift.",
+  "So it builds the whole plan and has it waiting: the email to your professor pushing the deadline, the message asking a coworker to cover Saturday's shift, your to-do list reshuffled and Monday's midterm prep protected, the travel time already on your calendar. It even reminds you to iron your shirts beforehand.",
+  "Everything accounted for — nothing sent without you — so you understand each trade-off, approve what fits, and change what doesn't.",
+  "You didn't plan any of it. You just got to be there for your friend.",
 ]
 
 const refrains = [
@@ -107,30 +120,11 @@ export default function LandingPage() {
       </section>
 
       <div className="relative z-10">
-        {/* 02 — The struggling moment (push) */}
-        <SectionReveal as="section">
-          <section id="section-problem" className="border-t border-[var(--rule)] py-[clamp(56px,7vw,104px)]">
-            <div className={CONTAINER}>
-              <SectionHead index="02" label="the part no one sees" meta="the struggle" />
-              <div className="mt-[clamp(28px,4vw,56px)] grid grid-cols-1 gap-[clamp(24px,4vw,56px)] lg:grid-cols-12">
-                <h2 className="landing-display text-[clamp(1.9rem,3.8vw,3rem)] font-semibold leading-[1.05] text-foreground lg:col-span-7">
-                  {problemHeading}
-                </h2>
-                <div className="space-y-5 text-[clamp(1rem,1.3vw,1.125rem)] leading-[1.6] text-foreground/80 lg:col-span-5">
-                  {problemCopy.map((paragraph) => (
-                    <p key={paragraph}>{paragraph}</p>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </section>
-        </SectionReveal>
-
-        {/* 03 — The progress (magnetism / the after) */}
+        {/* 02 — The progress (magnetism / the after) */}
         <SectionReveal as="section">
           <section id="section-progress" className="border-t border-[var(--rule)] py-[clamp(56px,7vw,104px)]">
             <div className={CONTAINER}>
-              <SectionHead index="03" label="what changes" meta="the payoff" />
+              <SectionHead index="02" label="what changes" meta="the payoff" />
               <h2 className="landing-display mt-[clamp(28px,4vw,56px)] max-w-[20ch] text-[clamp(1.9rem,3.8vw,3rem)] font-semibold leading-[1.04] text-foreground">
                 {progressHeading}
               </h2>
@@ -155,37 +149,64 @@ export default function LandingPage() {
           </section>
         </SectionReveal>
 
-        {/* 04 — How it works */}
+        {/* 03 — Most days: quiet background competence (reads + builds; toggles) */}
         <SectionReveal as="section">
-          <section id="section-how" className="border-t border-[var(--rule)] py-[clamp(56px,7vw,104px)]">
+          <section id="section-does" className="border-t border-[var(--rule)] py-[clamp(56px,7vw,104px)]">
             <div className={CONTAINER}>
-              <SectionHead index="04" label="how it works" meta="3 steps" />
-              <h2 className="landing-display mt-[clamp(24px,3vw,44px)] max-w-[22ch] text-[clamp(1.9rem,3.8vw,3rem)] font-semibold leading-[1.04] text-foreground">
-                {howHeading}
+              <SectionHead index="03" label="most days" meta="quiet" />
+              <h2 className="landing-display mt-[clamp(24px,3vw,44px)] max-w-[18ch] text-[clamp(1.9rem,3.8vw,3rem)] font-semibold leading-[1.04] text-foreground">
+                {everydayHeading}
               </h2>
+              <p className="mt-5 max-w-[52ch] text-[clamp(1rem,1.3vw,1.125rem)] leading-[1.55] text-foreground/70">
+                {everydayLede}
+              </p>
 
-              <ol className="mt-[clamp(32px,4vw,56px)] divide-y divide-[var(--rule)] border-y border-[var(--rule)]">
-                {steps.map((step) => (
-                  <li
-                    key={step.number}
-                    className="grid grid-cols-[auto_1fr] gap-x-[clamp(20px,4vw,64px)] gap-y-2 py-[clamp(24px,3vw,36px)] md:grid-cols-[110px_minmax(0,5fr)_minmax(0,7fr)]"
-                  >
-                    <span
-                      className="landing-display num text-[clamp(1.8rem,3.2vw,2.6rem)] font-light leading-none text-[var(--copper)]"
-                      aria-hidden="true"
-                      style={{ letterSpacing: "-0.02em" }}
-                    >
-                      {step.number}
-                    </span>
-                    <h3 className="max-w-[24ch] self-center text-[clamp(1.1rem,1.7vw,1.4rem)] font-semibold leading-[1.2] text-foreground">
-                      {step.title}
-                    </h3>
-                    <p className="col-span-2 max-w-[60ch] text-[clamp(0.95rem,1.25vw,1.05rem)] leading-[1.6] text-foreground/70 md:col-span-1 md:col-start-3 md:row-start-1 md:self-center">
-                      {step.detail}
-                    </p>
-                  </li>
-                ))}
-              </ol>
+              <CapabilityList items={everydayCapabilities} />
+            </div>
+          </section>
+        </SectionReveal>
+
+        {/* 04 — When it counts: the agentic peak, funeral shown open (not a toggle) */}
+        <SectionReveal as="section">
+          <section id="section-moment" className="border-t border-[var(--rule)] py-[clamp(64px,8vw,124px)]">
+            <div className={CONTAINER}>
+              <SectionHead index="04" label="when it counts" meta="the moment" />
+              <h2 className="landing-display mt-[clamp(28px,4vw,56px)] max-w-[16ch] text-[clamp(2.1rem,4.4vw,3.4rem)] font-semibold leading-[1.02] text-foreground">
+                {momentHeading}
+              </h2>
+              <p className="mt-5 max-w-[58ch] text-[clamp(1.05rem,1.4vw,1.2rem)] leading-[1.55] text-foreground/75">
+                {momentLede}
+              </p>
+
+              <div className="mt-[clamp(36px,5vw,64px)] max-w-[760px] rounded-sm bg-[var(--panel)]/60 p-[clamp(24px,4vw,52px)]">
+                <div className="space-y-[clamp(16px,2.4vw,26px)]">
+                  {momentScenario.map((line, i) => {
+                    const isLast = i === momentScenario.length - 1
+                    if (isLast) {
+                      return (
+                        <p
+                          key={i}
+                          className="landing-display border-t border-[var(--rule)] pt-[clamp(16px,2.4vw,26px)] text-[clamp(1.4rem,2.6vw,2.1rem)] font-semibold leading-[1.15] text-foreground"
+                        >
+                          {line}
+                        </p>
+                      )
+                    }
+                    return (
+                      <p
+                        key={i}
+                        className={
+                          i === 0
+                            ? "text-[clamp(1.15rem,1.9vw,1.5rem)] font-medium leading-[1.4] text-foreground"
+                            : "max-w-[64ch] text-[clamp(1rem,1.3vw,1.12rem)] leading-[1.65] text-foreground/75"
+                        }
+                      >
+                        {line}
+                      </p>
+                    )
+                  })}
+                </div>
+              </div>
             </div>
           </section>
         </SectionReveal>
@@ -200,8 +221,8 @@ export default function LandingPage() {
                   <Refrain lines={refrains} />
                 </div>
                 <p className="self-center text-[clamp(0.95rem,1.2vw,1.05rem)] leading-[1.55] text-muted-foreground lg:col-span-4">
-                  No dashboards to maintain, no prompts to write. You connect your accounts once and it
-                  runs in the background — the way a real assistant would.
+                  It doesn&rsquo;t wait for instructions or hand you a blank chat box to fill in. It already
+                  knows your week — you just decide what to act on.
                 </p>
               </div>
             </div>
