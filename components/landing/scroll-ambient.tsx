@@ -391,6 +391,9 @@ export function ScrollAmbient() {
 
     const step = (dt: number) => {
       const speed = (2.0 + sp * 2.2) * (dt * 60)
+      // Lift the streaks a touch at the very top of the page (the hero); eases back to
+      // normal as you scroll down, so the first impression reads a little brighter.
+      const topBoost = 1 + (1 - sp) * 0.25
       const md = Math.max(bw, bh)
       // Centered nearer horizontal so the field reads side-to-side, not just top-to-bottom.
       // Sweeps fast enough that the overall lean visibly drifts (not a frozen dead side).
@@ -492,7 +495,7 @@ export function ScrollAmbient() {
         const band = 0.5 + 0.5 * Math.sin(y * 0.0024 - x * 0.0014 + t * 0.22)
         const lane = 0.06 + 1.04 * band * band // deep dark lanes ↔ brighter-than-full thread cores
         const thread = lane + (1 - lane) * mark // → 1 while bonded to the mark (intro J stays solid)
-        const alpha = env * BASE_ALPHA * weight[i] * fall * thread * (1 + mark * 0.3)
+        const alpha = env * BASE_ALPHA * weight[i] * fall * thread * topBoost * (1 + mark * 0.3)
         const o = i * 6
         segData[o] = ppx[i]
         segData[o + 1] = ppy[i]
