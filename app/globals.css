@@ -227,7 +227,7 @@ body {
   /* Cooled to match the real app's graphite (hue 60, low chroma); copper is the
      only warmth, exactly like the dashboard. This also makes the embedded
      dashboard preview sit natively instead of clashing with a warm page. */
-  --background: oklch(0.145 0.006 60);
+  --background: oklch(0.1 0.006 55);
   --paper: oklch(0.965 0.010 80);
   --foreground: oklch(0.965 0.010 80);
   --panel: oklch(0.185 0.006 60);
@@ -378,20 +378,6 @@ body {
     radial-gradient(58rem 42rem at 72% 14%, oklch(0.72 0.13 45 / 0.16), transparent 62%),
     radial-gradient(52rem 40rem at 18% 72%, oklch(0.55 0.13 40 / 0.12), transparent 66%),
     var(--background);
-}
-
-/* Subtle gray edge-light along the top and left — a soft sheen catching those two
-   edges (as in the earliest revision), fading inward over a short distance. Sits
-   above the canvas (z-0) but below page content; desaturated so it reads as light
-   on the border, not a colored wash. */
-.scroll-ambient-edge {
-  position: fixed;
-  inset: 0;
-  z-index: 1;
-  pointer-events: none;
-  background:
-    linear-gradient(180deg, oklch(0.82 0.006 60 / 0.09), transparent 14%),
-    linear-gradient(90deg, oklch(0.82 0.006 60 / 0.07), transparent 12%);
 }
 
 /* Thin scroll-progress bar at the very top — copper fill scales with --sp. */

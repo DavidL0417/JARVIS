@@ -29,10 +29,9 @@ const MAX_DPR = 1.25 // cap backing resolution; softer (glowier) + far cheaper t
 
 // Copper light added over the base; overlaps + bloom go toward hot copper.
 const STREAM: [number, number, number] = [1.0, 0.58, 0.32]
-// MUST equal the page `--background` (oklch(0.145 0.006 60) → sRGB rgb(16,13,10)).
-// The canvas floor IS the page background: every non-streak pixel matches the rest
-// of the site, so there is no darker "frame" where the streaks thin out.
-const GRAPHITE: [number, number, number] = [0.063, 0.051, 0.039]
+// The field's base, matched by the landing --background so load/fallback don't flash a
+// different tone. Uniform everywhere → no darker "frame"; the streaks add light on top.
+const GRAPHITE: [number, number, number] = [0.03, 0.024, 0.019]
 
 // --- Convergence intro: on load the signals gather to a dot, the dot morphs into the
 // "J", then it blooms back into the ambient flow. The whole thing is driven by
@@ -97,15 +96,11 @@ void main(){
     g1 += texture(u_tex, v_uv + OFF[i] * r1).rgb;
     g2 += texture(u_tex, v_uv + OFF[i] * r2).rgb;
   }
-  vec3 light = core + g1 * (0.42 / 8.0) + g2 * (0.3 / 8.0); // two-ring bloom
-  // Taper the STREAK LIGHT toward every edge — not the base floor. The streaks run
-  // up close to the border and fade out only in a thin final band, leaving the base
-  // (= page background) behind. No darkened frame, minimal dead space at the edges.
-  vec2 pxc = v_uv * u_res;
-  float mg = 18.0; // thin bloom-cleanup feather; the per-particle envelope does the real taper
-  float ex = smoothstep(0.0, mg, pxc.x) * smoothstep(0.0, mg, u_res.x - pxc.x);
-  float ey = smoothstep(0.0, mg, pxc.y) * smoothstep(0.0, mg, u_res.y - pxc.y);
-  vec3 col = u_bg + light * ex * ey;
+  vec3 light = core + g1 * (0.34 / 8.0) + g2 * (0.22 / 8.0); // two-ring bloom (trimmed → less haze)
+  // NO edge feather/vignette. The base (u_bg) is uniform across the whole canvas and the
+  // streaks run at full density right to all four edges (they just flow off-screen), so
+  // there is no darker rim/"frame" — the field reads edge-to-edge, the same tone all over.
+  vec3 col = u_bg + light;
   col += (hash(v_uv * u_res + u_seed) - 0.5) * (1.0 / 255.0); // dither
   o = vec4(col, 1.0);
 }`
@@ -398,7 +393,8 @@ export function ScrollAmbient() {
       const speed = (2.0 + sp * 2.2) * (dt * 60)
       const md = Math.max(bw, bh)
       // Centered nearer horizontal so the field reads side-to-side, not just top-to-bottom.
-      const baseAng = 0.5 + 0.4 * Math.sin(t * 0.03)
+      // Sweeps fast enough that the overall lean visibly drifts (not a frozen dead side).
+      const baseAng = 0.5 + 0.4 * Math.sin(t * 0.16)
       // Convergence intro state. g settles to 0 once the intro is over, so the loop falls
       // back to the original ambient path with no extra cost.
       const morph = introMorph(introT) // dot (0) → J (1)
@@ -437,10 +433,16 @@ export function ScrollAmbient() {
         if (life[i] <= 0) spawn(i, false)
         const x = px[i]
         const y = py[i]
-        // One smooth, low-amplitude laminar flow everywhere — even density, so it can
-        // never form a ribbon, ring, or vortex.
+        // A few layered currents weave into bright THREADS (where the flow converges),
+        // separated by darker LANES (where it diverges) — and the whole pattern drifts
+        // and morphs at a visible pace, so a lane is never a fixed dead spot: it sweeps
+        // across and reorganizes over ~20–30s. Net drift stays right+down (the streams
+        // keep entering from the upstream edges), so the field stays balanced over time.
         const flowAng =
-          baseAng + 0.5 * Math.sin(x * 0.0015 + t * 0.05) + 0.4 * Math.sin(y * 0.0018 - t * 0.045)
+          baseAng +
+          0.55 * Math.sin(x * 0.0016 + t * 0.23) +
+          0.42 * Math.sin(y * 0.0019 - t * 0.19) +
+          0.3 * Math.sin((x - y) * 0.0013 + t * 0.3)
         let nx = x + Math.cos(flowAng) * speed
         let ny = y + Math.sin(flowAng) * speed
         if (mark > 0.001) {
@@ -479,19 +481,18 @@ export function ScrollAmbient() {
         const lp = life[i] / maxLife[i]
         // While bonded to the mark, override the life-fade so it reads as one bright shape.
         const env = Math.sin(Math.max(0, Math.min(1, lp)) * Math.PI) * (1 - mark) + mark
-        // Spatial edge envelope — the streaks' own "spawn-in / despawn-out". A gentle
-        // taper-IN over the upstream edges (left/top, ~5%) and a wider taper-OUT toward
-        // the downstream edges (right/bottom, ~14%), so streaks dissolve gradually before
-        // the border rather than hitting a wall. (=1 anywhere off these bands, incl. the
-        // mark at centre, so the intro is untouched.)
-        const nxp = x / bw
-        const nyp = y / bh
-        const spatial =
-          sstep(0, 0.05, nxp) *
-          sstep(0, 0.05, nyp) *
-          (1 - sstep(0.86, 1.0, nxp)) *
-          (1 - sstep(0.86, 1.0, nyp))
-        const alpha = env * BASE_ALPHA * weight[i] * fall * spatial * (1 + mark * 0.3)
+        // No spatial edge envelope: the field runs at full density to all four edges, so
+        // there is no darker rim/vignette. Balance comes from the upstream respawn + the
+        // morphing flow, not from tapering the edges.
+        // Thread/lane contrast: gather the streaks into brighter THREADS separated by
+        // darker LANES. The band runs roughly ALONG the flow (so it reads as flowing
+        // threads, not cross-hatching) and its phase drifts in time, so the lanes sweep
+        // and morph with the currents — a lane is a moving gap, never a fixed dead spot.
+        // band² broadens + darkens the lanes and narrows the bright cores → distinct gaps.
+        const band = 0.5 + 0.5 * Math.sin(y * 0.0024 - x * 0.0014 + t * 0.22)
+        const lane = 0.06 + 1.04 * band * band // deep dark lanes ↔ brighter-than-full thread cores
+        const thread = lane + (1 - lane) * mark // → 1 while bonded to the mark (intro J stays solid)
+        const alpha = env * BASE_ALPHA * weight[i] * fall * thread * (1 + mark * 0.3)
         const o = i * 6
         segData[o] = ppx[i]
         segData[o + 1] = ppy[i]
@@ -612,7 +613,6 @@ export function ScrollAmbient() {
   return (
     <>
       <canvas ref={canvasRef} aria-hidden="true" className="scroll-ambient-canvas" />
-      <div aria-hidden="true" className="scroll-ambient-edge" />
       <div aria-hidden="true" className="scroll-progress" />
     </>
   )

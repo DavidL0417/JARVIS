@@ -40,7 +40,7 @@ const everydayCapabilities = [
     number: "01",
     title: "Reads everything you already use.",
     detail:
-      "Canvas, Gmail, Notion, your calendar — all pulled into one place and kept current, without you asking.",
+      "Canvas, Gmail, Notion, GCal, iMessages, Reminders, etc. — all pulled into one place and kept current, without you asking.",
     body:
       "Anyone can sync calendars and deadlines. But Jarvis, like a true secretary, holds the other context too — the opportunities you texted in passing to friends, your half-formed reminders, your regrade requests to professors — so it understands the full picture, never a to-do list.",
   },
@@ -54,8 +54,8 @@ const everydayCapabilities = [
     example: {
       label: "For example",
       lines: [
-        "Three lines into a Canvas announcement, the midterm quietly moves up two days.",
-        "You'd have skimmed past it — Jarvis didn't. Because it already holds your calendar, it catches what the change actually breaks: the new date lands on the morning you're running your club's event, and the study group you'd booked is now a day too late. It flags the collision a week out, while there's still time to move.",
+        "Your professor emails that the midterm's been moved to a hall across campus.",
+        "Jarvis checks it against your schedule and catches what you wouldn't: your 11am class lets out ten minutes before, on the far side of campus. It flags that you won't make it in time — a week out, not at 10:55.",
       ],
     },
   },
@@ -68,7 +68,8 @@ const momentLede =
 const momentScenario = [
   "A friend texts: his mom passed. The funeral's next weekend, a few hours away.",
   "Before you've even worked out what to say back, Jarvis has mapped what going means — leave Friday, back Sunday, which runs into the problem set due that night and your Saturday shift.",
-  "So it builds the whole plan and has it waiting: the email to your professor pushing the deadline, the message asking a coworker to cover Saturday's shift, your readings reshuffled and Monday's midterm prep protected, the travel time already on your calendar. Every piece drafted — nothing sent without you — so you approve what fits and change what doesn't.",
+  "So it builds the whole plan and has it waiting: the email to your professor pushing the deadline, the message asking a coworker to cover Saturday's shift, your to-do list reshuffled and Monday's midterm prep protected, the travel time already on your calendar. It even reminds you to iron your shirts beforehand.",
+  "Everything accounted for — nothing sent without you — so you understand each trade-off, approve what fits, and change what doesn't.",
   "You didn't plan any of it. You just got to be there for your friend.",
 ]
 
