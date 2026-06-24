@@ -692,7 +692,83 @@ body {
   animation: cta-accent-breathe 3.6s cubic-bezier(0.42, 0, 0.58, 1) 1.2s infinite;
 }
 
+/* ---------------- Selective heading emphasis (scroll light-up) ----------------
+   A key phrase inside a section heading warms from the heading color to copper
+   as the section scrolls into view — the same copper light-up as the refrain
+   close and CTA "remembers", but it holds still (no breathe) so the two finales
+   stay the only pulsing phrases. Triggered by the SectionReveal data-visible
+   ancestor; sequenced a beat after the block settles. */
+.heading-keyword {
+  color: inherit;
+  text-shadow: none;
+  transition:
+    color 760ms cubic-bezier(0.16, 1, 0.3, 1) 240ms,
+    text-shadow 760ms cubic-bezier(0.16, 1, 0.3, 1) 240ms;
+}
+
+[data-visible="true"] .heading-keyword {
+  color: var(--copper-bright);
+  text-shadow:
+    0 0 20px oklch(0.84 0.13 50 / 0.42),
+    0 0 46px oklch(0.74 0.14 42 / 0.26);
+}
+
+/* The §04 closing line is a destination beat: copper light-up + breathe, the
+   same treatment as the §05 refrain close. */
+.moment-finale {
+  color: var(--foreground);
+  text-shadow: none;
+  transition:
+    color 900ms cubic-bezier(0.16, 1, 0.3, 1),
+    text-shadow 900ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+[data-visible="true"] .moment-finale {
+  color: var(--copper-bright);
+  text-shadow:
+    0 0 22px oklch(0.84 0.13 50 / 0.48),
+    0 0 48px oklch(0.74 0.14 42 / 0.32);
+  animation: cta-accent-breathe 3.6s cubic-bezier(0.42, 0, 0.58, 1) 1.2s infinite;
+}
+
+/* ---------------- §04 scenario panel (copper left accent bar + warm tint) ---- */
+.moment-panel {
+  position: relative;
+  isolation: isolate;
+  background:
+    linear-gradient(
+      100deg,
+      oklch(0.72 0.13 45 / 0.1),
+      oklch(0.72 0.13 45 / 0.025) 40%,
+      transparent 62%
+    ),
+    color-mix(in oklab, var(--panel) 72%, transparent);
+  box-shadow:
+    0 0 0 1px oklch(0.5 0.06 45 / 0.18),
+    0 24px 60px -36px oklch(0.74 0.14 42 / 0.32);
+}
+
+.moment-panel::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  border-radius: inherit;
+  background: linear-gradient(to bottom, var(--copper-bright), var(--copper-deep));
+  box-shadow: 0 0 18px -2px oklch(0.78 0.14 46 / 0.6);
+  z-index: 1;
+}
+
 @media (prefers-reduced-motion: reduce) {
+  .heading-keyword,
+  .moment-finale {
+    transition: none;
+  }
+
+  [data-visible="true"] .moment-finale {
+    animation: none;
+  }
+
   .hero-reveal {
     opacity: 1;
     transform: none;

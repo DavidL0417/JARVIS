@@ -21,8 +21,6 @@ export const metadata: Metadata = {
   },
 }
 
-const progressHeading = "Imagine not being the one who has to remember."
-
 const progressLines = [
   { k: "01", t: "A night out with friends, with nothing humming in the back of your head." },
   { k: "02", t: "Sunday nights without the dread, because Monday is already mapped." },
@@ -60,7 +58,6 @@ const everydayCapabilities = [
 ]
 
 // 04 — when it counts: the agentic peak, shown open (not a toggle)
-const momentHeading = "And when it counts, it's already there."
 const momentScenario = [
   "A friend texts: his mom passed. The funeral's next weekend, a few hours away.",
   "Before you've even worked out what to say back, Jarvis has mapped what going means — leave Friday, back Sunday, which runs into the problem set due that night and your Saturday shift.",
@@ -122,7 +119,8 @@ export default function LandingPage() {
             <div className={CONTAINER}>
               <SectionHead index="02" label="what changes" meta="the payoff" />
               <h2 className="landing-display mt-[clamp(28px,4vw,56px)] max-w-[20ch] text-[clamp(1.9rem,3.8vw,3rem)] font-semibold leading-[1.04] text-foreground">
-                {progressHeading}
+                Imagine not being the one who{" "}
+                <span className="heading-keyword">has to remember</span>.
               </h2>
 
               <ul className="mt-[clamp(32px,4vw,56px)] grid grid-cols-1 gap-px overflow-hidden rounded-sm bg-[var(--rule)] sm:grid-cols-2 lg:grid-cols-4">
@@ -164,9 +162,10 @@ export default function LandingPage() {
             <div className={CONTAINER}>
               <SectionHead index="04" label="when it counts" meta="the moment" />
               <h2 className="landing-display mt-[clamp(28px,4vw,56px)] max-w-[16ch] text-[clamp(2.1rem,4.4vw,3.4rem)] font-semibold leading-[1.02] text-foreground">
-                {momentHeading}
+                And when it counts, it&rsquo;s{" "}
+                <span className="heading-keyword">already there</span>.
               </h2>
-              <div className="mt-[clamp(36px,5vw,64px)] max-w-[760px] rounded-sm bg-[var(--panel)]/60 p-[clamp(24px,4vw,52px)]">
+              <div className="moment-panel mt-[clamp(36px,5vw,64px)] max-w-[760px] rounded-sm p-[clamp(24px,4vw,52px)]">
                 <div className="space-y-[clamp(16px,2.4vw,26px)]">
                   {momentScenario.map((line, i) => {
                     const isLast = i === momentScenario.length - 1
@@ -174,7 +173,7 @@ export default function LandingPage() {
                       return (
                         <p
                           key={i}
-                          className="landing-display border-t border-[var(--rule)] pt-[clamp(16px,2.4vw,26px)] text-[clamp(1.4rem,2.6vw,2.1rem)] font-semibold leading-[1.15] text-foreground"
+                          className="moment-finale landing-display border-t border-[var(--rule)] pt-[clamp(16px,2.4vw,26px)] text-[clamp(1.4rem,2.6vw,2.1rem)] font-semibold leading-[1.15]"
                         >
                           {line}
                         </p>
