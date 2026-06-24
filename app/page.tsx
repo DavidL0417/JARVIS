@@ -32,8 +32,6 @@ const progressLines = [
 
 // 03 — most days: the quiet background competence (rendered as toggles)
 const everydayHeading = "Most of the time, you won't notice it."
-const everydayLede =
-  "The quiet, unglamorous work — handled in the background, before it ever becomes your problem."
 
 const everydayCapabilities = [
   {
@@ -63,8 +61,6 @@ const everydayCapabilities = [
 
 // 04 — when it counts: the agentic peak, shown open (not a toggle)
 const momentHeading = "And when it counts, it's already there."
-const momentLede =
-  "When something big lands, it reads the situation, figures out what it affects, and hands you a plan with the tradeoffs already laid out — the decision stays yours, but the thinking is done."
 const momentScenario = [
   "A friend texts: his mom passed. The funeral's next weekend, a few hours away.",
   "Before you've even worked out what to say back, Jarvis has mapped what going means — leave Friday, back Sunday, which runs into the problem set due that night and your Saturday shift.",
@@ -157,10 +153,6 @@ export default function LandingPage() {
               <h2 className="landing-display mt-[clamp(24px,3vw,44px)] max-w-[18ch] text-[clamp(1.9rem,3.8vw,3rem)] font-semibold leading-[1.04] text-foreground">
                 {everydayHeading}
               </h2>
-              <p className="mt-5 max-w-[52ch] text-[clamp(1rem,1.3vw,1.125rem)] leading-[1.55] text-foreground/70">
-                {everydayLede}
-              </p>
-
               <CapabilityList items={everydayCapabilities} />
             </div>
           </section>
@@ -174,10 +166,6 @@ export default function LandingPage() {
               <h2 className="landing-display mt-[clamp(28px,4vw,56px)] max-w-[16ch] text-[clamp(2.1rem,4.4vw,3.4rem)] font-semibold leading-[1.02] text-foreground">
                 {momentHeading}
               </h2>
-              <p className="mt-5 max-w-[58ch] text-[clamp(1.05rem,1.4vw,1.2rem)] leading-[1.55] text-foreground/75">
-                {momentLede}
-              </p>
-
               <div className="mt-[clamp(36px,5vw,64px)] max-w-[760px] rounded-sm bg-[var(--panel)]/60 p-[clamp(24px,4vw,52px)]">
                 <div className="space-y-[clamp(16px,2.4vw,26px)]">
                   {momentScenario.map((line, i) => {
@@ -216,14 +204,8 @@ export default function LandingPage() {
           <section id="section-not" className="border-t border-[var(--rule)] py-[clamp(56px,7vw,104px)]">
             <div className={CONTAINER}>
               <SectionHead index="05" label="what it isn&rsquo;t" meta="no catch" />
-              <div className="mt-[clamp(28px,4vw,56px)] grid grid-cols-1 gap-[clamp(20px,4vw,56px)] lg:grid-cols-12">
-                <div className="lg:col-span-8">
-                  <Refrain lines={refrains} />
-                </div>
-                <p className="self-center text-[clamp(0.95rem,1.2vw,1.05rem)] leading-[1.55] text-muted-foreground lg:col-span-4">
-                  It doesn&rsquo;t wait for instructions or hand you a blank chat box to fill in. It already
-                  knows your week — you just decide what to act on.
-                </p>
+              <div className="mt-[clamp(28px,4vw,56px)]">
+                <Refrain lines={refrains} />
               </div>
             </div>
           </section>
