@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 
 import { ASSISTANT_TOOL_RUN_SELECT } from "@/lib/data/mappers"
+import { createCalDavEventForUser } from "@/lib/caldav/write"
 import {
   createGoogleCalendarEventForUser,
   syncTaskEventsToGoogleForUser,
@@ -39,7 +40,11 @@ export async function POST(_request: Request, context: RouteContext) {
     }
 
     const action = payloadAction(toolRun.payload)
-    if (action !== "google_task_event_sync" && action !== "google_calendar_event_create") {
+    if (
+      action !== "google_task_event_sync" &&
+      action !== "google_calendar_event_create" &&
+      action !== "apple_calendar_event_create"
+    ) {
       return NextResponse.json({ error: "Unsupported external action." }, { status: 400 })
     }
 
@@ -100,6 +105,30 @@ export async function POST(_request: Request, context: RouteContext) {
         summary = `Approved and created "${title}" on ${created.calendarSummary ?? "Google Calendar"}.`
         result = created
         auditAfter = { status: "completed", eventId: created.eventId ?? null, calendar: created.calendarSummary ?? null }
+      } else if (action === "apple_calendar_event_create") {
+        const payload = toolRun.payload as Record<string, unknown>
+        const created = await createCalDavEventForUser(user.id, {
+          title: typeof payload.title === "string" ? payload.title : "",
+          startIso: typeof payload.startIso === "string" ? payload.startIso : "",
+          endIso: typeof payload.endIso === "string" ? payload.endIso : "",
+          calendarName: typeof payload.calendarName === "string" ? payload.calendarName : null,
+          description: typeof payload.description === "string" ? payload.description : null,
+          location: typeof payload.location === "string" ? payload.location : null,
+          allDay: payload.allDay === true,
+        })
+
+        if (!created.connected || !created.created || created.error) {
+          const hint =
+            created.availableCalendars && created.availableCalendars.length
+              ? ` Calendars you can use: ${created.availableCalendars.join(", ")}.`
+              : ""
+          throw new Error((created.error || "Apple Calendar event could not be created.") + hint)
+        }
+
+        const title = typeof payload.title === "string" ? payload.title : "event"
+        summary = `Approved and created "${title}" on ${created.calendarSummary ?? "Apple Calendar"}.`
+        result = created
+        auditAfter = { status: "completed", uid: created.uid ?? null, calendar: created.calendarSummary ?? null }
       } else {
         const synced = await syncTaskEventsToGoogleForUser(user.id)
 

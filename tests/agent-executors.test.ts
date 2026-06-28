@@ -123,3 +123,49 @@ describe("create_calendar_event executor", () => {
     expect(outcome.didWrite).toBe(false)
   })
 })
+
+describe("create_apple_calendar_event executor", () => {
+  it("queues an approval with the apple_calendar_event_create action", async () => {
+    const outcome = await executeAgentTool(
+      "create_apple_calendar_event",
+      {
+        title: "Dentist",
+        startIso: "2026-06-28T20:00:00-05:00",
+        endIso: "2026-06-28T21:00:00-05:00",
+        calendar: "Home",
+      },
+      ctx,
+    )
+
+    expect(outcome.receipt.status).toBe("pending_approval")
+    expect(outcome.receipt.requiresApproval).toBe(true)
+    expect(outcome.didWrite).toBe(false)
+    expect(outcome.payload).toMatchObject({
+      action: "apple_calendar_event_create",
+      title: "Dentist",
+      calendarName: "Home",
+      allDay: false,
+    })
+    expect(outcome.payload?.startIso).toBe("2026-06-29T01:00:00.000Z")
+  })
+
+  it("rejects an end not after start", async () => {
+    const outcome = await executeAgentTool(
+      "create_apple_calendar_event",
+      { title: "X", startIso: "2026-06-28T21:00:00-05:00", endIso: "2026-06-28T20:00:00-05:00" },
+      ctx,
+    )
+    expect(outcome.receipt.status).toBe("error")
+    expect(outcome.payload).toBeUndefined()
+  })
+
+  it("is blocked on the read-only note surface", async () => {
+    const outcome = await executeAgentTool(
+      "create_apple_calendar_event",
+      { title: "X", startIso: "2026-06-28T20:00:00-05:00", endIso: "2026-06-28T21:00:00-05:00" },
+      { ...ctx, surface: "note" },
+    )
+    expect(outcome.receipt.status).toBe("error")
+    expect(outcome.didWrite).toBe(false)
+  })
+})

@@ -48,7 +48,7 @@ interface CalDavCalendar {
 // VTODO-only and should not surface as calendars (they inflate the calendar list vs
 // what Apple Calendar shows). Keep anything that supports VEVENT, and treat a missing
 // component set as "include" so servers that omit it don't lose their calendars.
-function supportsCalendarEvents(calendar: CalDavCalendar): boolean {
+export function supportsCalendarEvents(calendar: CalDavCalendar): boolean {
   const components = calendar.components
   if (!components || components.length === 0) return true
   return components.some((component) => component.toUpperCase() === "VEVENT")
@@ -135,7 +135,7 @@ function listHashFromExternalTaskId(externalTaskId: string): string | null {
   return parts[0] === CALDAV_TODO_ID_PREFIX && parts[1] ? parts[1] : null
 }
 
-function normalizeCalendarName(value: CalDavCalendar["displayName"]) {
+export function normalizeCalendarName(value: CalDavCalendar["displayName"]) {
   if (typeof value === "string" && value.trim()) {
     return value.trim()
   }
@@ -147,7 +147,7 @@ function normalizeServerUrl(value: string) {
   return new URL(value).toString()
 }
 
-function createCalDavClient(input: {
+export function createCalDavClient(input: {
   serverUrl: string
   username: string
   password: string

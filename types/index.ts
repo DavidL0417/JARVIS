@@ -135,6 +135,7 @@ export interface ScheduleEventRow {
   location: string | null
   external_event_id: string | null
   gcal_event_id: string | null
+  ical_uid: string | null
   last_synced_from: SyncOrigin
   created_at: string
   updated_at: string
@@ -346,8 +347,12 @@ export type TaskInsertRow = Omit<
   inferred_deadline_dismissed?: boolean
 }
 export type TaskUpdateRow = Partial<Omit<TaskInsertRow, "user_id">>
-export type ScheduleEventInsertRow = Omit<ScheduleEventRow, "id" | "created_at" | "updated_at" | "plan_id"> & {
+export type ScheduleEventInsertRow = Omit<
+  ScheduleEventRow,
+  "id" | "created_at" | "updated_at" | "plan_id" | "ical_uid"
+> & {
   plan_id?: string | null
+  ical_uid?: string | null
 }
 export type CheckInInsertRow = Omit<CheckInRow, "id" | "created_at" | "event_id"> & { event_id?: string | null }
 export type UserIntegrationUpsertRow = Omit<UserIntegrationRow, "id" | "created_at" | "updated_at">
@@ -444,6 +449,9 @@ export interface ScheduleEvent {
   location: string | null
   externalEventId: string | null
   gcalEventId: string | null
+  // Raw iCalendar UID — populated only for externally mirrored events (Google/CalDAV)
+  // for cross-source dedup. Task/focus/imported blocks have no UID.
+  icalUid?: string | null
   lastSyncedFrom: SyncOrigin
   isImmutable: boolean
   isCheckedIn: boolean

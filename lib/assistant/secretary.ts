@@ -492,7 +492,7 @@ export async function runSecretaryTurn(input: RunSecretaryTurnInput): Promise<As
       clarification = "Approve this only if you want JARVIS to create or update task events on Google Calendar."
     } else {
       ok = false
-      error = "That external write is not supported yet. JARVIS can sync task blocks to Google Calendar and add events to your Google Calendar; it can't send email or texts, write to Apple/CalDAV calendars, or delete or move external events."
+      error = "That external write is not supported yet. JARVIS can sync task blocks to Google Calendar and add events to your Google or Apple/iCloud calendars; it can't send email or texts, or delete, move, or reschedule existing external events."
       reply = "I cannot safely execute that external write yet."
       toolCalls.push(makeReceipt("external_write", "error", "Unsupported external write.", { errorMessage: error }))
     }

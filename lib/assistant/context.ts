@@ -18,6 +18,7 @@ import {
   TASK_SELECT,
 } from "@/lib/data/mappers"
 import { listScheduleEventRowsInWindow } from "@/lib/supabase/schedule-events"
+import { dedupeCrossSourceEvents } from "@/lib/dedupe-cross-source"
 import type {
   AssistantContextData,
   MemoryEntrySummary,
@@ -382,9 +383,11 @@ export async function loadAssistantRuntimeContext(
     ...mapPreferencesRowToPreferences(preferencesResult.data),
   }
   const tasks = (tasksResult.data || []).map((row) => mapTaskRowToTask(row as TaskRow))
-  const events = (eventsResult.data || [])
-    .filter((row) => !isExcludedScheduleEventTitle((row as ScheduleEventRow).title))
-    .map((row) => mapScheduleEventRowToScheduleEvent(row as ScheduleEventRow))
+  const events = dedupeCrossSourceEvents(
+    (eventsResult.data || [])
+      .filter((row) => !isExcludedScheduleEventTitle((row as ScheduleEventRow).title))
+      .map((row) => mapScheduleEventRowToScheduleEvent(row as ScheduleEventRow)),
+  )
   const memoryEntries = selectPlannerMemories(
     (memoryResult.data || []).map((row) => mapMemoryItemRowToSummary(row as MemoryItemRow)),
   )

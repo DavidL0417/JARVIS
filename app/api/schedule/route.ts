@@ -16,6 +16,7 @@ import {
   TASK_SELECT,
 } from "@/lib/data/mappers"
 import { listScheduleEventRowsInWindow } from "@/lib/supabase/schedule-events"
+import { dedupeCrossSourceEvents } from "@/lib/dedupe-cross-source"
 import {
   isAuthenticationRequiredError,
   requireAuthenticatedUser,
@@ -274,8 +275,9 @@ export async function POST(request: Request) {
       .filter((event) => !event.taskId || !selectedTaskIds.has(event.taskId))
       .map((event) => mapScheduleEventInputToScheduleEvent(event, user.id))
     const requestHardEventKeys = new Set(requestHardEvents.map(getEventIdentity))
-    const persistedHardEvents = (eventsResult.data || [])
-      .map((event) => mapScheduleEventRowToScheduleEvent(event as ScheduleEventRow))
+    const persistedHardEvents = dedupeCrossSourceEvents(
+      (eventsResult.data || []).map((event) => mapScheduleEventRowToScheduleEvent(event as ScheduleEventRow)),
+    )
       .filter((event) => !event.taskId || !selectedTaskIds.has(event.taskId))
       .filter((event) => !requestHardEventKeys.has(getEventIdentity(event)))
 

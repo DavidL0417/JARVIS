@@ -56,6 +56,7 @@ describe("agent tool surface gating", () => {
     expect(names).toContain("update_task")
     expect(names).toContain("sync_tasks_to_google")
     expect(names).toContain("create_calendar_event")
+    expect(names).toContain("create_apple_calendar_event")
   })
 
   it("offers only read tools on the note surface", () => {
@@ -75,10 +76,12 @@ describe("agent tool surface gating", () => {
     expect(isToolAllowedForSurface("nonsense", "interactive")).toBe(false)
   })
 
-  it("classifies create_calendar_event as an external (approval-gated) tool", () => {
+  it("classifies the calendar-write tools as external (approval-gated)", () => {
     // A tier regression to 'write' would silently auto-execute the calendar write.
     expect(getAgentToolTier("create_calendar_event")).toBe("external")
+    expect(getAgentToolTier("create_apple_calendar_event")).toBe("external")
     expect(isToolAllowedForSurface("create_calendar_event", "note")).toBe(false)
+    expect(isToolAllowedForSurface("create_apple_calendar_event", "note")).toBe(false)
   })
 })
 
