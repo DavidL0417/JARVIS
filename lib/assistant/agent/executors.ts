@@ -472,16 +472,42 @@ function execSyncTasksToGoogle(input: Record<string, unknown>, ctx: AgentExecCon
   }
 }
 
-// Compose an arbitrary Google Calendar event for the user. Like the task sync, we
-// do NOT write here — we resolve the times to concrete ISO now (so the user
-// approves a specific event) and queue a pending approval. The approve route calls
-// createGoogleCalendarEventForUser on confirm; payload.action is the contract.
-function execCreateCalendarEvent(input: Record<string, unknown>, ctx: AgentExecContext): AgentToolOutcome {
+// Provider config for the two external calendar-write tools. They share all of the
+// validation/time-resolution/approval-queueing logic; only the action contract and
+// the user-facing labels differ.
+interface CalendarWriteProvider {
+  action: "google_calendar_event_create" | "apple_calendar_event_create"
+  providerLabel: string
+  defaultCalendarLabel: string
+}
+
+const GOOGLE_CALENDAR_PROVIDER: CalendarWriteProvider = {
+  action: "google_calendar_event_create",
+  providerLabel: "Google Calendar",
+  defaultCalendarLabel: "your primary Google Calendar",
+}
+
+const APPLE_CALENDAR_PROVIDER: CalendarWriteProvider = {
+  action: "apple_calendar_event_create",
+  providerLabel: "Apple Calendar",
+  defaultCalendarLabel: "your default Apple calendar",
+}
+
+// Compose an external calendar event for the user. Like the task sync, we do NOT
+// write here — we resolve the times to concrete ISO now (so the user approves a
+// specific event) and queue a pending approval. The approve route calls the matching
+// write fn on confirm; payload.action is the contract.
+function queueCalendarEventApproval(
+  input: Record<string, unknown>,
+  ctx: AgentExecContext,
+  provider: CalendarWriteProvider,
+): AgentToolOutcome {
+  const tool = provider.action
   const title = asString(input.title)
   if (!title) {
     return {
       resultForModel: { ok: false, error: "An event title is required." },
-      receipt: receipt("google_calendar_event_create", "error", "Calendar event missing a title.", { errorMessage: "No title." }),
+      receipt: receipt(tool, "error", "Calendar event missing a title.", { errorMessage: "No title." }),
       didWrite: false,
     }
   }
@@ -492,14 +518,14 @@ function execCreateCalendarEvent(input: Record<string, unknown>, ctx: AgentExecC
     const raw = !start.ok ? start.raw : (end as { raw: string }).raw
     return {
       resultForModel: { ok: false, error: `Couldn't understand the time "${raw}". Provide an ISO timestamp.` },
-      receipt: receipt("google_calendar_event_create", "error", "Unparseable time for calendar event.", { errorMessage: raw }),
+      receipt: receipt(tool, "error", "Unparseable time for calendar event.", { errorMessage: raw }),
       didWrite: false,
     }
   }
   if (!start.value || !end.value) {
     return {
       resultForModel: { ok: false, error: "Both a start and end time are required." },
-      receipt: receipt("google_calendar_event_create", "error", "Calendar event missing start/end.", { errorMessage: "Missing time." }),
+      receipt: receipt(tool, "error", "Calendar event missing start/end.", { errorMessage: "Missing time." }),
       didWrite: false,
     }
   }
@@ -507,13 +533,13 @@ function execCreateCalendarEvent(input: Record<string, unknown>, ctx: AgentExecC
   const allDay = typeof input.allDay === "boolean" ? input.allDay : false
 
   // Reject inverted / zero-duration windows before they reach the approval queue or
-  // Google (which would 400). All-day allows a same-day (start === end) request.
+  // the provider (which would 400). All-day allows a same-day (start === end) request.
   const startMs = Date.parse(start.value)
   const endMs = Date.parse(end.value)
   if (allDay ? endMs < startMs : endMs <= startMs) {
     return {
       resultForModel: { ok: false, error: "The end time must be after the start time." },
-      receipt: receipt("google_calendar_event_create", "error", "Calendar event end is not after start.", { errorMessage: "end_before_start" }),
+      receipt: receipt(tool, "error", "Calendar event end is not after start.", { errorMessage: "end_before_start" }),
       didWrite: false,
     }
   }
@@ -521,7 +547,7 @@ function execCreateCalendarEvent(input: Record<string, unknown>, ctx: AgentExecC
   const calendarName = asString(input.calendar)
   const description = asString(input.description)
   const location = asString(input.location)
-  const calendarLabel = calendarName ? `"${calendarName}"` : "your primary Google Calendar"
+  const calendarLabel = calendarName ? `"${calendarName}"` : provider.defaultCalendarLabel
 
   // Surface the resolved window in the user's timezone so the approval artifact
   // reflects exactly what will be written (this is the confirm-before-write gate).
@@ -533,17 +559,17 @@ function execCreateCalendarEvent(input: Record<string, unknown>, ctx: AgentExecC
   return {
     resultForModel: {
       queued: true,
-      note: "Queued an approval. The event is written to Google Calendar only after the user approves it.",
-      event: { title, startIso: start.value, endIso: end.value, allDay, calendar: calendarName ?? "primary" },
+      note: `Queued an approval. The event is written to ${provider.providerLabel} only after the user approves it.`,
+      event: { title, startIso: start.value, endIso: end.value, allDay, calendar: calendarName ?? "default" },
     },
     receipt: receipt(
-      "google_calendar_event_create",
+      tool,
       "pending_approval",
       `Prepared "${title}" for ${calendarLabel}, ${whenLabel} — awaiting your approval.`,
       { requiresApproval: true },
     ),
     payload: {
-      action: "google_calendar_event_create",
+      action: provider.action,
       title,
       startIso: start.value,
       endIso: end.value,
@@ -555,6 +581,14 @@ function execCreateCalendarEvent(input: Record<string, unknown>, ctx: AgentExecC
     },
     didWrite: false,
   }
+}
+
+function execCreateCalendarEvent(input: Record<string, unknown>, ctx: AgentExecContext): AgentToolOutcome {
+  return queueCalendarEventApproval(input, ctx, GOOGLE_CALENDAR_PROVIDER)
+}
+
+function execCreateAppleCalendarEvent(input: Record<string, unknown>, ctx: AgentExecContext): AgentToolOutcome {
+  return queueCalendarEventApproval(input, ctx, APPLE_CALENDAR_PROVIDER)
 }
 
 const EXECUTORS: Record<string, (input: Record<string, unknown>, ctx: AgentExecContext) => AgentToolOutcome | Promise<AgentToolOutcome>> = {
@@ -569,6 +603,7 @@ const EXECUTORS: Record<string, (input: Record<string, unknown>, ctx: AgentExecC
   remember: execRemember,
   sync_tasks_to_google: execSyncTasksToGoogle,
   create_calendar_event: execCreateCalendarEvent,
+  create_apple_calendar_event: execCreateAppleCalendarEvent,
 }
 
 export async function executeAgentTool(

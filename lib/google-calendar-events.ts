@@ -16,6 +16,7 @@ import { pruneExpiredMirroredEvents } from "@/lib/supabase/schedule-events"
 import { CALENDAR_FEEDBACK_LEARNING_ENABLED, recordGoogleCalendarTaskFeedback } from "@/lib/sources/calendar-feedback"
 import { TASKS_CALENDAR_ID } from "@/lib/task-calendar-constants"
 import { loadUserTimezone } from "@/lib/data/user-timezone"
+import { addDaysToDateKey, localDateKeyFromIso } from "@/lib/time/date-keys"
 import { zonedDateStartUtc } from "@/lib/time/zoned"
 import type { GoogleCalendarSyncResponse, ScheduleEvent, ScheduleEventRow, UserCalendar, UserCalendarRow } from "@/types"
 
@@ -64,6 +65,7 @@ interface GoogleCalendarEventDateTime {
 
 interface GoogleCalendarEventItem {
   id: string
+  iCalUID?: string
   summary?: string
   location?: string
   start?: GoogleCalendarEventDateTime
@@ -203,6 +205,7 @@ function mapGoogleEventToScheduleEvent(
     location: item.location?.trim() || null,
     externalEventId: `${googleCalendarId}:${item.id}`,
     gcalEventId: `${googleCalendarId}:${item.id}`,
+    icalUid: item.iCalUID ?? null,
     lastSyncedFrom: "gcal",
     isImmutable: !isJarvisTaskEvent,
     isCheckedIn: true,
@@ -746,26 +749,6 @@ export interface CreateGoogleCalendarEventResult {
 }
 
 const WRITABLE_GOOGLE_ACCESS_ROLES = new Set(["owner", "writer"])
-
-// Format a UTC ISO instant to its YYYY-MM-DD calendar date IN the given timezone
-// (en-CA yields ISO-style YYYY-MM-DD). Used for all-day event dates so an evening
-// local time doesn't roll onto the next UTC day.
-function localDateKeyFromIso(iso: string, timeZone: string): string {
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(new Date(iso))
-}
-
-// Add days to a YYYY-MM-DD key using pure calendar arithmetic (no timezone math).
-function addDaysToDateKey(dateKey: string, days: number): string {
-  const [year, month, day] = dateKey.split("-").map(Number)
-  const dt = new Date(Date.UTC(year, month - 1, day))
-  dt.setUTCDate(dt.getUTCDate() + days)
-  return dt.toISOString().slice(0, 10)
-}
 
 // calendarList omits accessRole on some reads; when it's absent we only trust the
 // primary calendar as writable, otherwise require an explicit owner/writer role.

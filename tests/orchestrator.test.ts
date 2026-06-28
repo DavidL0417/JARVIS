@@ -122,6 +122,30 @@ describe("secretary orchestrator", () => {
     ).resolves.toMatchObject({ kind: "answer" })
   })
 
+  it("routes Apple/iCloud calendar event writes to the agent loop", async () => {
+    await expect(
+      classifySecretaryIntent({ ...baseInput, message: "Add dinner to my Apple Calendar 8 to 9pm" }),
+    ).resolves.toMatchObject({ kind: "answer" })
+
+    await expect(
+      classifySecretaryIntent({ ...baseInput, message: "Put a dentist appointment on my iCloud calendar tomorrow at 3pm" }),
+    ).resolves.toMatchObject({ kind: "answer" })
+  })
+
+  it("still rejects destructive Apple calendar writes", async () => {
+    await expect(
+      classifySecretaryIntent({ ...baseInput, message: "Delete my dentist event from my Apple Calendar" }),
+    ).resolves.toMatchObject({ kind: "request_external_write", action: "unsupported_external_write" })
+  })
+
+  it("does not treat the bare word 'apple' as a calendar target", async () => {
+    // "apple" is a common noun; only "apple calendar" (via the calendar token) or
+    // "icloud" should route to the calendar-write path.
+    await expect(
+      classifySecretaryIntent({ ...baseInput, message: "Add apple juice to my shopping list" }),
+    ).resolves.not.toMatchObject({ kind: "request_external_write" })
+  })
+
   it("does not divert a Gmail READ/search question to the external-write path", async () => {
     // "email" is a noun here; previously the external-write regex matched it and
     // hijacked the message into "unsupported external write" instead of letting the

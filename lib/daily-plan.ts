@@ -9,6 +9,7 @@ import { loadLayeredSecretaryContext } from "@/lib/assistant/context"
 import { buildPlanRealitySummary } from "@/lib/assistant/feedback"
 import { unexpiredOrFilter } from "@/lib/assistant/memory-write"
 import { overlapsSimilarBlock } from "@/lib/dedupe"
+import { dedupeCrossSourceEvents } from "@/lib/dedupe-cross-source"
 import { reconcileStaleSchedule } from "@/lib/reconciliation"
 import {
   DAILY_PLAN_SELECT,
@@ -491,9 +492,11 @@ async function loadScheduleContext(input: {
     .filter((event) => !event.taskId || !selectedTaskIds.has(event.taskId))
     .map((event) => mapScheduleEventInputToScheduleEvent(event, input.userId))
   const requestHardEventKeys = new Set(requestHardEvents.map(getEventIdentity))
-  const persistedEvents = (eventsResult.data || [])
-    .filter((event) => !isExcludedScheduleEventTitle((event as { title: string | null }).title))
-    .map((event) => mapScheduleEventRowToScheduleEvent(event as Parameters<typeof mapScheduleEventRowToScheduleEvent>[0]))
+  const persistedEvents = dedupeCrossSourceEvents(
+    (eventsResult.data || [])
+      .filter((event) => !isExcludedScheduleEventTitle((event as { title: string | null }).title))
+      .map((event) => mapScheduleEventRowToScheduleEvent(event as Parameters<typeof mapScheduleEventRowToScheduleEvent>[0])),
+  )
   const persistedHardEvents = persistedEvents
     .filter((event) => !event.taskId || !selectedTaskIds.has(event.taskId))
     .filter((event) => !requestHardEventKeys.has(getEventIdentity(event)))

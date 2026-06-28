@@ -241,6 +241,33 @@ const TOOLS: AgentToolSpec[] = [
       },
     },
   },
+  {
+    name: "create_apple_calendar_event",
+    tier: "external",
+    definition: {
+      name: "create_apple_calendar_event",
+      description:
+        "Create a real event on the user's Apple/iCloud Calendar (via CalDAV) — use when they explicitly want something written to their Apple or iCloud calendar at a specific time (e.g. 'put dinner on my Apple Calendar 8–9pm', 'add a dentist appointment to my iCloud Home calendar'). This does NOT write immediately — it queues a pending approval the user confirms. Compute startIso/endIso from the `now` and `timezone` in context. Target an existing calendar by name with `calendar`; JARVIS CANNOT create a new calendar, so if the named calendar doesn't exist the write fails — say so. Use create_calendar_event (not this) for Google Calendar, and create_task for internal to-dos.",
+      input_schema: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          title: { type: "string", description: "Event title, as it should read on the calendar." },
+          startIso: { type: "string", description: `Event start. ${ISO_OR_NATURAL_REQUIRED}` },
+          endIso: { type: "string", description: `Event end. ${ISO_OR_NATURAL_REQUIRED}` },
+          calendar: {
+            type: "string",
+            description:
+              "Optional name of an EXISTING Apple/iCloud calendar to add the event to (e.g. 'Home', 'Work'). Omit for the default calendar. JARVIS cannot create new calendars.",
+          },
+          description: { type: "string", description: "Optional event notes/description." },
+          location: { type: "string", description: "Optional event location." },
+          allDay: { type: "boolean", description: "True for an all-day event (date only, no time)." },
+        },
+        required: ["title", "startIso", "endIso"],
+      },
+    },
+  },
 ]
 
 const TOOL_BY_NAME = new Map(TOOLS.map((tool) => [tool.name, tool]))

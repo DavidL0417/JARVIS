@@ -56,7 +56,7 @@ export const PREFERENCES_SELECT =
 export const TASK_SELECT =
   "id, user_id, title, description, deadline, duration_minutes, priority, status, scheduled_for, created_at, updated_at, is_immutable, all_day, calendar_id, tags, course, category, source_snapshot_id, source_candidate_id, plan_id, external_task_id, last_synced_from, inferred_deadline, inferred_deadline_reason, inferred_deadline_dismissed"
 export const SCHEDULE_EVENT_SELECT =
-  "id, user_id, task_id, title, starts_at, ends_at, source, priority, status, location, external_event_id, gcal_event_id, last_synced_from, created_at, updated_at, is_immutable, is_checked_in, all_day, calendar_id, plan_id"
+  "id, user_id, task_id, title, starts_at, ends_at, source, priority, status, location, external_event_id, gcal_event_id, ical_uid, last_synced_from, created_at, updated_at, is_immutable, is_checked_in, all_day, calendar_id, plan_id"
 export const USER_CALENDAR_SELECT =
   "id, user_id, calendar_key, name, color, source, google_calendar_id, remote_name, is_visible, is_immutable, sync_preference, is_task_calendar, created_at, updated_at"
 export const USER_INTEGRATION_SELECT =
@@ -496,6 +496,7 @@ export function mapScheduleEventRowToScheduleEvent(row: ScheduleEventRow): Sched
     location: normalizeNullableText(row.location),
     externalEventId: normalizeNullableText(row.external_event_id),
     gcalEventId: normalizeNullableText(row.gcal_event_id),
+    icalUid: normalizeNullableText(row.ical_uid),
     lastSyncedFrom: normalizeSyncOrigin(row.last_synced_from),
     isImmutable: row.is_immutable,
     isCheckedIn: row.is_checked_in ?? false,
@@ -544,6 +545,7 @@ export function mapScheduleEventToInsert(event: ScheduleEvent, userId = event.us
     location: normalizeNullableText(event.location),
     external_event_id: normalizeNullableText(event.externalEventId),
     gcal_event_id: normalizeNullableText(event.gcalEventId),
+    ical_uid: normalizeNullableText(event.icalUid),
     last_synced_from: normalizeSyncOrigin(event.lastSyncedFrom),
     is_immutable: event.isImmutable,
     is_checked_in: event.isCheckedIn,

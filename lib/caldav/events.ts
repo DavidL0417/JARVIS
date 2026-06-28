@@ -171,6 +171,7 @@ export function toCalDavScheduleEvent(input: {
     location: input.parsedEvent.location,
     externalEventId: input.externalEventId,
     gcalEventId: null,
+    icalUid: input.parsedEvent.uid,
     lastSyncedFrom: "caldav",
     isImmutable: input.isImmutable ?? true,
     isCheckedIn: true,

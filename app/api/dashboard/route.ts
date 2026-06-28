@@ -22,6 +22,7 @@ import {
 } from "@/lib/data/mappers"
 import { unexpiredOrFilter } from "@/lib/assistant/memory-write"
 import { listScheduleEventRowsInWindow } from "@/lib/supabase/schedule-events"
+import { dedupeCrossSourceEvents } from "@/lib/dedupe-cross-source"
 import { GMAIL_READONLY_SCOPE, GOOGLE_CALENDAR_READONLY_SCOPE, hasOAuthScope } from "@/lib/google-oauth"
 import { isExcludedScheduleEventTitle } from "@/lib/task-calendar-constants"
 import {
@@ -724,10 +725,11 @@ export async function GET() {
     }
 
     const tasks = (tasksResult.data || []).map((row) => mapTaskRowToTask(row as TaskRow))
-    const events = (eventsResult.data || [])
-      .filter((row) => !isExcludedScheduleEventTitle((row as ScheduleEventRow).title))
-      .map((row) => mapScheduleEventRowToScheduleEvent(row as ScheduleEventRow))
-      .sort((left, right) => new Date(left.start).getTime() - new Date(right.start).getTime())
+    const events = dedupeCrossSourceEvents(
+      (eventsResult.data || [])
+        .filter((row) => !isExcludedScheduleEventTitle((row as ScheduleEventRow).title))
+        .map((row) => mapScheduleEventRowToScheduleEvent(row as ScheduleEventRow)),
+    ).sort((left, right) => new Date(left.start).getTime() - new Date(right.start).getTime())
     const memories = (memoryResult.data || []).map((row) => mapMemoryItemRowToSummary(row as MemoryItemRow))
     const sources = (sourceResult.data || []).map((row) => mapSourceSnapshotRowToSummary(row as SourceSnapshotRow))
     const sourceFiles = (sourceFileResult.data || []).map((row) => mapSourceFileRowToSummary(row as SourceFileRow))

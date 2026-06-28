@@ -218,12 +218,18 @@ function parseActivityLog(
 // into the unsupported-external-write path. A genuine "send an email …" still trips
 // this via "send".
 const BROAD_WRITE_VERBS = /\b(sync|write|push|publish|send|export|mirror|delete|remove|cancel|move|reschedule|invite)\b/i
-const BROAD_WRITE_TARGETS = /\b(google|calendar|gcal|gmail|notion|external)\b/i
-// Calendar-create verbs only count as an external write when a Google Calendar
-// target is named — otherwise "create a page in notion" / "add a contact" would be
-// wrongly captured and rejected. Confines the broadening to the one capability we
-// built (Google Calendar event creation, handled by the agent loop).
+const BROAD_WRITE_TARGETS = /\b(google|calendar|gcal|gmail|notion|external|icloud)\b/i
+// Calendar-create verbs only count as an external write when a calendar target is
+// named — otherwise "create a page in notion" / "add a contact" would be wrongly
+// captured and rejected. Confines the broadening to the capability we built
+// (Google + Apple/iCloud event creation, both handled by the agent loop).
 const CALENDAR_WRITE_VERBS = /\b(add|create|put|book|set up|new)\b/i
+// Any calendar target (Google or Apple). The agent loop picks the matching tool
+// (create_calendar_event vs create_apple_calendar_event) from the user's wording.
+// Bare "apple" is intentionally NOT a target ("add apple juice to my list" is not a
+// calendar write) — "apple calendar" is still caught by the "calendar" alternative.
+const CALENDAR_TARGET = /\b(google|gcal|calendar|icloud)\b/i
+// Google-specific target — task-block sync only writes to Google Calendar.
 const GOOGLE_CALENDAR_TARGET = /\b(google|gcal|calendar)\b/i
 // Destructive / move operations on external calendars are NOT supported — they must
 // reach the unsupported branch even when phrased with an "add"-ish verb ("put off" =
@@ -233,31 +239,32 @@ const DESTRUCTIVE_EXTERNAL = /\b(delete|remove|cancel|move|reschedule|postpone|p
 function isExternalWriteCommand(message: string) {
   return (
     (BROAD_WRITE_VERBS.test(message) && BROAD_WRITE_TARGETS.test(message)) ||
-    (CALENDAR_WRITE_VERBS.test(message) && GOOGLE_CALENDAR_TARGET.test(message))
+    (CALENDAR_WRITE_VERBS.test(message) && CALENDAR_TARGET.test(message))
   )
 }
 
 function externalWriteAction(message: string): SecretaryIntent {
-  const targetsGoogleCalendar = GOOGLE_CALENDAR_TARGET.test(message)
+  const targetsCalendar = CALENDAR_TARGET.test(message)
   const isDestructive = DESTRUCTIVE_EXTERNAL.test(message)
 
   const isTaskBlockSync =
     /\b(sync|push|mirror|publish)\b/i.test(message) &&
     /\b(task|tasks|block|blocks|jarvis)\b/i.test(message) &&
-    targetsGoogleCalendar
+    GOOGLE_CALENDAR_TARGET.test(message)
 
   if (isTaskBlockSync) {
     return { kind: "request_external_write", action: "google_task_event_sync", command: message }
   }
 
-  // Writing a one-off event onto the user's Google Calendar is now a first-class
-  // capability, handled by the agent loop's create_calendar_event tool
-  // (approval-gated). Route it to the loop instead of rejecting it. Destructive/move
-  // requests are excluded — those remain unsupported and fall through below.
+  // Writing a one-off event onto the user's Google OR Apple/iCloud calendar is now a
+  // first-class capability, handled by the agent loop's create_calendar_event /
+  // create_apple_calendar_event tools (approval-gated). Route it to the loop instead
+  // of rejecting it. Destructive/move requests are excluded — those remain
+  // unsupported and fall through below.
   const isCalendarEventWrite =
     !isDestructive &&
     /\b(add|create|put|book|write|set up|new|schedule)\b/i.test(message) &&
-    targetsGoogleCalendar
+    targetsCalendar
 
   if (isCalendarEventWrite) {
     return { kind: "answer" }
