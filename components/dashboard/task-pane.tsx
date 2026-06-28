@@ -334,7 +334,7 @@ export function TaskPane({
         ) : (
           <TaskCheckbox
             checked={completed}
-            onToggle={() => void handleToggleComplete(task)}
+            onToggle={() => handleToggleComplete(task)}
             className="mt-px rounded-[5px]"
             uncheckedClassName="border-rule-strong hover:border-copper"
           />

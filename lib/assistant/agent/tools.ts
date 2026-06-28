@@ -20,6 +20,9 @@ export interface AgentToolSpec {
 const ISO_OR_NATURAL =
   "ISO-8601 timestamp with timezone offset (compute it from the provided `now` and `timezone`). Natural language like 'tomorrow 3pm' is also accepted. Pass null to clear."
 
+const ISO_OR_NATURAL_REQUIRED =
+  "ISO-8601 timestamp with timezone offset (compute it from the provided `now` and `timezone`). Natural language like 'tomorrow 8pm' is also accepted."
+
 const TOOLS: AgentToolSpec[] = [
   {
     name: "find_tasks",
@@ -208,6 +211,33 @@ const TOOLS: AgentToolSpec[] = [
           reason: { type: "string", description: "Short note on why, shown to the user." },
         },
         required: [],
+      },
+    },
+  },
+  {
+    name: "create_calendar_event",
+    tier: "external",
+    definition: {
+      name: "create_calendar_event",
+      description:
+        "Create a real event on the user's Google Calendar — use when they explicitly want something written to their Google Calendar at a specific time (e.g. 'put dinner on my Google Calendar 8–9pm', 'add a dentist appointment to my Appointments calendar'). This does NOT write immediately — it queues a pending approval the user confirms. Compute startIso/endIso from the `now` and `timezone` in context. Target an existing calendar by name with `calendar`; JARVIS CANNOT create a new calendar, so if the named calendar doesn't exist the write fails — say so. For internal to-dos or work the planner should schedule into the day, use create_task instead, not this.",
+      input_schema: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          title: { type: "string", description: "Event title, as it should read on the calendar." },
+          startIso: { type: "string", description: `Event start. ${ISO_OR_NATURAL_REQUIRED}` },
+          endIso: { type: "string", description: `Event end. ${ISO_OR_NATURAL_REQUIRED}` },
+          calendar: {
+            type: "string",
+            description:
+              "Optional name of an EXISTING Google calendar to add the event to (e.g. 'Appointments Personal'). Omit for the primary calendar. JARVIS cannot create new calendars.",
+          },
+          description: { type: "string", description: "Optional event notes/description." },
+          location: { type: "string", description: "Optional event location." },
+          allDay: { type: "boolean", description: "True for an all-day event (date only, no time)." },
+        },
+        required: ["title", "startIso", "endIso"],
       },
     },
   },

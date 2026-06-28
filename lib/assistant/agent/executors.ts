@@ -47,6 +47,18 @@ function asString(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value.trim() : undefined
 }
 
+// Human-readable labels for the approval receipt, rendered in the user's timezone
+// so what they approve matches what gets written.
+function formatCalendarDate(iso: string, timeZone: string): string {
+  return new Date(iso).toLocaleDateString("en-US", { timeZone, weekday: "short", month: "short", day: "numeric" })
+}
+function formatCalendarDateTime(iso: string, timeZone: string): string {
+  return new Date(iso).toLocaleString("en-US", { timeZone, month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })
+}
+function formatCalendarTime(iso: string, timeZone: string): string {
+  return new Date(iso).toLocaleTimeString("en-US", { timeZone, hour: "numeric", minute: "2-digit" })
+}
+
 function asPriority(value: unknown): Priority | undefined {
   return value === "low" || value === "medium" || value === "high" ? value : undefined
 }
@@ -460,6 +472,91 @@ function execSyncTasksToGoogle(input: Record<string, unknown>, ctx: AgentExecCon
   }
 }
 
+// Compose an arbitrary Google Calendar event for the user. Like the task sync, we
+// do NOT write here — we resolve the times to concrete ISO now (so the user
+// approves a specific event) and queue a pending approval. The approve route calls
+// createGoogleCalendarEventForUser on confirm; payload.action is the contract.
+function execCreateCalendarEvent(input: Record<string, unknown>, ctx: AgentExecContext): AgentToolOutcome {
+  const title = asString(input.title)
+  if (!title) {
+    return {
+      resultForModel: { ok: false, error: "An event title is required." },
+      receipt: receipt("google_calendar_event_create", "error", "Calendar event missing a title.", { errorMessage: "No title." }),
+      didWrite: false,
+    }
+  }
+
+  const start = resolveDate(input.startIso, ctx)
+  const end = resolveDate(input.endIso, ctx)
+  if (!start.ok || !end.ok) {
+    const raw = !start.ok ? start.raw : (end as { raw: string }).raw
+    return {
+      resultForModel: { ok: false, error: `Couldn't understand the time "${raw}". Provide an ISO timestamp.` },
+      receipt: receipt("google_calendar_event_create", "error", "Unparseable time for calendar event.", { errorMessage: raw }),
+      didWrite: false,
+    }
+  }
+  if (!start.value || !end.value) {
+    return {
+      resultForModel: { ok: false, error: "Both a start and end time are required." },
+      receipt: receipt("google_calendar_event_create", "error", "Calendar event missing start/end.", { errorMessage: "Missing time." }),
+      didWrite: false,
+    }
+  }
+
+  const allDay = typeof input.allDay === "boolean" ? input.allDay : false
+
+  // Reject inverted / zero-duration windows before they reach the approval queue or
+  // Google (which would 400). All-day allows a same-day (start === end) request.
+  const startMs = Date.parse(start.value)
+  const endMs = Date.parse(end.value)
+  if (allDay ? endMs < startMs : endMs <= startMs) {
+    return {
+      resultForModel: { ok: false, error: "The end time must be after the start time." },
+      receipt: receipt("google_calendar_event_create", "error", "Calendar event end is not after start.", { errorMessage: "end_before_start" }),
+      didWrite: false,
+    }
+  }
+
+  const calendarName = asString(input.calendar)
+  const description = asString(input.description)
+  const location = asString(input.location)
+  const calendarLabel = calendarName ? `"${calendarName}"` : "your primary Google Calendar"
+
+  // Surface the resolved window in the user's timezone so the approval artifact
+  // reflects exactly what will be written (this is the confirm-before-write gate).
+  const tz = ctx.timezone || DEFAULT_TIMEZONE
+  const whenLabel = allDay
+    ? formatCalendarDate(start.value, tz)
+    : `${formatCalendarDateTime(start.value, tz)}–${formatCalendarTime(end.value, tz)}`
+
+  return {
+    resultForModel: {
+      queued: true,
+      note: "Queued an approval. The event is written to Google Calendar only after the user approves it.",
+      event: { title, startIso: start.value, endIso: end.value, allDay, calendar: calendarName ?? "primary" },
+    },
+    receipt: receipt(
+      "google_calendar_event_create",
+      "pending_approval",
+      `Prepared "${title}" for ${calendarLabel}, ${whenLabel} — awaiting your approval.`,
+      { requiresApproval: true },
+    ),
+    payload: {
+      action: "google_calendar_event_create",
+      title,
+      startIso: start.value,
+      endIso: end.value,
+      calendarName: calendarName ?? null,
+      description: description ?? null,
+      location: location ?? null,
+      allDay,
+      command: ctx.command,
+    },
+    didWrite: false,
+  }
+}
+
 const EXECUTORS: Record<string, (input: Record<string, unknown>, ctx: AgentExecContext) => AgentToolOutcome | Promise<AgentToolOutcome>> = {
   find_tasks: execFindTasks,
   get_schedule: execGetSchedule,
@@ -471,6 +568,7 @@ const EXECUTORS: Record<string, (input: Record<string, unknown>, ctx: AgentExecC
   plan_day: execPlanDay,
   remember: execRemember,
   sync_tasks_to_google: execSyncTasksToGoogle,
+  create_calendar_event: execCreateCalendarEvent,
 }
 
 export async function executeAgentTool(

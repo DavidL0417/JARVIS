@@ -49,6 +49,8 @@ interface GoogleCalendarListItem {
   id?: string
   summary?: string
   backgroundColor?: string
+  accessRole?: string
+  primary?: boolean
 }
 
 interface GoogleCalendarListResponse {
@@ -82,6 +84,7 @@ interface GoogleCalendarEventsResponse {
 
 interface GoogleCalendarWriteResponse {
   id?: string
+  htmlLink?: string
 }
 
 function toCalendarKey(googleCalendarId: string) {
@@ -592,6 +595,42 @@ async function writeTaskEventToGoogle(
   }
 }
 
+// Remove a JARVIS-mirrored task block from Google Calendar. Called when a
+// scheduled block is unscheduled or its task deleted, so the block doesn't
+// linger on the user's phone calendar (and re-import as a provisional event on
+// the next inbound sync). Best-effort: a missing event (404/410) is treated as
+// already gone, and a disconnected Google account is a no-op rather than an error.
+export async function deleteTaskEventFromGoogle(userId: string, storedGcalEventId: string) {
+  const target = splitStoredGoogleEventId(storedGcalEventId)
+
+  if (!target) {
+    return { connected: false, deleted: false }
+  }
+
+  const accessToken = await getValidGoogleAccessToken(userId)
+
+  if (!accessToken) {
+    return { connected: false, deleted: false }
+  }
+
+  const url = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(target.calendarId)}/events/${encodeURIComponent(target.eventId)}`
+  const response = await fetch(url, {
+    method: "DELETE",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+    cache: "no-store",
+  })
+
+  // 404/410 → the event is already gone on Google's side; nothing to clean up.
+  if (!response.ok && response.status !== 404 && response.status !== 410) {
+    const errorText = await response.text().catch(() => "")
+    throw new Error(errorText || `Google task event delete failed with status ${response.status}.`)
+  }
+
+  return { connected: true, deleted: true }
+}
+
 export async function syncTaskEventsToGoogleForUser(userId: string) {
   const accessToken = await getValidGoogleAccessToken(userId)
 
@@ -677,6 +716,198 @@ export async function syncTaskEventsToGoogleForUser(userId: string) {
   return {
     connected: true,
     synced,
+  }
+}
+
+export interface CreateGoogleCalendarEventInput {
+  title: string
+  startIso: string
+  endIso: string
+  // Name of an EXISTING calendar to target (case-insensitive). Null/omitted writes
+  // to the primary calendar. We never create a calendar — that needs a scope JARVIS
+  // does not request.
+  calendarName?: string | null
+  description?: string | null
+  location?: string | null
+  allDay?: boolean
+}
+
+export interface CreateGoogleCalendarEventResult {
+  connected: boolean
+  created: boolean
+  error?: string
+  eventId?: string
+  htmlLink?: string
+  // Friendly name of the calendar the event landed on (for the receipt/summary).
+  calendarSummary?: string
+  // Populated when a named calendar couldn't be resolved, so the caller can tell
+  // the user what they *can* write to.
+  availableCalendars?: string[]
+}
+
+const WRITABLE_GOOGLE_ACCESS_ROLES = new Set(["owner", "writer"])
+
+// Format a UTC ISO instant to its YYYY-MM-DD calendar date IN the given timezone
+// (en-CA yields ISO-style YYYY-MM-DD). Used for all-day event dates so an evening
+// local time doesn't roll onto the next UTC day.
+function localDateKeyFromIso(iso: string, timeZone: string): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date(iso))
+}
+
+// Add days to a YYYY-MM-DD key using pure calendar arithmetic (no timezone math).
+function addDaysToDateKey(dateKey: string, days: number): string {
+  const [year, month, day] = dateKey.split("-").map(Number)
+  const dt = new Date(Date.UTC(year, month - 1, day))
+  dt.setUTCDate(dt.getUTCDate() + days)
+  return dt.toISOString().slice(0, 10)
+}
+
+// calendarList omits accessRole on some reads; when it's absent we only trust the
+// primary calendar as writable, otherwise require an explicit owner/writer role.
+function isWritableGoogleCalendar(item: GoogleCalendarListItem): boolean {
+  if (!item.accessRole) {
+    return Boolean(item.primary)
+  }
+  return WRITABLE_GOOGLE_ACCESS_ROLES.has(item.accessRole)
+}
+
+// Create a single arbitrary event on the user's Google Calendar. Unlike
+// syncTaskEventsToGoogleForUser (which mirrors JARVIS task blocks), this writes a
+// user-authored event the assistant composed. Approval-gated upstream: the agent
+// loop queues a pending approval, and the approve route calls this on confirm.
+export async function createGoogleCalendarEventForUser(
+  userId: string,
+  input: CreateGoogleCalendarEventInput,
+): Promise<CreateGoogleCalendarEventResult> {
+  const accessToken = await getValidGoogleAccessToken(userId)
+  if (!accessToken) {
+    return {
+      connected: false,
+      created: false,
+      error: "Google Calendar is not connected or needs reauthorization.",
+    }
+  }
+
+  const title = input.title?.trim()
+  if (!title) {
+    return { connected: true, created: false, error: "An event title is required." }
+  }
+  if (!input.startIso || !input.endIso) {
+    return { connected: true, created: false, error: "Both a start and end time are required." }
+  }
+
+  // Resolve the target calendar. A named calendar is matched case-insensitively
+  // against the user's writable calendars; otherwise default to primary. We do not
+  // create calendars (no scope for it) — an unmatched name is a hard error.
+  let targetCalendarId = "primary"
+  let calendarSummary = "your primary calendar"
+  const requestedName = input.calendarName?.trim()
+
+  if (requestedName && requestedName.toLowerCase() !== "primary") {
+    const calendars = await fetchGoogleCalendarList(accessToken)
+    const match = calendars.find(
+      (calendar) => (calendar.summary ?? "").trim().toLowerCase() === requestedName.toLowerCase(),
+    )
+
+    if (!match || !match.id) {
+      const available = calendars
+        .filter(isWritableGoogleCalendar)
+        .map((calendar) => calendar.summary?.trim())
+        .filter((summary): summary is string => Boolean(summary))
+      return {
+        connected: true,
+        created: false,
+        error: `No Google calendar named "${requestedName}" was found. JARVIS can add events to an existing calendar but cannot create a new one.`,
+        availableCalendars: available,
+      }
+    }
+
+    if (!isWritableGoogleCalendar(match)) {
+      return {
+        connected: true,
+        created: false,
+        error: `The Google calendar "${match.summary ?? requestedName}" is read-only, so events can't be added to it.`,
+      }
+    }
+
+    targetCalendarId = match.id
+    calendarSummary = match.summary?.trim() || requestedName
+  }
+
+  const body: Record<string, unknown> = {
+    summary: title,
+    extendedProperties: {
+      private: {
+        // Provenance marker for events JARVIS authored. NOT yet consumed by the read
+        // path (mapGoogleEventToScheduleEvent only special-cases "jarvis_task"), so
+        // these round-trip as ordinary immutable mirrored events by design.
+        source: "jarvis_assistant",
+      },
+    },
+  }
+
+  if (input.allDay) {
+    // All-day dates must be the user's LOCAL calendar date, not a slice of the UTC
+    // instant (an evening local time rolls to the next UTC day). Google's all-day
+    // end.date is EXCLUSIVE — it must be the day AFTER the last day — so a single-day
+    // event needs end = start + 1 day (matching the exclusivity the read path handles).
+    const timezone = await loadUserTimezone(userId)
+    const startDateKey = localDateKeyFromIso(input.startIso, timezone)
+    let lastDayKey = localDateKeyFromIso(input.endIso, timezone)
+    if (lastDayKey < startDateKey) {
+      lastDayKey = startDateKey
+    }
+    body.start = { date: startDateKey }
+    body.end = { date: addDaysToDateKey(lastDayKey, 1) }
+  } else {
+    body.start = { dateTime: input.startIso }
+    body.end = { dateTime: input.endIso }
+  }
+  if (input.description?.trim()) {
+    body.description = input.description.trim()
+  }
+  if (input.location?.trim()) {
+    body.location = input.location.trim()
+  }
+
+  const response = await fetch(
+    `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(targetCalendarId)}/events`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+      cache: "no-store",
+    },
+  )
+
+  if (!response.ok) {
+    const errorText = await response.text().catch(() => "")
+    return {
+      connected: true,
+      created: false,
+      error: errorText || `Google Calendar event create failed with status ${response.status}.`,
+    }
+  }
+
+  const payload = (await response.json()) as GoogleCalendarWriteResponse
+  if (!payload.id) {
+    return { connected: true, created: false, error: "Google Calendar returned no event id." }
+  }
+
+  return {
+    connected: true,
+    created: true,
+    eventId: payload.id,
+    htmlLink: payload.htmlLink,
+    calendarSummary,
   }
 }
 

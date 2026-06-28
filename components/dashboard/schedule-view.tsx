@@ -22,6 +22,7 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import {
   CalendarDays,
+  CalendarMinus,
   CalendarPlus,
   Check,
   ChevronLeft,
@@ -30,8 +31,19 @@ import {
   Loader2,
   MapPin,
   RefreshCw,
+  Trash2,
   X,
 } from "lucide-react"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import {
   fetchCalDavEvents,
   fetchGoogleEvents,
@@ -76,6 +88,10 @@ export interface CalendarEvent {
   // Rendered with a copper dashed outline + a confirm checkmark; still a concrete
   // commitment for planning. (schedule_events.source === "imported" && !isCheckedIn)
   isProvisional?: boolean
+  // Backed by a schedule_events row JARVIS created from a task (DB source="task").
+  // `id` is that row's id, so it's the unit the right-click delete acts on. Note
+  // the visual `source` above is the sync origin (local/google), not "task".
+  isTaskBlock?: boolean
 }
 
 const fallbackHues: Record<CalendarEvent["color"], number> = {
@@ -184,6 +200,9 @@ function mapScheduleEventsToCalendarEvents(
       duration: Math.max((end.getTime() - start.getTime()) / 3_600_000, 0.25),
       canEdit: true,
       isProvisional: event.source === "imported" && !event.isCheckedIn,
+      // DB source="task" → a JARVIS task block; `event.id` is the schedule_events
+      // row id the delete operates on. (Visual `source` above is the sync origin.)
+      isTaskBlock: event.source === "task",
     }
 
     if (event.allDay) {
@@ -443,6 +462,9 @@ export function ScheduleView({
   const [syncErrorMessage, setSyncErrorMessage] = useState<string | null>(null)
   const [syncNeedsAuthorization, setSyncNeedsAuthorization] = useState(false)
   const [eventEditError, setEventEditError] = useState<string | null>(null)
+  // The task block whose destructive "Delete task" awaits confirmation. Set from
+  // the context menu; the AlertDialog opens off it (menu closes first, no nesting).
+  const [taskDeleteTarget, setTaskDeleteTarget] = useState<CalendarEvent | null>(null)
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null)
   const [selectedTaskReminder, setSelectedTaskReminder] = useState<CalendarEvent | null>(null)
   const [now, setNow] = useState(() => new Date())
@@ -599,6 +621,48 @@ export function ScheduleView({
       }
     },
     [updateEventSettings],
+  )
+
+  // Right-click delete for JARVIS-scheduled task blocks. "unschedule" returns the
+  // task to the to-do pool; "task" deletes it outright. The server clears the
+  // Google mirror either way; we just refresh the dashboard on success.
+  const deleteScheduledEvent = useCallback(async (event: CalendarEvent, mode: "unschedule" | "task") => {
+    setEventEditError(null)
+
+    const response = await fetch(`/api/events/${event.id}?mode=${mode}`, {
+      method: "DELETE",
+      cache: "no-store",
+    })
+    const payload = (await response.json().catch(() => null)) as { success?: boolean; error?: string; details?: string } | null
+
+    if (!response.ok || !payload || !payload.success) {
+      throw new Error(getApiErrorMessage(payload, "Failed to remove event."))
+    }
+
+    window.dispatchEvent(new CustomEvent("jarvis-dashboard-refresh"))
+  }, [])
+
+  const handleRemoveFromCalendar = useCallback(
+    async (event: CalendarEvent) => {
+      try {
+        await deleteScheduledEvent(event, "unschedule")
+      } catch (error) {
+        setEventEditError(error instanceof Error ? error.message : "Failed to remove event.")
+      }
+    },
+    [deleteScheduledEvent],
+  )
+
+  // Confirmed (via the alert dialog) destructive delete of the underlying task.
+  const handleDeleteTask = useCallback(
+    async (event: CalendarEvent) => {
+      try {
+        await deleteScheduledEvent(event, "task")
+      } catch (error) {
+        setEventEditError(error instanceof Error ? error.message : "Failed to delete task.")
+      }
+    },
+    [deleteScheduledEvent],
   )
 
   const formatLastSynced = () => {
@@ -863,7 +927,7 @@ export function ScheduleView({
     const kicker =
       event.renderVariant === "task-due"
         ? "Due reminder"
-        : event.source === "task"
+        : event.isTaskBlock || event.source === "task"
           ? "Task block"
           : event.isProvisional
             ? "Imported · confirm"
@@ -928,14 +992,37 @@ export function ScheduleView({
                 Fixed in place
               </ContextMenuCheckboxItem>
             </>
-          ) : (
+          ) : !event.isTaskBlock ? (
             <>
               <ContextMenuSeparator />
               <ContextMenuLabel className="max-w-56 whitespace-normal px-2 py-1.5 text-[11px] leading-snug text-muted-foreground">
                 {readOnlyNote}
               </ContextMenuLabel>
             </>
-          )}
+          ) : null}
+          {event.isTaskBlock ? (
+            <>
+              <ContextMenuSeparator />
+              {/* Immutable blocks are fixed appointments: unscheduling would strip
+                  the time into a floating todo, so deleting is the only removal. */}
+              {!event.isReadOnly ? (
+                <ContextMenuItem
+                  onSelect={() => void handleRemoveFromCalendar(event)}
+                  className="gap-2 text-[13px]"
+                >
+                  <CalendarMinus className="h-3.5 w-3.5" aria-hidden="true" />
+                  Remove from calendar
+                </ContextMenuItem>
+              ) : null}
+              <ContextMenuItem
+                onSelect={() => setTaskDeleteTarget(event)}
+                className="gap-2 text-[13px] text-destructive focus:text-destructive"
+              >
+                <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+                Delete task
+              </ContextMenuItem>
+            </>
+          ) : null}
         </ContextMenuContent>
       </ContextMenu>
     )
@@ -1008,6 +1095,36 @@ export function ScheduleView({
           </div>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog
+        open={taskDeleteTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setTaskDeleteTarget(null)
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this task?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This deletes “{taskDeleteTarget?.title}” everywhere — the calendar block and the underlying task
+              (including its linked Notion page). To just clear the time slot and keep the task, use “Remove from
+              calendar” instead.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (taskDeleteTarget) void handleDeleteTask(taskDeleteTarget)
+                setTaskDeleteTarget(null)
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Delete task
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {syncStatus === "success" ? (
         <div className="num fixed right-6 top-20 z-[200] flex items-center gap-2 rounded-sm border border-rule-strong bg-popover px-2.5 py-1.5 text-[11px] uppercase text-foreground shadow-lg">
