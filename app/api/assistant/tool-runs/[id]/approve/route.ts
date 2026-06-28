@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server"
 
 import { ASSISTANT_TOOL_RUN_SELECT } from "@/lib/data/mappers"
-import { syncTaskEventsToGoogleForUser } from "@/lib/google-calendar-events"
+import {
+  createGoogleCalendarEventForUser,
+  syncTaskEventsToGoogleForUser,
+} from "@/lib/google-calendar-events"
 import {
   isAuthenticationRequiredError,
   requireAuthenticatedUser,
@@ -35,33 +38,81 @@ export async function POST(_request: Request, context: RouteContext) {
       return NextResponse.json({ error: "This tool run is not awaiting approval." }, { status: 409 })
     }
 
-    if (payloadAction(toolRun.payload) !== "google_task_event_sync") {
+    const action = payloadAction(toolRun.payload)
+    if (action !== "google_task_event_sync" && action !== "google_calendar_event_create") {
       return NextResponse.json({ error: "Unsupported external action." }, { status: 400 })
     }
 
     const approvedAt = new Date().toISOString()
 
-    const { error: approvedError } = await adminClient
+    // Atomic claim: flip requires_approval→false guarded on the still-pending state.
+    // A double-click on Approve, a client retry, or a replayed POST otherwise both
+    // pass the read check above and each execute the external write (duplicate
+    // events). Only the request that actually flips the row proceeds; the loser 409s.
+    const { data: claimed, error: approvedError } = await adminClient
       .from("assistant_tool_runs")
       .update({
         approved_at: approvedAt,
+        requires_approval: false,
       })
       .eq("id", toolRun.id)
       .eq("user_id", user.id)
+      .eq("status", "pending_approval")
+      .eq("requires_approval", true)
+      .select("id")
 
     if (approvedError) {
       throw new Error(approvedError.message)
     }
 
-    try {
-      const result = await syncTaskEventsToGoogleForUser(user.id)
+    if (!claimed || claimed.length === 0) {
+      return NextResponse.json({ error: "This tool run is not awaiting approval." }, { status: 409 })
+    }
 
-      if (!result.connected || result.error) {
-        throw new Error(result.error || "Google Calendar is not connected.")
+    try {
+      let summary: string
+      let result: unknown
+      let auditAfter: Record<string, unknown>
+
+      if (action === "google_calendar_event_create") {
+        const payload = toolRun.payload as Record<string, unknown>
+        const created = await createGoogleCalendarEventForUser(user.id, {
+          title: typeof payload.title === "string" ? payload.title : "",
+          startIso: typeof payload.startIso === "string" ? payload.startIso : "",
+          endIso: typeof payload.endIso === "string" ? payload.endIso : "",
+          calendarName: typeof payload.calendarName === "string" ? payload.calendarName : null,
+          description: typeof payload.description === "string" ? payload.description : null,
+          location: typeof payload.location === "string" ? payload.location : null,
+          allDay: payload.allDay === true,
+        })
+
+        if (!created.connected || !created.created || created.error) {
+          // Surface the resolvable calendars when the named one wasn't found, so the
+          // user learns what they can write to instead of a bare "not found".
+          const hint =
+            created.availableCalendars && created.availableCalendars.length
+              ? ` Calendars you can use: ${created.availableCalendars.join(", ")}.`
+              : ""
+          throw new Error((created.error || "Google Calendar event could not be created.") + hint)
+        }
+
+        const title = typeof payload.title === "string" ? payload.title : "event"
+        summary = `Approved and created "${title}" on ${created.calendarSummary ?? "Google Calendar"}.`
+        result = created
+        auditAfter = { status: "completed", eventId: created.eventId ?? null, calendar: created.calendarSummary ?? null }
+      } else {
+        const synced = await syncTaskEventsToGoogleForUser(user.id)
+
+        if (!synced.connected || synced.error) {
+          throw new Error(synced.error || "Google Calendar is not connected.")
+        }
+
+        summary = `Approved and synced ${synced.synced} JARVIS task block${synced.synced === 1 ? "" : "s"} to Google Calendar.`
+        result = synced
+        auditAfter = { status: "completed", synced: synced.synced }
       }
 
       const executedAt = new Date().toISOString()
-      const summary = `Approved and synced ${result.synced} JARVIS task block${result.synced === 1 ? "" : "s"} to Google Calendar.`
 
       const { error: updateError } = await adminClient
         .from("assistant_tool_runs")
@@ -82,7 +133,7 @@ export async function POST(_request: Request, context: RouteContext) {
       await adminClient.from("change_logs").insert({
         user_id: user.id,
         actor: "assistant",
-        action: "external.google_task_sync.approve",
+        action: `external.${action}.approve`,
         target_table: "assistant_tool_runs",
         target_id: toolRun.id,
         summary,
@@ -90,10 +141,7 @@ export async function POST(_request: Request, context: RouteContext) {
           status: toolRun.status,
           requiresApproval: toolRun.requires_approval,
         },
-        after_value: {
-          status: "completed",
-          synced: result.synced,
-        },
+        after_value: auditAfter,
         source_label: "master_input_approval",
       })
 

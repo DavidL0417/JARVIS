@@ -1,11 +1,12 @@
 "use client"
 
 import { useMemo } from "react"
-import { CalendarClock, Check, ListTodo } from "lucide-react"
+import { CalendarClock, ListTodo } from "lucide-react"
 
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
+import { TaskCheckbox } from "@/components/dashboard/task-row"
 import type { Task } from "@/types"
 
 interface TaskQueuePopoverProps {
@@ -88,18 +89,11 @@ export function TaskQueuePopover({ tasks, onToggleComplete }: TaskQueuePopoverPr
                     <span className="num w-6 shrink-0 text-[11px] font-medium uppercase text-muted-foreground">
                       {String(index + 1).padStart(2, "0")}
                     </span>
-                    <button
-                      type="button"
-                      onClick={() => void onToggleComplete?.(task)}
-                      aria-label={task.status === "completed" ? `Mark ${task.title} todo` : `Mark ${task.title} done`}
-                      className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border transition-colors ${
-                        task.status === "completed"
-                          ? "border-copper bg-copper text-primary-foreground"
-                          : "border-rule-strong hover:border-foreground"
-                      }`}
-                    >
-                      {task.status === "completed" ? <Check className="h-3 w-3" strokeWidth={3} /> : null}
-                    </button>
+                    <TaskCheckbox
+                      checked={task.status === "completed"}
+                      onToggle={() => onToggleComplete?.(task)}
+                      className="mt-0.5 rounded-sm"
+                    />
                     <div className="min-w-0 flex-1">
                       <p
                         className={`truncate text-[14px] ${

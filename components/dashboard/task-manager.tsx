@@ -365,7 +365,7 @@ export function TaskManager({
             </span>
             <TaskCheckbox
               checked={task.status === "completed"}
-              onToggle={() => void handleToggleComplete(task)}
+              onToggle={() => handleToggleComplete(task)}
               className="mt-0.5 rounded-sm"
             />
           </>

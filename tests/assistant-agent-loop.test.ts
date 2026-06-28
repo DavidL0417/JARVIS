@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 import type { AssistantRuntimeContext } from "../lib/assistant/context"
-import { getAgentTools, isToolAllowedForSurface } from "../lib/assistant/agent/tools"
+import { getAgentTools, getAgentToolTier, isToolAllowedForSurface } from "../lib/assistant/agent/tools"
 
 // Control the Anthropic SDK and the tool executors from the test, so we exercise
 // the loop's mechanics (tool_use → tool_result → end_turn, receipts, needsRefresh)
@@ -55,6 +55,7 @@ describe("agent tool surface gating", () => {
     expect(names).toContain("find_tasks")
     expect(names).toContain("update_task")
     expect(names).toContain("sync_tasks_to_google")
+    expect(names).toContain("create_calendar_event")
   })
 
   it("offers only read tools on the note surface", () => {
@@ -64,6 +65,7 @@ describe("agent tool surface gating", () => {
     expect(names).not.toContain("update_task")
     expect(names).not.toContain("create_task")
     expect(names).not.toContain("sync_tasks_to_google")
+    expect(names).not.toContain("create_calendar_event")
   })
 
   it("permits writes only on interactive, reads on both", () => {
@@ -71,6 +73,12 @@ describe("agent tool surface gating", () => {
     expect(isToolAllowedForSurface("update_task", "note")).toBe(false)
     expect(isToolAllowedForSurface("find_tasks", "note")).toBe(true)
     expect(isToolAllowedForSurface("nonsense", "interactive")).toBe(false)
+  })
+
+  it("classifies create_calendar_event as an external (approval-gated) tool", () => {
+    // A tier regression to 'write' would silently auto-execute the calendar write.
+    expect(getAgentToolTier("create_calendar_event")).toBe("external")
+    expect(isToolAllowedForSurface("create_calendar_event", "note")).toBe(false)
   })
 })
 

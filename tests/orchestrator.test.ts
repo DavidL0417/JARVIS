@@ -66,6 +66,62 @@ describe("secretary orchestrator", () => {
     })
   })
 
+  it("routes a direct Google Calendar event write to the agent loop (not the unsupported branch)", async () => {
+    // The agent loop's create_calendar_event tool handles these now.
+    await expect(
+      classifySecretaryIntent({
+        ...baseInput,
+        message: "Write to the Google Calendar from 8 to 9pm called test calendar event three",
+      }),
+    ).resolves.toMatchObject({ kind: "answer" })
+
+    await expect(
+      classifySecretaryIntent({
+        ...baseInput,
+        message: "Add an event to my Google Calendar tomorrow from 8 to 9pm",
+      }),
+    ).resolves.toMatchObject({ kind: "answer" })
+  })
+
+  it("still rejects destructive Google Calendar writes it cannot do", async () => {
+    for (const message of [
+      "Delete my dentist event from Google Calendar",
+      "Move my dentist event on Google Calendar to 4pm",
+      // "put off" (postpone) must NOT slip through the calendar-event-write path
+      // just because it contains the verb "put".
+      "Put off the meeting on my Google Calendar",
+    ]) {
+      await expect(classifySecretaryIntent({ ...baseInput, message })).resolves.toMatchObject({
+        kind: "request_external_write",
+        action: "unsupported_external_write",
+      })
+    }
+  })
+
+  it("does not hijack non-calendar create/add commands into the unsupported branch", async () => {
+    // "create a task ..." is intercepted by parseTaskTitle before the external gate.
+    await expect(
+      classifySecretaryIntent({ ...baseInput, message: "Create a task to email my professor" }),
+    ).resolves.toMatchObject({ kind: "create_task" })
+
+    // Notion create/add no longer trips the broadened gate (it requires a Google
+    // Calendar target), so it falls through to the agent loop instead of a canned
+    // "unsupported external write" rejection.
+    await expect(
+      classifySecretaryIntent({ ...baseInput, message: "Add a page to my Notion workspace" }),
+    ).resolves.toMatchObject({ kind: "answer" })
+  })
+
+  it("routes 'book'/'put' Google Calendar event writes to the agent loop", async () => {
+    await expect(
+      classifySecretaryIntent({ ...baseInput, message: "Book a haircut on my Google Calendar at 3pm" }),
+    ).resolves.toMatchObject({ kind: "answer" })
+
+    await expect(
+      classifySecretaryIntent({ ...baseInput, message: "Put dinner on my Google Calendar 8 to 9pm" }),
+    ).resolves.toMatchObject({ kind: "answer" })
+  })
+
   it("does not divert a Gmail READ/search question to the external-write path", async () => {
     // "email" is a noun here; previously the external-write regex matched it and
     // hijacked the message into "unsupported external write" instead of letting the

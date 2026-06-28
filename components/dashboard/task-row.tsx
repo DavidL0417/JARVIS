@@ -1,7 +1,9 @@
 "use client"
 
-import type { ReactNode } from "react"
-import { Check } from "lucide-react"
+import { useRef, useState, type ReactNode } from "react"
+import { Check, Loader2 } from "lucide-react"
+
+import { fireConfetti } from "@/components/dashboard/confetti"
 
 // Shared row skeleton for the task surfaces (rail + pane). It owns the <li>
 // wrapper, the title clamp, and the reveal-on-hover action cluster; everything
@@ -67,7 +69,9 @@ export function TaskRow(props: TaskRowProps) {
 
 interface TaskCheckboxProps {
   checked: boolean
-  onToggle: () => void
+  // May be async: while the toggle is in flight we spin so the click reads as
+  // acknowledged across the mutation + dashboard-reload round-trip.
+  onToggle: () => Promise<void> | void
   // Layout/shape classes that differ per surface (top margin, corner radius).
   className?: string
   // Border treatment for the unchecked state (hover color differs per surface).
@@ -80,16 +84,51 @@ export function TaskCheckbox({
   className = "",
   uncheckedClassName = "border-rule-strong hover:border-foreground",
 }: TaskCheckboxProps) {
+  const buttonRef = useRef<HTMLButtonElement>(null)
+  const [busy, setBusy] = useState(false)
+
+  const handleClick = async () => {
+    if (busy) return
+    // Fire the celebration only when completing — and from the box's own center,
+    // before the await, so it originates right where the user clicked even if the
+    // row vanishes a moment later.
+    if (!checked) {
+      const rect = buttonRef.current?.getBoundingClientRect()
+      if (rect) {
+        fireConfetti(rect.left + rect.width / 2, rect.top + rect.height / 2)
+      }
+    }
+
+    setBusy(true)
+    try {
+      await onToggle()
+    } finally {
+      // Harmless no-op if the row already unmounted on reload.
+      setBusy(false)
+    }
+  }
+
+  // Show the filled (copper) treatment the instant work starts, so completing a
+  // task reads as done immediately rather than after the server round-trip.
+  const filled = checked || busy
+
   return (
     <button
+      ref={buttonRef}
       type="button"
-      onClick={onToggle}
+      onClick={() => void handleClick()}
+      disabled={busy}
+      aria-busy={busy || undefined}
       aria-label={checked ? "Mark todo" : "Mark complete"}
       className={`flex h-4 w-4 shrink-0 items-center justify-center border transition-colors ${className} ${
-        checked ? "border-copper bg-copper text-primary-foreground" : uncheckedClassName
+        filled ? "border-copper bg-copper text-primary-foreground" : uncheckedClassName
       }`}
     >
-      {checked ? <Check className="h-3 w-3" strokeWidth={3} /> : null}
+      {busy ? (
+        <Loader2 className="h-3 w-3 animate-spin" strokeWidth={3} />
+      ) : checked ? (
+        <Check className="h-3 w-3" strokeWidth={3} />
+      ) : null}
     </button>
   )
 }
